@@ -7,3 +7,4 @@
 - Admin setup wizard
 - Optional reschedule (thank-you / account)
 - Routing integration hooks (webhooks/outbound)
+- Recommendation engine (suggests optimal slots, locations, and alternative times)
