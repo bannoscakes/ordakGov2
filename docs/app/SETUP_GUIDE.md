@@ -33,4 +33,25 @@ Follow these steps to configure the Delivery & Pickup Scheduler app on your Shop
    - Test both delivery and pickup flows with eligible and ineligible postcodes. Complete a test order and confirm the order metafields/tags reflect the selected options.
    - If everything looks correct, repeat the steps on your live store. Otherwise, adjust your zones, rules, or widget styling as needed.
 
+7. **Configure recommendation settings (optional)**
+   - Navigate to **Recommendation Settings** in the app admin panel.
+   - **Enable/Disable**: Toggle the recommendation engine on or off globally. When enabled, customers will see "Recommended" badges on optimal slots and locations.
+   - **Weighting Factors**: Adjust how the recommendation algorithm prioritizes different factors:
+     - **Capacity**: Higher weight = prioritize slots with more availability.
+     - **Distance**: Higher weight = prioritize nearest pickup locations.
+     - **Route Efficiency**: Higher weight = prioritize slots that cluster deliveries geographically (requires routing integration).
+     - **Personalization**: Higher weight = prioritize slots similar to customer's past selections.
+   - **Number of Alternatives**: Set how many alternative slots to show when a customer's preferred time is unavailable (default: 3).
+   - **Location Coordinates**: Ensure all your pickup locations have accurate latitude/longitude set for distance calculations. The app can auto‑populate these from Shopify location addresses.
+   - **Analytics Dashboard**: Review recommendation adoption rates to see how often customers choose recommended slots vs. other options. Use this data to fine‑tune your settings.
+
+8. **Test recommendations on your Test store**
+   - With recommendations enabled, open the cart widget and verify that:
+     - The top‑recommended slot has a "Recommended" badge.
+     - A brief reason is displayed (e.g., "Most available capacity").
+     - When multiple pickup locations are available, they're sorted by distance with the nearest marked as recommended.
+   - Try selecting a fully booked slot (if any) and confirm that alternative suggestions appear.
+   - Complete a test order with a recommended slot and check that the order tags include `recommended-slot`.
+   - Review the analytics dashboard to confirm recommendation events are being logged.
+
 This setup guide ensures merchants can quickly configure and validate the scheduling app with real data, minimising surprises during launch.
