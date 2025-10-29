@@ -1,0 +1,26 @@
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration
+
+name = "ordakgov2"
+client_id = ""
+application_url = "https://localhost"
+embedded = true
+
+[access_scopes]
+scopes = "write_products,write_orders,read_locations,write_merchant-managed_fulfillment_orders"
+
+[auth]
+redirect_urls = [
+  "https://localhost/auth/callback",
+  "https://localhost/auth/shopify/callback",
+  "https://localhost/api/auth/callback"
+]
+
+[webhooks]
+api_version = "2024-01"
+
+[pos]
+embedded = false
+
+[build]
+automatically_update_urls_on_dev = true
+dev_store_url = ""
