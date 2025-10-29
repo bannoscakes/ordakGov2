@@ -1,0 +1,23 @@
+node_modules
+/.cache
+/build
+/public/build
+.env
+*.db
+.shopify
+*.log
+.DS_Store
+dist
+.vercel
+.output
+
+# Prisma
+prisma/*.db
+prisma/*.db-journal
+
+# Editor directories
+.vscode/
+.idea/
+
+# OS files
+Thumbs.db
