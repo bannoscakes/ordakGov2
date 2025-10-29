@@ -1,0 +1,278 @@
+// Prisma schema for ordakGov2 Delivery & Pickup Scheduler
+// Includes recommendation engine entities
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Shopify session storage
+model Session {
+  id          String    @id
+  shop        String
+  state       String
+  isOnline    Boolean   @default(false)
+  scope       String?
+  expires     DateTime?
+  accessToken String
+  userId      BigInt?
+  firstName   String?
+  lastName    String?
+  email       String?
+  accountOwner Boolean  @default(false)
+  locale      String?
+  collaborator Boolean? @default(false)
+  emailVerified Boolean? @default(false)
+}
+
+// Core entities
+model Shop {
+  id                    String    @id @default(cuid())
+  shopifyDomain         String    @unique
+  accessToken           String
+  scope                 String?
+
+  // Recommendation settings
+  recommendationsEnabled Boolean  @default(true)
+  capacityWeight        Float     @default(0.4)
+  distanceWeight        Float     @default(0.3)
+  routeEfficiencyWeight Float     @default(0.2)
+  personalizationWeight Float     @default(0.1)
+  numAlternatives       Int       @default(3)
+
+  locations             Location[]
+  zones                 Zone[]
+  rules                 Rule[]
+
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+model Location {
+  id                String   @id @default(cuid())
+  shopId            String
+  shop              Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  name              String
+  address           String
+  city              String?
+  province          String?
+  country           String?
+  postalCode        String?
+
+  // Coordinates for distance calculations
+  latitude          Float?
+  longitude         Float?
+
+  phone             String?
+  email             String?
+  timezone          String   @default("UTC")
+
+  isActive          Boolean  @default(true)
+  supportsDelivery  Boolean  @default(true)
+  supportsPickup    Boolean  @default(true)
+
+  zones             Zone[]
+  slots             Slot[]
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([shopId])
+}
+
+model Zone {
+  id            String   @id @default(cuid())
+  shopId        String
+  shop          Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  locationId    String
+  location      Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  name          String
+  type          String   // 'postcode_range', 'postcode_list', 'radius'
+
+  // For postcode ranges/lists
+  postcodes     String[] // Array of postcodes or ranges
+
+  // For radius
+  radiusKm      Float?
+
+  isActive      Boolean  @default(true)
+  priority      Int      @default(0)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([shopId])
+  @@index([locationId])
+}
+
+model Rule {
+  id              String   @id @default(cuid())
+  shopId          String
+  shop            Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  name            String
+  type            String   // 'cutoff', 'lead_time', 'blackout', 'capacity'
+
+  // Cut-off time (e.g., "14:00" - no same-day orders after 2 PM)
+  cutoffTime      String?
+
+  // Lead time (minimum hours/days before delivery)
+  leadTimeHours   Int?
+  leadTimeDays    Int?
+
+  // Blackout dates
+  blackoutDates   DateTime[]
+
+  // Capacity
+  slotDuration    Int?     // minutes
+  slotCapacity    Int?     // max orders per slot
+
+  isActive        Boolean  @default(true)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([shopId])
+}
+
+model Slot {
+  id                  String   @id @default(cuid())
+  locationId          String
+  location            Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  date                DateTime
+  timeStart           String   // "09:00"
+  timeEnd             String   // "11:00"
+
+  capacity            Int      @default(10)
+  booked              Int      @default(0)
+
+  // Recommendation score (0.0 - 1.0)
+  recommendationScore Float?
+
+  fulfillmentType     String   // 'delivery' or 'pickup'
+
+  isActive            Boolean  @default(true)
+
+  orders              OrderLink[]
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([locationId])
+  @@index([date])
+  @@index([recommendationScore])
+}
+
+model OrderLink {
+  id                String   @id @default(cuid())
+
+  shopifyOrderId    String   @unique
+  shopifyOrderNumber String?
+
+  slotId            String
+  slot              Slot     @relation(fields: [slotId], references: [id], onDelete: Cascade)
+
+  fulfillmentType   String   // 'delivery' or 'pickup'
+
+  customerEmail     String?
+  customerPhone     String?
+
+  deliveryAddress   String?
+  deliveryPostcode  String?
+
+  // Recommendation metadata
+  wasRecommended    Boolean  @default(false)
+  recommendationScore Float?
+
+  status            String   @default("scheduled") // 'scheduled', 'updated', 'canceled', 'completed'
+
+  notes             String?
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  eventLogs         EventLog[]
+
+  @@index([shopifyOrderId])
+  @@index([slotId])
+}
+
+model EventLog {
+  id              String    @id @default(cuid())
+
+  orderLinkId     String?
+  orderLink       OrderLink? @relation(fields: [orderLinkId], references: [id], onDelete: Cascade)
+
+  eventType       String    // 'order.scheduled', 'order.schedule_updated', 'order.schedule_canceled', 'recommendation.viewed', 'recommendation.selected'
+
+  payload         String    @db.Text // JSON payload
+
+  timestamp       DateTime  @default(now())
+
+  @@index([orderLinkId])
+  @@index([eventType])
+  @@index([timestamp])
+}
+
+// Recommendation entities
+
+model CustomerPreferences {
+  id                String   @id @default(cuid())
+
+  customerId        String?  // Shopify customer ID (optional)
+  customerEmail     String?  // Email hash for anonymous tracking
+
+  // Historical preferences
+  preferredDays     String[] // e.g., ["Saturday", "Sunday"]
+  preferredTimes    String[] // e.g., ["09:00-11:00", "14:00-16:00"]
+  preferredLocationIds String[]
+
+  // Statistics
+  totalOrders       Int      @default(0)
+  lastOrderDate     DateTime?
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([customerEmail])
+}
+
+model RecommendationLog {
+  id                  String   @id @default(cuid())
+
+  sessionId           String
+  customerId          String?
+  customerEmail       String?
+
+  shopifyDomain       String
+
+  // What was recommended
+  recommendedSlotIds  String[]
+  recommendedLocationIds String[]
+
+  // What was selected
+  selectedSlotId      String?
+  selectedLocationId  String?
+
+  wasRecommended      Boolean  @default(false)
+
+  // For analytics
+  alternativesShown   String[]
+
+  viewedAt            DateTime @default(now())
+  selectedAt          DateTime?
+
+  @@index([sessionId])
+  @@index([customerId])
+  @@index([shopifyDomain])
+  @@index([viewedAt])
+}
