@@ -34,8 +34,25 @@
 ## Phase 3 — Merchant UX
 - [ ] Setup wizard (locations → zones → rules → widget styles)
 - [ ] Calendar overview (due today, due this week)
-- [ ] Diagnostics: “Why no slots?”
+- [ ] Diagnostics: "Why no slots?"
 - [ ] Reschedule flow (thank-you page / customer account)
+
+## Phase 3.5 — Recommendation Engine
+- [ ] Data model: Add CustomerPreferences, RecommendationLog entities; extend Slot with recommendation_score
+- [ ] Location coordinates storage for distance calculations
+- [ ] Implement recommendation scoring algorithm (capacity, distance, popularity, personalization)
+- [ ] API endpoints: POST /recommendations/slots, POST /recommendations/locations
+- [ ] Recommendation events: recommendation.viewed, recommendation.selected webhooks
+- [ ] Storefront widget: Display "Recommended" badges on optimal slots
+- [ ] Admin settings page: Toggle recommendations, adjust weights, view adoption analytics
+- [ ] Alternative time suggestions when preferred slots unavailable
+
+**Verify on Test store**
+- [ ] Recommended slots appear with badges and reasons
+- [ ] Location recommendations sorted by distance
+- [ ] Alternative suggestions shown for full slots
+- [ ] Recommendation events logged correctly
+- [ ] Analytics track adoption rates
 
 ## Phase 4 — Compliance & Performance
 - [ ] App Store review checklist passed
