@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ordak Slot Picker Widget - Demo</title>
+
+  <!-- Widget Styles -->
+  <link rel="stylesheet" href="/ordak-widget.css">
+
+  <!-- Demo Page Styles -->
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f6f6f7;
+    }
+
+    .demo-container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .demo-header {
+      background: white;
+      padding: 30px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    .demo-header h1 {
+      margin: 0 0 10px 0;
+      color: #202223;
+    }
+
+    .demo-header p {
+      color: #6d7175;
+      margin: 0;
+    }
+
+    .demo-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+
+    @media (max-width: 768px) {
+      .demo-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .demo-section {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+    }
+
+    .demo-section h2 {
+      margin-top: 0;
+      font-size: 18px;
+      color: #202223;
+    }
+
+    .demo-controls {
+      margin-bottom: 20px;
+    }
+
+    .demo-control {
+      margin-bottom: 15px;
+    }
+
+    .demo-control label {
+      display: block;
+      margin-bottom: 5px;
+      font-size: 14px;
+      font-weight: 500;
+      color: #202223;
+    }
+
+    .demo-control select,
+    .demo-control input {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #c9cccf;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+
+    .demo-control button {
+      width: 100%;
+      padding: 10px;
+      background: #008060;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .demo-control button:hover {
+      background: #006e52;
+    }
+
+    .demo-output {
+      background: #f6f6f7;
+      padding: 15px;
+      border-radius: 4px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      overflow-x: auto;
+    }
+
+    .demo-output pre {
+      margin: 0;
+      color: #202223;
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 500;
+      margin-bottom: 10px;
+    }
+
+    .status-badge.success {
+      background: #d1f7e5;
+      color: #004c3b;
+    }
+
+    .status-badge.warning {
+      background: #fff4c4;
+      color: #663c00;
+    }
+  </style>
+</head>
+<body>
+  <div class="demo-container">
+    <!-- Header -->
+    <div class="demo-header">
+      <h1>🗓️ Ordak Slot Picker Widget Demo</h1>
+      <p>Interactive demonstration of the delivery/pickup slot selector with recommendations</p>
+    </div>
+
+    <!-- Main Grid -->
+    <div class="demo-grid">
+      <!-- Widget Demo -->
+      <div class="demo-section">
+        <h2>Widget Preview</h2>
+        <div id="ordak-slot-picker"></div>
+      </div>
+
+      <!-- Controls & Output -->
+      <div class="demo-section">
+        <h2>Configuration</h2>
+
+        <div class="demo-controls">
+          <div class="demo-control">
+            <label for="fulfillment-type">Fulfillment Type</label>
+            <select id="fulfillment-type">
+              <option value="delivery">Delivery</option>
+              <option value="pickup">Pickup</option>
+            </select>
+          </div>
+
+          <div class="demo-control">
+            <label for="location-id">Location ID (optional)</label>
+            <input type="text" id="location-id" placeholder="Leave empty for all locations">
+          </div>
+
+          <div class="demo-control">
+            <label for="customer-id">Customer ID (for personalization)</label>
+            <input type="text" id="customer-id" placeholder="customer_123">
+          </div>
+
+          <div class="demo-control">
+            <label for="customer-email">Customer Email</label>
+            <input type="text" id="customer-email" placeholder="customer@example.com">
+          </div>
+
+          <div class="demo-control">
+            <button onclick="reloadWidget()">Reload Widget</button>
+          </div>
+        </div>
+
+        <h2>Selected Slot</h2>
+        <div class="demo-output">
+          <pre id="selected-output">No slot selected yet</pre>
+        </div>
+
+        <h2>Widget Status</h2>
+        <div id="status-container">
+          <span class="status-badge warning">Widget not initialized</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Installation Instructions -->
+    <div class="demo-section">
+      <h2>📋 Integration Code</h2>
+      <p style="color: #6d7175; font-size: 14px; margin-bottom: 15px;">
+        Copy this code to integrate the widget into your Shopify theme:
+      </p>
+
+      <div class="demo-output">
+<pre style="color: #004c3b;">
+&lt;!-- Include widget assets --&gt;
+&lt;link rel="stylesheet" href="https://your-app-url.com/ordak-widget.css"&gt;
+&lt;script src="https://your-app-url.com/ordak-widget.js"&gt;&lt;/script&gt;
+
+&lt;!-- Widget container --&gt;
+&lt;div id="ordak-slot-picker"&gt;&lt;/div&gt;
+
+&lt;script&gt;
+  window.ORDAK_API_URL = 'https://your-app-url.com';
+
+  document.addEventListener('DOMContentLoaded', function() {
+    window.ordakPicker = new OrdakSlotPicker('ordak-slot-picker', {
+      fulfillmentType: 'delivery',
+      customerId: '{{ customer.id }}',
+      customerEmail: '{{ customer.email }}',
+      onSelect: function(slot) {
+        console.log('Selected:', slot);
+        // Save to cart attributes
+        fetch('/cart/update.js', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            attributes: {
+              'Delivery Date': slot.date,
+              'Delivery Time': slot.timeStart + ' - ' + slot.timeEnd
+            }
+          })
+        });
+      }
+    });
+  });
+&lt;/script&gt;
+</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Widget Script -->
+  <script src="/ordak-widget.js"></script>
+
+  <!-- Demo Script -->
+  <script>
+    // Set API URL (replace with your actual app URL in production)
+    window.ORDAK_API_URL = window.location.origin;
+
+    let pickerInstance;
+
+    function initWidget() {
+      const fulfillmentType = document.getElementById('fulfillment-type').value;
+      const locationId = document.getElementById('location-id').value || null;
+      const customerId = document.getElementById('customer-id').value || null;
+      const customerEmail = document.getElementById('customer-email').value || null;
+
+      pickerInstance = new OrdakSlotPicker('ordak-slot-picker', {
+        fulfillmentType: fulfillmentType,
+        locationId: locationId,
+        customerId: customerId,
+        customerEmail: customerEmail,
+        deliveryAddress: {
+          latitude: -33.8688, // Sydney coordinates for demo
+          longitude: 151.2093,
+          postcode: '2000'
+        },
+        onSelect: function(slot) {
+          // Update output display
+          document.getElementById('selected-output').textContent =
+            JSON.stringify(slot, null, 2);
+
+          // Update status
+          const statusContainer = document.getElementById('status-container');
+          statusContainer.innerHTML = `
+            <span class="status-badge success">Slot Selected!</span>
+            <p style="font-size: 14px; margin: 10px 0 0 0;">
+              ${slot.date} at ${slot.timeStart} - ${slot.timeEnd}
+              ${slot.recommended ? '⭐ (Recommended)' : ''}
+            </p>
+          `;
+        }
+      });
+
+      // Update status
+      document.getElementById('status-container').innerHTML =
+        '<span class="status-badge success">Widget initialized</span>';
+    }
+
+    function reloadWidget() {
+      document.getElementById('ordak-slot-picker').innerHTML = '';
+      document.getElementById('selected-output').textContent = 'Reloading...';
+      initWidget();
+    }
+
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', function() {
+      initWidget();
+    });
+  </script>
+</body>
+</html>
