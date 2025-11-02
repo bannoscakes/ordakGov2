@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ordak Postcode Checker - Demo</title>
+  <link rel="stylesheet" href="postcode-checker.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+
+    .demo-container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .demo-header {
+      text-align: center;
+      color: white;
+      margin-bottom: 40px;
+    }
+
+    .demo-header h1 {
+      font-size: 42px;
+      margin-bottom: 12px;
+      font-weight: 700;
+    }
+
+    .demo-header p {
+      font-size: 18px;
+      opacity: 0.9;
+    }
+
+    .demo-content {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 40px;
+      margin-bottom: 40px;
+    }
+
+    .demo-widget {
+      background: white;
+      padding: 40px;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+
+    .demo-info {
+      background: rgba(255, 255, 255, 0.95);
+      padding: 32px;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+
+    .demo-info h2 {
+      font-size: 24px;
+      margin-bottom: 16px;
+      color: #202223;
+    }
+
+    .demo-info h3 {
+      font-size: 18px;
+      margin: 24px 0 12px;
+      color: #202223;
+    }
+
+    .demo-info p {
+      font-size: 14px;
+      line-height: 1.6;
+      color: #6d7175;
+      margin-bottom: 12px;
+    }
+
+    .demo-info ul {
+      margin-left: 20px;
+      margin-bottom: 16px;
+    }
+
+    .demo-info li {
+      font-size: 14px;
+      line-height: 1.8;
+      color: #6d7175;
+    }
+
+    .demo-info code {
+      background: #f6f6f7;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: 'Monaco', 'Courier New', monospace;
+      font-size: 13px;
+      color: #d72c0d;
+    }
+
+    .demo-code {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      padding: 20px;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-family: 'Monaco', 'Courier New', monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      margin: 16px 0;
+    }
+
+    .demo-code .comment {
+      color: #6a9955;
+    }
+
+    .demo-code .keyword {
+      color: #569cd6;
+    }
+
+    .demo-code .string {
+      color: #ce9178;
+    }
+
+    .demo-examples {
+      background: rgba(255, 255, 255, 0.95);
+      padding: 32px;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      margin-bottom: 40px;
+    }
+
+    .demo-examples h2 {
+      font-size: 24px;
+      margin-bottom: 20px;
+      color: #202223;
+    }
+
+    .example-postcodes {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+    }
+
+    .postcode-card {
+      padding: 12px 16px;
+      background: #f6f6f7;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      border: 2px solid transparent;
+    }
+
+    .postcode-card:hover {
+      background: #e8e8e9;
+      border-color: #008060;
+      transform: translateY(-2px);
+    }
+
+    .postcode-card strong {
+      display: block;
+      font-size: 16px;
+      color: #202223;
+      margin-bottom: 4px;
+    }
+
+    .postcode-card span {
+      font-size: 12px;
+      color: #6d7175;
+    }
+
+    .demo-badge {
+      display: inline-block;
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      border-radius: 4px;
+      margin-left: 8px;
+    }
+
+    .demo-badge.eligible {
+      background: #f1f8f5;
+      color: #008060;
+    }
+
+    .demo-badge.not-eligible {
+      background: #fef3f2;
+      color: #d72c0d;
+    }
+
+    @media (max-width: 900px) {
+      .demo-content {
+        grid-template-columns: 1fr;
+      }
+
+      .demo-header h1 {
+        font-size: 32px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="demo-container">
+    <!-- Header -->
+    <div class="demo-header">
+      <h1>🎯 Postcode Eligibility Checker</h1>
+      <p>Check if delivery and pickup services are available in your area</p>
+    </div>
+
+    <!-- Main Content -->
+    <div class="demo-content">
+      <!-- Widget -->
+      <div class="demo-widget">
+        <div id="ordak-postcode-checker"></div>
+      </div>
+
+      <!-- Info -->
+      <div class="demo-info">
+        <h2>How It Works</h2>
+        <p>
+          The Postcode Eligibility Checker validates customer postcodes against your
+          configured service zones to determine if delivery and/or pickup is available.
+        </p>
+
+        <h3>Features</h3>
+        <ul>
+          <li>Instant postcode validation</li>
+          <li>Zone matching (list, range, radius)</li>
+          <li>Service type filtering (delivery/pickup)</li>
+          <li>Location discovery</li>
+          <li>Responsive design</li>
+          <li>No external dependencies</li>
+        </ul>
+
+        <h3>Integration</h3>
+        <p>Add to your Shopify theme with just a few lines of code:</p>
+        <div class="demo-code">
+<span class="comment"><!-- Add CSS --></span>
+{{ <span class="string">'postcode-checker.css'</span> | asset_url | stylesheet_tag }}
+
+<span class="comment"><!-- Add container --></span>
+&lt;<span class="keyword">div</span> <span class="keyword">id</span>=<span class="string">"ordak-postcode-checker"</span>&gt;&lt;/<span class="keyword">div</span>&gt;
+
+<span class="comment"><!-- Initialize widget --></span>
+{{ <span class="string">'postcode-checker.js'</span> | asset_url | script_tag }}
+&lt;<span class="keyword">script</span>&gt;
+  <span class="keyword">new</span> OrdakPostcodeChecker(<span class="string">'ordak-postcode-checker'</span>, {
+    shopDomain: <span class="string">'{{ shop.permanent_domain }}'</span>,
+    apiUrl: <span class="string">'https://your-app.com/api/eligibility/check'</span>
+  });
+&lt;/<span class="keyword">script</span>&gt;
+        </div>
+
+        <h3>Configuration</h3>
+        <p>
+          Customize the widget behavior with options:
+        </p>
+        <ul>
+          <li><code>shopDomain</code> - Your Shopify store domain (required)</li>
+          <li><code>apiUrl</code> - API endpoint URL (required)</li>
+          <li><code>showFulfillmentType</code> - Show delivery/pickup selector (default: true)</li>
+          <li><code>theme</code> - Color theme: light, dark, auto (default: light)</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Example Postcodes -->
+    <div class="demo-examples">
+      <h2>Try These Example Postcodes</h2>
+      <p style="margin-bottom: 16px; color: #6d7175;">
+        Click a postcode below to test the checker (demo uses mock data):
+      </p>
+      <div class="example-postcodes">
+        <div class="postcode-card" onclick="testPostcode('2000')">
+          <strong>2000</strong>
+          <span>Sydney CBD</span>
+          <span class="demo-badge eligible">Eligible</span>
+        </div>
+        <div class="postcode-card" onclick="testPostcode('2001')">
+          <strong>2001</strong>
+          <span>Sydney CBD</span>
+          <span class="demo-badge eligible">Eligible</span>
+        </div>
+        <div class="postcode-card" onclick="testPostcode('2010')">
+          <strong>2010</strong>
+          <span>Surry Hills</span>
+          <span class="demo-badge eligible">Eligible</span>
+        </div>
+        <div class="postcode-card" onclick="testPostcode('3000')">
+          <strong>3000</strong>
+          <span>Melbourne CBD</span>
+          <span class="demo-badge not-eligible">Not Eligible</span>
+        </div>
+        <div class="postcode-card" onclick="testPostcode('2100')">
+          <strong>2100</strong>
+          <span>North Sydney</span>
+          <span class="demo-badge eligible">Eligible</span>
+        </div>
+        <div class="postcode-card" onclick="testPostcode('9999')">
+          <strong>9999</strong>
+          <span>Invalid Postcode</span>
+          <span class="demo-badge not-eligible">Not Eligible</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="postcode-checker.js"></script>
+  <script>
+    // Initialize widget with mock API for demo
+    const checker = new OrdakPostcodeChecker('ordak-postcode-checker', {
+      shopDomain: 'demo-store.myshopify.com',
+      apiUrl: '/mock-api', // Mock endpoint for demo
+      showFulfillmentType: true,
+      theme: 'light'
+    });
+
+    // Override fetch for demo purposes
+    const originalFetch = window.fetch;
+    window.fetch = function(url, options) {
+      if (url === '/mock-api') {
+        // Mock API response
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            const body = JSON.parse(options.body);
+            const postcode = body.postcode;
+
+            // Simulate different responses
+            let response;
+            if (['2000', '2001', '2010', '2100'].includes(postcode)) {
+              response = {
+                eligible: true,
+                locations: [
+                  {
+                    id: 'loc_1',
+                    name: 'Sydney Warehouse',
+                    address: '123 Main Street',
+                    city: 'Sydney',
+                    supportsDelivery: true,
+                    supportsPickup: true,
+                  },
+                  {
+                    id: 'loc_2',
+                    name: 'North Shore Pickup Point',
+                    address: '456 Pacific Highway',
+                    city: 'Chatswood',
+                    supportsDelivery: false,
+                    supportsPickup: true,
+                  }
+                ],
+                services: {
+                  delivery: true,
+                  pickup: true
+                },
+                message: 'Service available from 2 locations'
+              };
+            } else {
+              response = {
+                eligible: false,
+                locations: [],
+                services: {
+                  delivery: false,
+                  pickup: false
+                },
+                message: 'No service available in your area'
+              };
+            }
+
+            resolve({
+              ok: true,
+              json: () => Promise.resolve(response)
+            });
+          }, 800); // Simulate network delay
+        });
+      }
+
+      return originalFetch(url, options);
+    };
+
+    // Helper function to test postcodes
+    function testPostcode(postcode) {
+      const input = document.getElementById('ordak-postcode-input');
+      if (input) {
+        input.value = postcode;
+        const form = document.getElementById('ordak-checker-form');
+        if (form) {
+          form.dispatchEvent(new Event('submit'));
+        }
+      }
+    }
+  </script>
+</body>
+</html>

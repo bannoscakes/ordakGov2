@@ -1,0 +1,317 @@
+/**
+ * Ordak Postcode Checker Widget Styles
+ * Responsive, accessible, and theme-able styles
+ */
+
+.ordak-checker {
+  max-width: 500px;
+  margin: 0 auto;
+  padding: 24px;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+.ordak-checker-header {
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.ordak-checker-title {
+  margin: 0 0 8px 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: #202223;
+  line-height: 1.3;
+}
+
+.ordak-checker-subtitle {
+  margin: 0;
+  font-size: 14px;
+  color: #6d7175;
+  line-height: 1.5;
+}
+
+.ordak-checker-form {
+  margin-bottom: 24px;
+}
+
+.ordak-checker-input-group {
+  margin-bottom: 16px;
+}
+
+.ordak-checker-input {
+  width: 100%;
+  padding: 12px 16px;
+  font-size: 16px;
+  border: 1px solid #c9cccf;
+  border-radius: 8px;
+  box-sizing: border-box;
+  transition: border-color 0.2s ease;
+}
+
+.ordak-checker-input:focus {
+  outline: none;
+  border-color: #005bd3;
+  box-shadow: 0 0 0 3px rgba(0, 91, 211, 0.1);
+}
+
+.ordak-checker-input::placeholder {
+  color: #8c9196;
+}
+
+.ordak-checker-options {
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+  justify-content: center;
+}
+
+.ordak-checker-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #202223;
+}
+
+.ordak-checker-option input[type='radio'] {
+  cursor: pointer;
+}
+
+.ordak-checker-button {
+  width: 100%;
+  padding: 14px 24px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #ffffff;
+  background: #008060;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.ordak-checker-button:hover {
+  background: #006e52;
+}
+
+.ordak-checker-button:active {
+  transform: scale(0.98);
+}
+
+.ordak-checker-button:disabled {
+  background: #b5b5b5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.ordak-checker-button-loading {
+  position: relative;
+}
+
+.ordak-checker-result {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ordak-checker-success {
+  padding: 20px;
+  background: #f1f8f5;
+  border: 1px solid #9bc4a7;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.ordak-checker-error {
+  padding: 20px;
+  background: #fef3f2;
+  border: 1px solid #f5c6cb;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.ordak-checker-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 12px;
+  font-size: 28px;
+  border-radius: 50%;
+}
+
+.ordak-checker-icon-success {
+  background: #008060;
+  color: #ffffff;
+}
+
+.ordak-checker-icon-error {
+  background: #d72c0d;
+  color: #ffffff;
+}
+
+.ordak-checker-result-title {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #202223;
+}
+
+.ordak-checker-result-message {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  color: #6d7175;
+  line-height: 1.5;
+}
+
+.ordak-checker-services {
+  margin: 12px 0 0 0;
+  padding: 10px;
+  font-size: 14px;
+  background: #ffffff;
+  border-radius: 6px;
+  color: #202223;
+}
+
+.ordak-checker-locations {
+  margin-top: 16px;
+  text-align: left;
+}
+
+.ordak-checker-locations-title {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #202223;
+}
+
+.ordak-checker-locations-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ordak-checker-location {
+  padding: 12px;
+  margin-bottom: 8px;
+  background: #ffffff;
+  border: 1px solid #e1e3e5;
+  border-radius: 6px;
+}
+
+.ordak-checker-location:last-child {
+  margin-bottom: 0;
+}
+
+.ordak-checker-location strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 15px;
+  color: #202223;
+}
+
+.ordak-checker-location-city {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: #6d7175;
+}
+
+.ordak-checker-location-services {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.ordak-checker-service-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #008060;
+  background: #f1f8f5;
+  border: 1px solid #9bc4a7;
+  border-radius: 4px;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .ordak-checker {
+    padding: 20px;
+    border-radius: 8px;
+  }
+
+  .ordak-checker-title {
+    font-size: 20px;
+  }
+
+  .ordak-checker-options {
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  .ordak-checker-button {
+    padding: 12px 20px;
+    font-size: 15px;
+  }
+}
+
+/* Dark theme support */
+@media (prefers-color-scheme: dark) {
+  .ordak-checker[data-theme='auto'] {
+    background: #1a1a1a;
+  }
+
+  .ordak-checker[data-theme='auto'] .ordak-checker-title,
+  .ordak-checker[data-theme='auto'] .ordak-checker-result-title,
+  .ordak-checker[data-theme='auto'] .ordak-checker-option,
+  .ordak-checker[data-theme='auto'] .ordak-checker-location strong {
+    color: #f1f1f1;
+  }
+
+  .ordak-checker[data-theme='auto'] .ordak-checker-subtitle,
+  .ordak-checker[data-theme='auto'] .ordak-checker-result-message,
+  .ordak-checker[data-theme='auto'] .ordak-checker-location-city {
+    color: #b5b5b5;
+  }
+
+  .ordak-checker[data-theme='auto'] .ordak-checker-input {
+    background: #2a2a2a;
+    border-color: #404040;
+    color: #f1f1f1;
+  }
+
+  .ordak-checker[data-theme='auto'] .ordak-checker-success {
+    background: #1a3329;
+    border-color: #2d5a45;
+  }
+
+  .ordak-checker[data-theme='auto'] .ordak-checker-error {
+    background: #3d1f1f;
+    border-color: #6b3535;
+  }
+
+  .ordak-checker[data-theme='auto'] .ordak-checker-location {
+    background: #2a2a2a;
+    border-color: #404040;
+  }
+
+  .ordak-checker[data-theme='auto'] .ordak-checker-services {
+    background: #2a2a2a;
+  }
+}
