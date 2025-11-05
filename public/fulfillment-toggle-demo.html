@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ordak Fulfillment Toggle - Demo</title>
+  <link rel="stylesheet" href="fulfillment-toggle.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+
+    .demo-container {
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    .demo-header {
+      text-align: center;
+      color: white;
+      margin-bottom: 40px;
+    }
+
+    .demo-header h1 {
+      font-size: 42px;
+      margin-bottom: 12px;
+      font-weight: 700;
+    }
+
+    .demo-header p {
+      font-size: 18px;
+      opacity: 0.9;
+    }
+
+    .demo-section {
+      background: white;
+      padding: 32px;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      margin-bottom: 24px;
+    }
+
+    .demo-section h2 {
+      font-size: 24px;
+      margin-bottom: 8px;
+      color: #202223;
+    }
+
+    .demo-section p {
+      font-size: 14px;
+      color: #6d7175;
+      margin-bottom: 24px;
+      line-height: 1.6;
+    }
+
+    .demo-preview {
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+    }
+
+    .demo-item {
+      padding: 24px;
+      background: #f6f6f7;
+      border-radius: 12px;
+    }
+
+    .demo-item h3 {
+      font-size: 16px;
+      margin-bottom: 4px;
+      color: #202223;
+    }
+
+    .demo-item .description {
+      font-size: 13px;
+      color: #6d7175;
+      margin-bottom: 16px;
+    }
+
+    .demo-code {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      padding: 16px;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-family: 'Monaco', 'Courier New', monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      margin-top: 16px;
+    }
+
+    .demo-code .comment {
+      color: #6a9955;
+    }
+
+    .demo-code .keyword {
+      color: #569cd6;
+    }
+
+    .demo-code .string {
+      color: #ce9178;
+    }
+
+    .demo-output {
+      margin-top: 16px;
+      padding: 16px;
+      background: #ffffff;
+      border-radius: 8px;
+      border: 1px solid #e1e3e5;
+    }
+
+    .demo-output-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: #6d7175;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .demo-output-value {
+      font-size: 16px;
+      font-weight: 600;
+      color: #008060;
+      font-family: 'Monaco', 'Courier New', monospace;
+    }
+
+    .demo-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+
+    @media (max-width: 768px) {
+      .demo-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .demo-header h1 {
+        font-size: 32px;
+      }
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      background: #008060;
+      color: white;
+      border-radius: 4px;
+      margin-left: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="demo-container">
+    <!-- Header -->
+    <div class="demo-header">
+      <h1>🔄 Fulfillment Toggle Widget</h1>
+      <p>A lightweight toggle for switching between delivery and pickup</p>
+    </div>
+
+    <!-- Default Theme -->
+    <div class="demo-section">
+      <h2>Default Theme</h2>
+      <p>Standard button style with clear active states and hover effects.</p>
+
+      <div class="demo-item">
+        <h3>With Icons & Labels <span class="badge">Recommended</span></h3>
+        <p class="description">Full version with emoji icons and text labels</p>
+        <div id="toggle-default"></div>
+        <div class="demo-output">
+          <div class="demo-output-label">Current Selection:</div>
+          <div class="demo-output-value" id="output-default">delivery</div>
+        </div>
+        <div class="demo-code">
+<span class="keyword">new</span> OrdakFulfillmentToggle(<span class="string">'toggle-default'</span>, {
+  defaultType: <span class="string">'delivery'</span>,
+  theme: <span class="string">'default'</span>
+});
+        </div>
+      </div>
+    </div>
+
+    <!-- Minimal Theme -->
+    <div class="demo-section">
+      <h2>Minimal Theme</h2>
+      <p>Clean segmented control style, perfect for modern interfaces.</p>
+
+      <div class="demo-item">
+        <h3>Segmented Control Style</h3>
+        <p class="description">Compact design with subtle background</p>
+        <div id="toggle-minimal"></div>
+        <div class="demo-output">
+          <div class="demo-output-label">Current Selection:</div>
+          <div class="demo-output-value" id="output-minimal">delivery</div>
+        </div>
+        <div class="demo-code">
+<span class="keyword">new</span> OrdakFulfillmentToggle(<span class="string">'toggle-minimal'</span>, {
+  defaultType: <span class="string">'delivery'</span>,
+  theme: <span class="string">'minimal'</span>
+});
+        </div>
+      </div>
+    </div>
+
+    <!-- Pills Theme -->
+    <div class="demo-section">
+      <h2>Pills Theme</h2>
+      <p>Rounded pill buttons for a softer, friendly appearance.</p>
+
+      <div class="demo-item">
+        <h3>Rounded Pills</h3>
+        <p class="description">Modern pill-shaped buttons</p>
+        <div id="toggle-pills"></div>
+        <div class="demo-output">
+          <div class="demo-output-label">Current Selection:</div>
+          <div class="demo-output-value" id="output-pills">delivery</div>
+        </div>
+        <div class="demo-code">
+<span class="keyword">new</span> OrdakFulfillmentToggle(<span class="string">'toggle-pills'</span>, {
+  defaultType: <span class="string">'delivery'</span>,
+  theme: <span class="string">'pills'</span>
+});
+        </div>
+      </div>
+    </div>
+
+    <!-- Variations Grid -->
+    <div class="demo-section">
+      <h2>Variations</h2>
+      <p>Different configurations for various use cases.</p>
+
+      <div class="demo-grid">
+        <div class="demo-item">
+          <h3>Without Labels</h3>
+          <p class="description">Icons only, more compact</p>
+          <div id="toggle-no-labels"></div>
+          <div class="demo-code">
+<span class="keyword">new</span> OrdakFulfillmentToggle(<span class="string">'toggle-no-labels'</span>, {
+  showLabels: <span class="keyword">false</span>
+});
+          </div>
+        </div>
+
+        <div class="demo-item">
+          <h3>Without Icons</h3>
+          <p class="description">Text only, cleaner look</p>
+          <div id="toggle-no-icons"></div>
+          <div class="demo-code">
+<span class="keyword">new</span> OrdakFulfillmentToggle(<span class="string">'toggle-no-icons'</span>, {
+  showIcons: <span class="keyword">false</span>
+});
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Event Handling -->
+    <div class="demo-section">
+      <h2>Event Handling</h2>
+      <p>Listen to changes and integrate with other widgets.</p>
+
+      <div class="demo-item">
+        <h3>onChange Callback</h3>
+        <p class="description">Get notified when selection changes</p>
+        <div id="toggle-events"></div>
+        <div class="demo-output">
+          <div class="demo-output-label">Event Log:</div>
+          <div id="event-log" style="font-family: monospace; font-size: 13px; color: #202223;">
+            Waiting for selection...
+          </div>
+        </div>
+        <div class="demo-code">
+<span class="keyword">new</span> OrdakFulfillmentToggle(<span class="string">'toggle-events'</span>, {
+  onChange: <span class="keyword">function</span>(type) {
+    console.log(<span class="string">'Selected:'</span>, type);
+    <span class="comment">// Update other widgets, fetch slots, etc.</span>
+  }
+});
+
+<span class="comment">// Or listen to custom events</span>
+document.addEventListener(<span class="string">'ordak:fulfillment-change'</span>, <span class="keyword">function</span>(e) {
+  console.log(<span class="string">'Type:'</span>, e.detail.type);
+});
+        </div>
+      </div>
+    </div>
+
+    <!-- API Methods -->
+    <div class="demo-section">
+      <h2>Public API</h2>
+      <p>Programmatically control the toggle widget.</p>
+
+      <div class="demo-item">
+        <h3>API Methods</h3>
+        <p class="description">Control the widget with JavaScript</p>
+        <div id="toggle-api"></div>
+        <div style="margin-top: 16px; display: flex; gap: 8px; flex-wrap: wrap;">
+          <button onclick="apiSetDelivery()" style="padding: 10px 16px; background: #008060; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500;">
+            Set to Delivery
+          </button>
+          <button onclick="apiSetPickup()" style="padding: 10px 16px; background: #008060; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500;">
+            Set to Pickup
+          </button>
+          <button onclick="apiReset()" style="padding: 10px 16px; background: #6d7175; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500;">
+            Reset
+          </button>
+          <button onclick="apiGetCurrent()" style="padding: 10px 16px; background: #005bd3; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500;">
+            Get Current
+          </button>
+        </div>
+        <div class="demo-code">
+<span class="keyword">const</span> toggle = <span class="keyword">new</span> OrdakFulfillmentToggle(<span class="string">'toggle-api'</span>);
+
+<span class="comment">// Programmatically change selection</span>
+toggle.setType(<span class="string">'pickup'</span>);
+
+<span class="comment">// Get current selection</span>
+<span class="keyword">const</span> type = toggle.getSelectedType();
+
+<span class="comment">// Reset to default</span>
+toggle.reset();
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="fulfillment-toggle.js"></script>
+  <script>
+    // Initialize all demo toggles
+    const defaultToggle = new OrdakFulfillmentToggle('toggle-default', {
+      defaultType: 'delivery',
+      theme: 'default',
+      onChange: function(type) {
+        document.getElementById('output-default').textContent = type;
+      }
+    });
+
+    const minimalToggle = new OrdakFulfillmentToggle('toggle-minimal', {
+      defaultType: 'delivery',
+      theme: 'minimal',
+      onChange: function(type) {
+        document.getElementById('output-minimal').textContent = type;
+      }
+    });
+
+    const pillsToggle = new OrdakFulfillmentToggle('toggle-pills', {
+      defaultType: 'delivery',
+      theme: 'pills',
+      onChange: function(type) {
+        document.getElementById('output-pills').textContent = type;
+      }
+    });
+
+    new OrdakFulfillmentToggle('toggle-no-labels', {
+      showLabels: false
+    });
+
+    new OrdakFulfillmentToggle('toggle-no-icons', {
+      showIcons: false
+    });
+
+    const eventLog = document.getElementById('event-log');
+    let eventCount = 0;
+
+    new OrdakFulfillmentToggle('toggle-events', {
+      onChange: function(type) {
+        eventCount++;
+        const timestamp = new Date().toLocaleTimeString();
+        eventLog.innerHTML = `
+          Event #${eventCount}: Selected "${type}" at ${timestamp}
+        `;
+      }
+    });
+
+    // API demo
+    const apiToggle = new OrdakFulfillmentToggle('toggle-api');
+
+    function apiSetDelivery() {
+      apiToggle.setType('delivery');
+      alert('Set to: delivery');
+    }
+
+    function apiSetPickup() {
+      apiToggle.setType('pickup');
+      alert('Set to: pickup');
+    }
+
+    function apiReset() {
+      apiToggle.reset();
+      alert('Reset to default');
+    }
+
+    function apiGetCurrent() {
+      const current = apiToggle.getSelectedType();
+      alert('Current selection: ' + current);
+    }
+  </script>
+</body>
+</html>
