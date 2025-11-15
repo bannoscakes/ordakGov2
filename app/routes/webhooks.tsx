@@ -1,11 +1,12 @@
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { logger } from "../utils/logger.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { topic, shop, session, admin, payload } = await authenticate.webhook(request);
 
-  console.log(`Received ${topic} webhook for ${shop}`);
+  logger.info("Received webhook", { topic, shop });
 
   switch (topic) {
     case "APP_UNINSTALLED":
@@ -20,7 +21,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     case "CUSTOMERS_REDACT":
     case "SHOP_REDACT":
     default:
-      console.log("Unhandled webhook topic:", topic);
+      logger.info("Unhandled webhook topic", { topic, shop });
   }
 
   return new Response("Webhook processed", { status: 200 });

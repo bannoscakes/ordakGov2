@@ -14,6 +14,7 @@ import {
   generateOrderTags,
   type SchedulingMetafields,
 } from "../services/metafield.service";
+import { logger } from "../utils/logger.server";
 
 export async function action({ request }: ActionFunctionArgs) {
   try {
@@ -28,7 +29,7 @@ export async function action({ request }: ActionFunctionArgs) {
     const gid = `gid://shopify/Order/${orderId}`;
 
     if (!orderId) {
-      console.error("No order ID in webhook payload");
+      logger.error("No order ID in webhook payload", undefined, { topic, shop });
       return new Response("No order ID", { status: 400 });
     }
 
@@ -46,7 +47,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
     if (!orderLink) {
       // Order not linked to a slot, nothing to do
-      console.log(`Order ${orderId} not linked to scheduling`);
+      logger.info("Order not linked to scheduling", { orderId, shop });
       return new Response("OK", { status: 200 });
     }
 
@@ -74,21 +75,21 @@ export async function action({ request }: ActionFunctionArgs) {
     );
 
     if (!metafieldsSuccess) {
-      console.error(`Failed to add metafields to order ${orderId}`);
+      logger.warn("Failed to add metafields to order", { orderId, shop });
     }
 
     // Add tags to order
     const tagsSuccess = await addOrderTags(admin.graphql, gid, tags);
 
     if (!tagsSuccess) {
-      console.error(`Failed to add tags to order ${orderId}`);
+      logger.warn("Failed to add tags to order", { orderId, shop });
     }
 
     // Add note to order
     const noteSuccess = await addOrderNote(admin.graphql, gid, note);
 
     if (!noteSuccess) {
-      console.error(`Failed to add note to order ${orderId}`);
+      logger.warn("Failed to add note to order", { orderId, shop });
     }
 
     // Log the completion
@@ -106,10 +107,10 @@ export async function action({ request }: ActionFunctionArgs) {
       },
     });
 
-    console.log(`Successfully processed order ${orderId} with scheduling data`);
+    logger.info("Successfully processed order with scheduling data", { orderId });
     return new Response("OK", { status: 200 });
   } catch (error) {
-    console.error("Webhook processing error:", error);
+    logger.error("Webhook processing error", error);
     return new Response("Error", { status: 500 });
   }
 }
