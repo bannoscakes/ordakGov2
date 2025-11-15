@@ -6,6 +6,7 @@
 import { json, type ActionFunctionArgs } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { logger } from "../utils/logger.server";
 
 interface RequestBody {
   sessionId: string;
@@ -131,7 +132,7 @@ export async function action({ request }: ActionFunctionArgs) {
       message: "Recommendation selection tracked successfully",
     });
   } catch (error) {
-    console.error("Error tracking recommendation.selected:", error);
+    logger.error("Error tracking recommendation.selected", error);
     return json(
       {
         error: "Internal server error",

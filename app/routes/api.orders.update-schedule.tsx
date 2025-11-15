@@ -13,6 +13,7 @@ import type { ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { authenticate } from "../../shopify.server";
 import prisma from "../../db.server";
+import { logger } from "../../utils/logger.server";
 import {
   addOrderMetafields,
   addOrderTags,
@@ -174,7 +175,7 @@ Time: ${existingLink.slot.timeStart} - ${existingLink.slot.timeEnd}
       message: "Schedule updated successfully",
     });
   } catch (error) {
-    console.error("Schedule update error:", error);
+    logger.error("Schedule update error", error);
     return json<UpdateScheduleResponse>(
       {
         success: false,

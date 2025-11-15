@@ -16,6 +16,7 @@ import type { ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { authenticate } from "../../shopify.server";
 import prisma from "../../db.server";
+import { logger } from "../../utils/logger.server";
 
 interface OrderTagRequest {
   orderId: string;
@@ -162,7 +163,7 @@ export async function action({ request }: ActionFunctionArgs) {
       },
     });
   } catch (error) {
-    console.error("Order tagging error:", error);
+    logger.error("Order tagging error", error);
     return json<OrderTagResponse>(
       {
         success: false,
