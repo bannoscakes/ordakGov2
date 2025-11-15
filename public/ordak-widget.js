@@ -39,6 +39,21 @@
       return 'sess_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     }
 
+    // Helper function to safely escape HTML
+    escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Helper function to create element with text content safely
+    createElement(tag, className, textContent) {
+      const el = document.createElement(tag);
+      if (className) el.className = className;
+      if (textContent) el.textContent = textContent;
+      return el;
+    }
+
     async init() {
       this.render();
       await this.loadSlots();
@@ -140,23 +155,24 @@
       const dateSelector = document.getElementById('ordak-date-selector');
       dateSelector.style.display = 'block';
 
-      dateSelector.innerHTML = `
-        <div class="ordak-dates">
-          ${dates
-            .map(
-              (date, index) => `
-            <button
-              class="ordak-date-btn ${index === 0 ? 'active' : ''}"
-              data-date="${date}"
-              onclick="window.ordakPicker.selectDate('${date}')"
-            >
-              ${this.formatDate(date)}
-            </button>
-          `
-            )
-            .join('')}
-        </div>
-      `;
+      // Clear previous content
+      dateSelector.innerHTML = '';
+
+      // Create dates container
+      const datesDiv = this.createElement('div', 'ordak-dates');
+
+      dates.forEach((date, index) => {
+        const button = document.createElement('button');
+        button.className = 'ordak-date-btn';
+        if (index === 0) button.classList.add('active');
+        button.setAttribute('data-date', date);
+        button.onclick = () => window.ordakPicker.selectDate(date);
+        button.textContent = this.formatDate(date);
+
+        datesDiv.appendChild(button);
+      });
+
+      dateSelector.appendChild(datesDiv);
 
       // Show first date's slots by default
       this.selectDate(dates[0]);
@@ -185,41 +201,50 @@
         (a, b) => b.recommendationScore - a.recommendationScore
       );
 
-      container.innerHTML = `
-        <div class="ordak-slots">
-          ${sortedSlots
-            .map(
-              (slot) => `
-            <div
-              class="ordak-slot ${slot.recommended ? 'recommended' : ''} ${
-                slot.capacityRemaining === 0 ? 'full' : ''
-              }"
-              data-slot-id="${slot.slotId}"
-              onclick="window.ordakPicker.selectSlot('${slot.slotId}')"
-            >
-              ${
-                slot.recommended
-                  ? '<span class="ordak-badge">⭐ Recommended</span>'
-                  : ''
-              }
-              <div class="ordak-slot-time">
-                ${slot.timeStart} - ${slot.timeEnd}
-              </div>
-              <div class="ordak-slot-reason">${slot.reason}</div>
-              <div class="ordak-slot-capacity">
-                ${slot.capacityRemaining} spots left
-              </div>
-              ${
-                slot.capacityRemaining === 0
-                  ? '<div class="ordak-slot-full-text">Fully Booked</div>'
-                  : ''
-              }
-            </div>
-          `
-            )
-            .join('')}
-        </div>
-      `;
+      // Clear previous content
+      container.innerHTML = '';
+
+      // Create slots container
+      const slotsDiv = this.createElement('div', 'ordak-slots');
+
+      sortedSlots.forEach((slot) => {
+        const slotDiv = document.createElement('div');
+        slotDiv.className = 'ordak-slot';
+        if (slot.recommended) slotDiv.classList.add('recommended');
+        if (slot.capacityRemaining === 0) slotDiv.classList.add('full');
+        slotDiv.setAttribute('data-slot-id', slot.slotId);
+        slotDiv.onclick = () => window.ordakPicker.selectSlot(slot.slotId);
+
+        // Recommended badge
+        if (slot.recommended) {
+          const badge = this.createElement('span', 'ordak-badge', '⭐ Recommended');
+          slotDiv.appendChild(badge);
+        }
+
+        // Slot time (safely escaped)
+        const timeDiv = this.createElement('div', 'ordak-slot-time');
+        timeDiv.textContent = `${slot.timeStart} - ${slot.timeEnd}`;
+        slotDiv.appendChild(timeDiv);
+
+        // Slot reason (safely escaped)
+        const reasonDiv = this.createElement('div', 'ordak-slot-reason', slot.reason);
+        slotDiv.appendChild(reasonDiv);
+
+        // Capacity (safely escaped)
+        const capacityDiv = this.createElement('div', 'ordak-slot-capacity');
+        capacityDiv.textContent = `${slot.capacityRemaining} spots left`;
+        slotDiv.appendChild(capacityDiv);
+
+        // Full text
+        if (slot.capacityRemaining === 0) {
+          const fullText = this.createElement('div', 'ordak-slot-full-text', 'Fully Booked');
+          slotDiv.appendChild(fullText);
+        }
+
+        slotsDiv.appendChild(slotDiv);
+      });
+
+      container.appendChild(slotsDiv);
     }
 
     selectSlot(slotId) {

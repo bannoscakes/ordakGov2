@@ -11,6 +11,7 @@ import type {
   LocationRecommendationInput,
   CustomerContext,
 } from "../services";
+import { validateRequest, recommendationLocationSchema } from "../utils/validation.server";
 
 interface RequestBody {
   postcode?: string;
@@ -34,7 +35,13 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   try {
-    const body: RequestBody = await request.json();
+    // Validate request body
+    const validation = await validateRequest(request, recommendationLocationSchema);
+    if (validation.error) {
+      return validation.error;
+    }
+
+    const body = validation.data;
 
     // Get shop settings
     const shop = await prisma.shop.findUnique({
