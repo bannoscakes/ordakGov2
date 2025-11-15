@@ -169,62 +169,126 @@
       }
     }
 
+    // Helper function to safely escape text content
+    escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Helper function to create element with text content safely
+    createElement(tag, className, textContent) {
+      const el = document.createElement(tag);
+      if (className) el.className = className;
+      if (textContent) el.textContent = textContent;
+      return el;
+    }
+
     showResult(data) {
       const resultContainer = document.getElementById('ordak-checker-result');
       this.state.result = data;
 
+      // Clear previous content
+      resultContainer.innerHTML = '';
+
       if (data.eligible) {
-        resultContainer.innerHTML = `
-          <div class="ordak-checker-success">
-            <div class="ordak-checker-icon ordak-checker-icon-success">✓</div>
-            <h4 class="ordak-checker-result-title">Great news! We deliver to your area</h4>
-            <p class="ordak-checker-result-message">${data.message}</p>
+        const successDiv = this.createElement('div', 'ordak-checker-success');
 
-            ${
-              data.services.delivery && data.services.pickup
-                ? '<p class="ordak-checker-services">Available: <strong>Delivery & Pickup</strong></p>'
-                : data.services.delivery
-                ? '<p class="ordak-checker-services">Available: <strong>Delivery</strong></p>'
-                : data.services.pickup
-                ? '<p class="ordak-checker-services">Available: <strong>Pickup</strong></p>'
-                : ''
+        // Icon
+        const icon = this.createElement('div', 'ordak-checker-icon ordak-checker-icon-success', '✓');
+        successDiv.appendChild(icon);
+
+        // Title
+        const title = this.createElement('h4', 'ordak-checker-result-title', 'Great news! We deliver to your area');
+        successDiv.appendChild(title);
+
+        // Message (safely escaped)
+        const message = this.createElement('p', 'ordak-checker-result-message', data.message || '');
+        successDiv.appendChild(message);
+
+        // Services
+        if (data.services) {
+          const servicesText = data.services.delivery && data.services.pickup
+            ? 'Available: Delivery & Pickup'
+            : data.services.delivery
+            ? 'Available: Delivery'
+            : data.services.pickup
+            ? 'Available: Pickup'
+            : '';
+
+          if (servicesText) {
+            const services = document.createElement('p');
+            services.className = 'ordak-checker-services';
+            services.innerHTML = servicesText.replace('Delivery', '<strong>Delivery</strong>').replace('Pickup', '<strong>Pickup</strong>');
+            successDiv.appendChild(services);
+          }
+        }
+
+        // Locations
+        if (data.locations && data.locations.length > 0) {
+          const locationsDiv = this.createElement('div', 'ordak-checker-locations');
+          const locationsTitle = this.createElement('h5', 'ordak-checker-locations-title', 'Available Locations:');
+          locationsDiv.appendChild(locationsTitle);
+
+          const locationsList = document.createElement('ul');
+          locationsList.className = 'ordak-checker-locations-list';
+
+          data.locations.forEach((loc) => {
+            const li = document.createElement('li');
+            li.className = 'ordak-checker-location';
+
+            // Location name (safely escaped)
+            const name = document.createElement('strong');
+            name.textContent = loc.name;
+            li.appendChild(name);
+
+            // City (safely escaped)
+            if (loc.city) {
+              const city = document.createElement('span');
+              city.className = 'ordak-checker-location-city';
+              city.textContent = loc.city;
+              li.appendChild(city);
             }
 
-            ${
-              data.locations && data.locations.length > 0
-                ? `
-              <div class="ordak-checker-locations">
-                <h5 class="ordak-checker-locations-title">Available Locations:</h5>
-                <ul class="ordak-checker-locations-list">
-                  ${data.locations
-                    .map(
-                      (loc) => `
-                    <li class="ordak-checker-location">
-                      <strong>${loc.name}</strong>
-                      ${loc.city ? `<span class="ordak-checker-location-city">${loc.city}</span>` : ''}
-                      <div class="ordak-checker-location-services">
-                        ${loc.supportsDelivery ? '<span class="ordak-checker-service-badge">Delivery</span>' : ''}
-                        ${loc.supportsPickup ? '<span class="ordak-checker-service-badge">Pickup</span>' : ''}
-                      </div>
-                    </li>
-                  `
-                    )
-                    .join('')}
-                </ul>
-              </div>
-            `
-                : ''
+            // Services badges
+            const servicesDiv = document.createElement('div');
+            servicesDiv.className = 'ordak-checker-location-services';
+
+            if (loc.supportsDelivery) {
+              const deliveryBadge = this.createElement('span', 'ordak-checker-service-badge', 'Delivery');
+              servicesDiv.appendChild(deliveryBadge);
             }
-          </div>
-        `;
+
+            if (loc.supportsPickup) {
+              const pickupBadge = this.createElement('span', 'ordak-checker-service-badge', 'Pickup');
+              servicesDiv.appendChild(pickupBadge);
+            }
+
+            li.appendChild(servicesDiv);
+            locationsList.appendChild(li);
+          });
+
+          locationsDiv.appendChild(locationsList);
+          successDiv.appendChild(locationsDiv);
+        }
+
+        resultContainer.appendChild(successDiv);
       } else {
-        resultContainer.innerHTML = `
-          <div class="ordak-checker-error">
-            <div class="ordak-checker-icon ordak-checker-icon-error">✕</div>
-            <h4 class="ordak-checker-result-title">Sorry, we don't deliver to your area yet</h4>
-            <p class="ordak-checker-result-message">${data.message || 'No service available in your postcode'}</p>
-          </div>
-        `;
+        const errorDiv = this.createElement('div', 'ordak-checker-error');
+
+        // Icon
+        const icon = this.createElement('div', 'ordak-checker-icon ordak-checker-icon-error', '✕');
+        errorDiv.appendChild(icon);
+
+        // Title
+        const title = this.createElement('h4', 'ordak-checker-result-title', "Sorry, we don't deliver to your area yet");
+        errorDiv.appendChild(title);
+
+        // Message (safely escaped)
+        const message = this.createElement('p', 'ordak-checker-result-message', data.message || 'No service available in your postcode');
+        errorDiv.appendChild(message);
+
+        resultContainer.appendChild(errorDiv);
       }
 
       resultContainer.style.display = 'block';

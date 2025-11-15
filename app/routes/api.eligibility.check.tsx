@@ -16,6 +16,7 @@ import type { ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import prisma from "../../db.server";
 import { logger } from "../../utils/logger.server";
+import { validateRequest, eligibilityCheckSchema } from "../../utils/validation.server";
 
 interface EligibilityRequest {
   postcode: string;
@@ -81,33 +82,13 @@ export async function action({ request }: ActionFunctionArgs) {
   // This is a public endpoint (app proxy), no authentication required
 
   try {
-    const body = await request.json();
-    const { postcode, fulfillmentType, shopDomain } = body as EligibilityRequest;
-
-    // Validation
-    if (!postcode || typeof postcode !== "string") {
-      return json<EligibilityResponse>(
-        {
-          eligible: false,
-          locations: [],
-          services: { delivery: false, pickup: false },
-          message: "Postcode is required",
-        },
-        { status: 400, headers: getCorsHeaders(request) }
-      );
+    // Validate request body with Zod
+    const validation = await validateRequest(request, eligibilityCheckSchema);
+    if (validation.error) {
+      return validation.error;
     }
 
-    if (!shopDomain) {
-      return json<EligibilityResponse>(
-        {
-          eligible: false,
-          locations: [],
-          services: { delivery: false, pickup: false },
-          message: "Shop domain is required",
-        },
-        { status: 400, headers: getCorsHeaders(request) }
-      );
-    }
+    const { postcode, fulfillmentType, shopDomain } = validation.data;
 
     // Find the shop
     const shop = await prisma.shop.findUnique({
