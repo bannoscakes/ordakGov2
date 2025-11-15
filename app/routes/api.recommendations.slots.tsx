@@ -6,6 +6,7 @@
 import { json, type ActionFunctionArgs } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { logger } from "../utils/logger.server";
 import { scoreSlots } from "../services";
 import type {
   SlotRecommendationInput,
@@ -244,7 +245,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
     return json(response);
   } catch (error) {
-    console.error("Error in recommendations/slots API:", error);
+    logger.error("Error in recommendations/slots API", error);
     return json(
       {
         error: "Internal server error",

@@ -21,6 +21,7 @@ import {
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { logger } from "../utils/logger.server";
 
 // Setup wizard steps
 const STEPS = {
@@ -228,7 +229,7 @@ export async function action({ request }: ActionFunctionArgs) {
         return json({ success: false, error: "Invalid step" }, { status: 400 });
     }
   } catch (error) {
-    console.error("Setup wizard error:", error);
+    logger.error("Setup wizard error", error);
     return json(
       { success: false, error: error instanceof Error ? error.message : "An error occurred" },
       { status: 500 }

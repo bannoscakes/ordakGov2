@@ -20,6 +20,7 @@ import {
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { logger } from "../utils/logger.server";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
   const { session } = await authenticate.admin(request);
@@ -355,7 +356,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
     return json({ success: false, error: "Invalid action" }, { status: 400 });
   } catch (error) {
-    console.error("Reschedule error:", error);
+    logger.error("Reschedule error", error);
     return json(
       {
         success: false,

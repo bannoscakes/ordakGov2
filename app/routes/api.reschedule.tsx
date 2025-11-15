@@ -1,6 +1,7 @@
 import { json, type ActionFunctionArgs } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { logger } from "../utils/logger.server";
 
 /**
  * API endpoint for customers to reschedule their orders
@@ -157,7 +158,7 @@ export async function action({ request }: ActionFunctionArgs) {
       },
     });
   } catch (error) {
-    console.error("Reschedule API error:", error);
+    logger.error("Reschedule API error", error);
     return json(
       {
         success: false,
