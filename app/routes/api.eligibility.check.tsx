@@ -93,7 +93,7 @@ export async function action({ request }: ActionFunctionArgs) {
           services: { delivery: false, pickup: false },
           message: "Postcode is required",
         },
-        { status: 400 }
+        { status: 400, headers: getCorsHeaders(request) }
       );
     }
 
@@ -105,7 +105,7 @@ export async function action({ request }: ActionFunctionArgs) {
           services: { delivery: false, pickup: false },
           message: "Shop domain is required",
         },
-        { status: 400 }
+        { status: 400, headers: getCorsHeaders(request) }
       );
     }
 
@@ -122,7 +122,7 @@ export async function action({ request }: ActionFunctionArgs) {
           services: { delivery: false, pickup: false },
           message: "Shop not found",
         },
-        { status: 404 }
+        { status: 404, headers: getCorsHeaders(request) }
       );
     }
 
@@ -159,12 +159,15 @@ export async function action({ request }: ActionFunctionArgs) {
     });
 
     if (matchingZones.length === 0) {
-      return json<EligibilityResponse>({
-        eligible: false,
-        locations: [],
-        services: { delivery: false, pickup: false },
-        message: "No service available in your area",
-      });
+      return json<EligibilityResponse>(
+        {
+          eligible: false,
+          locations: [],
+          services: { delivery: false, pickup: false },
+          message: "No service available in your area",
+        },
+        { headers: getCorsHeaders(request) }
+      );
     }
 
     // Get unique locations from matching zones
