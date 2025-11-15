@@ -15,6 +15,7 @@
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import prisma from "../../db.server";
+import { logger } from "../../utils/logger.server";
 
 interface EligibilityRequest {
   postcode: string;
@@ -198,19 +199,25 @@ export async function action({ request }: ActionFunctionArgs) {
       pickup: eligibleLocations.some((loc) => loc.supportsPickup),
     };
 
-    return json<EligibilityResponse>({
-      eligible: filteredLocations.length > 0,
-      locations: filteredLocations,
-      services,
-      message:
-        filteredLocations.length > 0
-          ? `Service available from ${filteredLocations.length} location${filteredLocations.length !== 1 ? "s" : ""}`
-          : fulfillmentType
-          ? `No ${fulfillmentType} service available in your area`
-          : "Service available, but not for the selected fulfillment type",
-    });
+    return json<EligibilityResponse>(
+      {
+        eligible: filteredLocations.length > 0,
+        locations: filteredLocations,
+        services,
+        message:
+          filteredLocations.length > 0
+            ? `Service available from ${filteredLocations.length} location${filteredLocations.length !== 1 ? "s" : ""}`
+            : fulfillmentType
+            ? `No ${fulfillmentType} service available in your area`
+            : "Service available, but not for the selected fulfillment type",
+      },
+      { headers: getCorsHeaders(request) }
+    );
   } catch (error) {
-    console.error("Eligibility check error:", error);
+    logger.error("Eligibility check error", error, {
+      postcode: (error as any)?.postcode,
+      shopDomain: (error as any)?.shopDomain
+    });
     return json<EligibilityResponse>(
       {
         eligible: false,
@@ -218,22 +225,39 @@ export async function action({ request }: ActionFunctionArgs) {
         services: { delivery: false, pickup: false },
         message: "An error occurred while checking eligibility",
       },
-      { status: 500 }
+      { status: 500, headers: getCorsHeaders(request) }
     );
   }
 }
 
+/**
+ * Helper to get CORS headers
+ * Allows requests from Shopify storefronts (*.myshopify.com and custom domains)
+ */
+function getCorsHeaders(request: Request): HeadersInit {
+  const origin = request.headers.get("origin");
+
+  // Allow Shopify storefronts and local development
+  const allowedOrigins = [
+    /^https?:\/\/.*\.myshopify\.com$/,
+    /^https?:\/\/localhost(:\d+)?$/,
+    /^https?:\/\/127\.0\.0\.1(:\d+)?$/,
+  ];
+
+  const isAllowed = origin && allowedOrigins.some(pattern => pattern.test(origin));
+
+  return {
+    "Access-Control-Allow-Origin": isAllowed ? origin : "null",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Vary": "Origin",
+  };
+}
+
 // OPTIONS for CORS preflight
 export async function loader({ request }: ActionFunctionArgs) {
-  // Return CORS headers for OPTIONS requests
   return json(
     { message: "Use POST to check eligibility" },
-    {
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
-      },
-    }
+    { headers: getCorsHeaders(request) }
   );
 }
