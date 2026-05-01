@@ -1,18 +1,18 @@
 {
-  "name": "ordakgov2",
+  "name": "ordak-go",
   "version": "0.1.0",
   "private": true,
   "description": "Shopify delivery and pickup scheduler app with recommendation engine",
   "license": "UNLICENSED",
   "scripts": {
-    "build": "remix build",
+    "build": "remix vite:build",
     "dev": "shopify app dev",
     "config:link": "shopify app config link",
     "generate": "shopify app generate",
     "deploy": "shopify app deploy",
     "config:use": "shopify app config use",
     "env": "shopify app env",
-    "start": "remix-serve build",
+    "start": "remix-serve build/server/index.js",
     "docker-start": "npm run setup && npm run start",
     "setup": "prisma generate && prisma migrate deploy",
     "lint": "eslint --cache --cache-location ./node_modules/.cache/eslint .",
@@ -30,37 +30,39 @@
   },
   "type": "module",
   "engines": {
-    "node": "^18.20 || ^20.10 || >=21.0.0"
+    "node": "^20.10 || >=22.0.0"
   },
   "dependencies": {
-    "@prisma/client": "^5.11.0",
-    "@remix-run/node": "^2.8.0",
-    "@remix-run/react": "^2.8.0",
-    "@remix-run/serve": "^2.8.0",
-    "@shopify/app-bridge-react": "^4.1.2",
-    "@shopify/polaris": "^12.28.0",
-    "@shopify/shopify-api": "^9.3.1",
-    "@shopify/shopify-app-remix": "^2.8.0",
-    "@shopify/shopify-app-session-storage-prisma": "^4.0.3",
-    "isbot": "^5.1.0",
-    "prisma": "^5.11.0",
+    "@prisma/client": "^6.19.3",
+    "@remix-run/node": "^2.17.4",
+    "@remix-run/react": "^2.17.4",
+    "@remix-run/serve": "^2.17.4",
+    "@shopify/app-bridge-react": "^4.2.10",
+    "@shopify/polaris": "^13.9.5",
+    "@shopify/shopify-api": "^13.0.0",
+    "@shopify/shopify-app-remix": "^4.2.0",
+    "@shopify/shopify-app-session-storage-prisma": "^9.0.0",
+    "isbot": "^5.1.39",
+    "prisma": "^6.19.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "zod": "^3.22.4"
   },
   "devDependencies": {
-    "@remix-run/dev": "^2.8.0",
-    "@shopify/api-codegen-preset": "^0.0.6",
+    "@remix-run/dev": "^2.17.4",
+    "@shopify/api-codegen-preset": "^2.0.0",
     "@types/eslint": "^8.56.5",
     "@types/node": "^20.11.24",
     "@types/react": "^18.2.64",
     "@types/react-dom": "^18.2.21",
+    "@vitest/coverage-v8": "^3.0.0",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.1.0",
     "prettier": "^3.2.5",
     "typescript": "^5.3.3",
     "vite": "^5.1.4",
-    "vite-tsconfig-paths": "^4.3.1"
+    "vite-tsconfig-paths": "^4.3.1",
+    "vitest": "^3.0.0"
   },
   "workspaces": [
     "extensions/*"
@@ -68,11 +70,5 @@
   "trustedDependencies": [
     "@shopify/plugin-cloudflare"
   ],
-  "resolutions": {
-    "undici": "6.13.0"
-  },
-  "overrides": {
-    "undici": "6.13.0"
-  },
-  "author": "ordakGov2"
+  "author": "P&T Group"
 }
