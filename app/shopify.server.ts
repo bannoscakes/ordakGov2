@@ -42,7 +42,28 @@ const shopify = shopifyApp({
   },
   hooks: {
     afterAuth: async ({ session }) => {
-      shopify.registerWebhooks({ session });
+      await shopify.registerWebhooks({ session });
+
+      // Bootstrap a Shop row so the storefront-facing api.* handlers
+      // (eligibility/check, recommendations/*, events/*) can scope queries
+      // to this shop. Idempotent — re-installs and token refreshes simply
+      // update the existing row's accessToken/scope. Without this, the
+      // first signed proxy request from the cart-block returns "404 Shop
+      // not found" even though OAuth succeeded.
+      if (session.accessToken) {
+        await prisma.shop.upsert({
+          where: { shopifyDomain: session.shop },
+          update: {
+            accessToken: session.accessToken,
+            scope: session.scope ?? null,
+          },
+          create: {
+            shopifyDomain: session.shop,
+            accessToken: session.accessToken,
+            scope: session.scope ?? null,
+          },
+        });
+      }
     },
   },
   future: {
