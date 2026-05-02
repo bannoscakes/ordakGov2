@@ -11,18 +11,25 @@ Welcome to **ordakGov2**, a Shopify app that lets merchants provide their custom
 - Integrates with external routing services via signed webhooks for order scheduling and updates.
 - Offers an admin setup wizard, calendar views, and rescheduling workflows for merchants.
 
+## Getting started
+
+- [`CLAUDE.md`](CLAUDE.md) — onboarding for Claude Code sessions (also useful for engineers new to the repo)
+- [`docs/DEV_SETUP.md`](docs/DEV_SETUP.md) — exact 3-terminal local boot procedure
+- [`docs/PLAN.md`](docs/PLAN.md) — current 5-phase build plan and where we are
+
 ## Documentation
 
 The detailed design and process documentation lives in the [`docs`](docs) folder. Key documents include:
 
-- `PRD.md` – Product Requirements Document.
-- `FEATURES.md` – Feature specifications and scope.
-- `DATA_MODEL.md` – Conceptual data model.
-- `API_EVENTS.md` – API and event contract definitions.
-- `CHECKOUT_SPEC.md` – Checkout & storefront extension spec.
-- `SHOPIFY_COMPLIANCE.md` – App Store and Built for Shopify compliance checklist.
-- `QA_TEST_PLAN.md` – End‑to‑end test matrix and quality plan.
-- `SETUP_GUIDE.md` – Merchant setup instructions.
+- `app/PRD.md` – Product Requirements Document.
+- `app/FEATURES.md` – Feature specifications and scope.
+- `app/DATA_MODEL.md` – Conceptual data model.
+- `app/API_EVENTS.md` – API and event contract definitions.
+- `app/CHECKOUT_SPEC.md` – Checkout & storefront extension spec.
+- `app/RECOMMENDATIONS.md` – Recommendation engine spec.
+- `app/SHOPIFY_COMPLIANCE.md` – App Store and Built for Shopify compliance checklist.
+- `app/QA_TEST_PLAN.md` – End‑to‑end test matrix and quality plan.
+- `app/SETUP_GUIDE.md` – Merchant setup instructions.
 - Workflow docs in `docs/workflow` for contributor guidelines and project tracking.
 
 ## Development
