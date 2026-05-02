@@ -1,0 +1,145 @@
+/**
+ * Carrier Service
+ *
+ * Registers our app as a Shopify "carrier service" — Shopify will POST to a
+ * callback URL during checkout to fetch shipping rates. Our callback reads
+ * the destination address + line item properties (which the cart-block
+ * mirrors from cart attributes) and returns the appropriate rates.
+ *
+ * Architectural note: Shopify's Carrier Service rate-request body does NOT
+ * include cart `note_attributes`. Only origin / destination / items /
+ * currency. To bridge cart-block selections (delivery vs pickup, slot id,
+ * etc.) into the carrier service callback, the cart-block writes the same
+ * info as `_`-prefixed line item properties on every line, which DO appear
+ * in `request.rate.items[*].properties`. That's why this module's contract
+ * is "read line item properties," not "read cart attributes."
+ */
+
+import { logger } from "../utils/logger.server";
+
+export const CARRIER_SERVICE_NAME = "Ordak Go";
+
+export interface CarrierServiceRecord {
+  id: string;
+  name: string;
+  callbackUrl: string;
+  active: boolean;
+}
+
+/**
+ * Build the absolute callback URL Shopify will POST to. Single source of
+ * truth — keep this in sync with the Remix route at
+ * app/routes/api.carrier-service.rates.tsx.
+ */
+export function buildCallbackUrl(appUrl: string): string {
+  return new URL("/api/carrier-service/rates", appUrl).toString();
+}
+
+/**
+ * Register the carrier service with Shopify. Idempotent in spirit — if the
+ * shop already has one registered (we'd see it via `carrierServices` query),
+ * the caller should pass the existing ID through `unregisterCarrierService`
+ * first. We don't list-then-create here because afterAuth callers know
+ * whether they have a stored ID.
+ */
+export async function registerCarrierService(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  graphql: any,
+  callbackUrl: string,
+): Promise<CarrierServiceRecord | null> {
+  try {
+    const response = await graphql(
+      `#graphql
+      mutation CarrierServiceCreate($input: DeliveryCarrierServiceCreateInput!) {
+        carrierServiceCreate(input: $input) {
+          carrierService {
+            id
+            name
+            callbackUrl
+            active
+          }
+          userErrors {
+            field
+            message
+          }
+        }
+      }`,
+      {
+        variables: {
+          input: {
+            name: CARRIER_SERVICE_NAME,
+            callbackUrl,
+            supportsServiceDiscovery: true,
+            active: true,
+          },
+        },
+      },
+    );
+
+    const json = await response.json();
+    const result = json.data?.carrierServiceCreate;
+
+    if (result?.userErrors?.length) {
+      logger.error("carrierServiceCreate userErrors", undefined, {
+        errors: result.userErrors,
+      });
+      return null;
+    }
+
+    if (!result?.carrierService) {
+      logger.error("carrierServiceCreate returned no carrierService", undefined, {
+        response: json,
+      });
+      return null;
+    }
+
+    return result.carrierService as CarrierServiceRecord;
+  } catch (err) {
+    logger.error("carrierServiceCreate threw", err);
+    return null;
+  }
+}
+
+/**
+ * Delete the carrier service. Called on APP_UNINSTALLED so the dev-store
+ * isn't left with an orphan registration pointing at a dead callback.
+ * Returns true on success, false on Shopify-reported error.
+ */
+export async function unregisterCarrierService(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  graphql: any,
+  carrierServiceId: string,
+): Promise<boolean> {
+  try {
+    const response = await graphql(
+      `#graphql
+      mutation CarrierServiceDelete($id: ID!) {
+        carrierServiceDelete(id: $id) {
+          deletedId
+          userErrors {
+            field
+            message
+          }
+        }
+      }`,
+      {
+        variables: { id: carrierServiceId },
+      },
+    );
+
+    const json = await response.json();
+    const result = json.data?.carrierServiceDelete;
+
+    if (result?.userErrors?.length) {
+      logger.error("carrierServiceDelete userErrors", undefined, {
+        errors: result.userErrors,
+      });
+      return false;
+    }
+
+    return true;
+  } catch (err) {
+    logger.error("carrierServiceDelete threw", err);
+    return false;
+  }
+}

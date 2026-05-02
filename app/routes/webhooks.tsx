@@ -2,6 +2,7 @@ import type { ActionFunctionArgs } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { logger } from "../utils/logger.server";
+import { unregisterCarrierService } from "../services/carrier-service.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { topic, shop, session, admin, payload } = await authenticate.webhook(request);
@@ -11,8 +12,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   try {
     switch (topic) {
       case "APP_UNINSTALLED":
-        // Clean up shop data on uninstall
-        if (session) {
+        // Clean up shop data on uninstall. Unregister the carrier service
+        // first so Shopify doesn't keep dispatching rate requests at our
+        // dead callback. Best-effort: if the unregister call fails (e.g.
+        // the registration was already gone), proceed with the DB delete.
+        if (session && admin) {
+          const dbShop = await prisma.shop.findUnique({
+            where: { shopifyDomain: shop },
+            select: { carrierServiceId: true },
+          });
+          if (dbShop?.carrierServiceId) {
+            await unregisterCarrierService(admin.graphql, dbShop.carrierServiceId);
+            logger.info("Carrier service unregistered on uninstall", {
+              shop,
+              id: dbShop.carrierServiceId,
+            });
+          }
+
           await prisma.shop.deleteMany({
             where: { shopifyDomain: shop },
           });

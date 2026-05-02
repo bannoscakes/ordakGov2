@@ -38,6 +38,12 @@ model Shop {
   accessToken           String
   scope                 String?
 
+  // Carrier Service: Shopify-assigned ID returned by carrierServiceCreate.
+  // Stored so APP_UNINSTALLED can call carrierServiceDelete and avoid
+  // orphaning the registration. Null means "not yet registered" (e.g. mid
+  // afterAuth, or Carrier Service registration failed and we'll retry).
+  carrierServiceId      String?
+
   // Recommendation settings
   recommendationsEnabled Boolean  @default(true)
   capacityWeight        Float     @default(0.4)
