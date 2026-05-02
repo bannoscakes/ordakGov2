@@ -7,7 +7,7 @@ application_url = "https://example.com/"
 embedded = true
 
 [access_scopes]
-scopes = "write_products,write_orders,read_locations,write_merchant-managed_fulfillment_orders"
+scopes = "write_products,write_orders,read_locations,write_merchant_managed_fulfillment_orders"
 
 [auth]
 redirect_urls = [ "https://example.com/api/auth" ]
@@ -22,4 +22,4 @@ embedded = false
 
 [build]
 automatically_update_urls_on_dev = true
-dev_store_url = "bannoscakes.myshopify.com"
+dev_store_url = "ordak-go-dev.myshopify.com"

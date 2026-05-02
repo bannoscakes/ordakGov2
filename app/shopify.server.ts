@@ -45,6 +45,13 @@ const shopify = shopifyApp({
       shopify.registerWebhooks({ session });
     },
   },
+  future: {
+    // Use OAuth token exchange instead of cookie-based redirect OAuth.
+    // Required because modern browsers block third-party cookies, which
+    // breaks the legacy embedded-app auth flow inside Shopify admin iframes.
+    // Pairs with Shopify-managed installation in Partners.
+    unstable_newEmbeddedAuthStrategy: true,
+  },
   ...(process.env.SHOP_CUSTOM_DOMAIN
     ? { customShopDomains: [process.env.SHOP_CUSTOM_DOMAIN] }
     : {}),

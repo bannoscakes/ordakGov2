@@ -3,6 +3,8 @@ node_modules
 /build
 /public/build
 .env
+.env.save
+.env.local
 *.db
 .shopify
 *.log
