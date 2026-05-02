@@ -16,7 +16,7 @@ const config = {
   target: "es2020",
   minify: true,
   sourcemap: true,
-  outfile: resolve(__dirname, "assets/cart-scheduler.js"),
+  outfile: resolve(__dirname, "../cart-block/assets/cart-scheduler.js"),
   jsx: "automatic",
   jsxImportSource: "preact",
   legalComments: "none",

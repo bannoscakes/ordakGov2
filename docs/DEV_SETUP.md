@@ -1,8 +1,20 @@
 # DEV_SETUP.md
 
-How to bring up Ordak Go locally and install it on the dev store. Follow the steps in order; do not improvise.
+How to bring up Ordak Go locally and install it on the dev store.
 
-The Shopify CLI's `app dev` auto-orchestration **does not work** for this project — its auto-tunnel never starts, it never spawns Vite, and the `--tunnel-url` flag interprets the URL's port as a local-bind port (EACCES on `:443`). The manual 3-terminal flow below is the workable path.
+## TL;DR
+
+```
+npm run dev:up      # boots cloudflared + builds extensions + pushes Partners config + starts vite
+npm run dev:logs    # tail vite + cloudflared logs (Ctrl-C exits tail, processes keep running)
+npm run dev:down    # stop both
+```
+
+That's it. `dev:up` does end-to-end: starts a cloudflared quick-tunnel in the background, parses the live URL out of cloudflared's logs, rewrites `SHOPIFY_APP_URL` in `.env`, builds the cart-block theme extension, pushes the new app URL to Shopify Partners via `shopify app deploy`, and brings up Vite. After deploy it restores `shopify.app.ordak-go.toml` to its placeholder URLs so git stays clean — `.env` (gitignored) keeps the live URL for the running server.
+
+If `dev:up` breaks (broken tunnel, deploy validation error, etc.), the manual 3-terminal flow below still works — read it for the mental model of what the script does.
+
+The Shopify CLI's `app dev` auto-orchestration **does not work** for this project — its auto-tunnel never starts, it never spawns Vite, and the `--tunnel-url` flag interprets the URL's port as a local-bind port (EACCES on `:443`).
 
 ## Prerequisites
 

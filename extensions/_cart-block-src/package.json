@@ -1,12 +1,12 @@
 {
-  "name": "@ordakgov2/cart-block",
+  "name": "@ordakgov2/cart-block-src",
   "version": "0.1.0",
   "private": true,
-  "description": "Ordak Go theme app extension — cart-page and cart-drawer scheduling block",
+  "description": "Source + build pipeline for the cart-block theme app extension. Outputs to ../cart-block/assets/ which is what Shopify deploys.",
   "scripts": {
     "build": "node build.mjs",
     "dev": "node build.mjs --watch",
-    "size": "gzip -c assets/cart-scheduler.js | wc -c"
+    "size": "gzip -c ../cart-block/assets/cart-scheduler.js | wc -c"
   },
   "dependencies": {
     "preact": "10.25.4",
