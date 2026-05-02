@@ -72,19 +72,13 @@ function observeDrawer(host: Element, drawer: Element) {
   // Move the host into the drawer so it lives inside the off-canvas container.
   if (drawer && !drawer.contains(host)) drawer.appendChild(host);
 
-  const config = readConfig(host);
-  if (!config) return;
-
-  const tryMount = () => {
-    const visible = (drawer as HTMLElement).offsetParent !== null;
-    if (visible) mountInto(host);
-  };
-
-  tryMount();
-
-  // Watch for class/attribute toggles indicating the drawer opened.
-  const mo = new MutationObserver(tryMount);
-  mo.observe(drawer, { attributes: true, attributeFilter: ["class", "open", "aria-hidden"] });
+  // Mount eagerly. Most themes' cart drawers are `position: fixed` and
+  // hidden via visibility/transform — `offsetParent` is null even when
+  // the drawer is open (Dawn pattern), and detecting "is the drawer open"
+  // across themes is fragile. The mounted Preact tree is cheap to keep
+  // around; user-visible work (slot fetch) only fires on interaction. So
+  // we mount once and let the theme's own toggle show/hide the container.
+  mountInto(host);
 }
 
 function init() {
