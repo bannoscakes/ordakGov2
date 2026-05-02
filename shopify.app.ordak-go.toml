@@ -20,6 +20,15 @@ api_version = "2026-04"
 [pos]
 embedded = false
 
+[app_proxy]
+# Storefront calls https://{shop}.myshopify.com/apps/ordak-go/* → forwarded to
+# <app-host>/apps/proxy/* and handled by Remix routes app/routes/apps.proxy.*.
+# `url` is rewritten to the live tunnel host on `shopify app dev` because
+# `automatically_update_urls_on_dev = true` is set under [build].
+url = "https://example.com/apps/proxy"
+subpath = "ordak-go"
+prefix = "apps"
+
 [build]
 automatically_update_urls_on_dev = true
 dev_store_url = "ordak-go-dev.myshopify.com"

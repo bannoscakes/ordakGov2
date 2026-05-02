@@ -6,6 +6,8 @@
   "license": "UNLICENSED",
   "scripts": {
     "build": "remix vite:build",
+    "build:extensions": "npm --workspace extensions/cart-block run build",
+    "predeploy": "npm run build:extensions",
     "dev": "shopify app dev",
     "vite:dev": "remix vite:dev",
     "config:link": "shopify app config link",

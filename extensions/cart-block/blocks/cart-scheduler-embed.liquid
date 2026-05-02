@@ -1,0 +1,91 @@
+{%- comment -%}
+  Ordak Cart Scheduler — app embed (cart drawer surface).
+  Auto-loads on every page. The bundle only mounts when a cart drawer DOM
+  is detected, otherwise it no-ops.
+{%- endcomment -%}
+
+{%- if block.settings.enabled -%}
+  <div
+    class="ordak-cart-scheduler-embed"
+    data-ordak-cart-scheduler-embed
+    data-ordak-drawer-selector="{{ block.settings.drawer_selector | default: '[data-cart-drawer], cart-drawer, #cart-drawer, .cart-drawer, .drawer--cart' }}"
+    style="--ordak-accent: {{ block.settings.accent_color | default: '#1a73e8' }};"
+    hidden
+  >
+    <script type="application/json" data-ordak-config>
+      {
+        "surface": "cart-drawer",
+        "blockId": {{ block.id | json }},
+        "shopDomain": {{ shop.permanent_domain | json }},
+        "currency": {{ shop.currency | json }},
+        "locale": {{ request.locale.iso_code | json }},
+        "customerId": {{ customer.id | json }},
+        "customerEmail": {{ customer.email | json }},
+        "headingText": {{ block.settings.heading_text | default: 'When would you like your order?' | json }},
+        "defaultFulfillment": {{ block.settings.default_fulfillment | default: 'delivery' | json }},
+        "showPostcodeField": {{ block.settings.show_postcode_field | default: true | json }},
+        "autoSelectRecommended": {{ block.settings.auto_select_recommended | default: true | json }},
+        "proxyBase": "/apps/ordak-go"
+      }
+    </script>
+  </div>
+
+  {{ 'cart-scheduler.css' | asset_url | stylesheet_tag }}
+  <script src="{{ 'cart-scheduler.js' | asset_url }}" defer></script>
+{%- endif -%}
+
+{% schema %}
+{
+  "name": "Ordak Cart Scheduler (drawer)",
+  "target": "body",
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "enabled",
+      "label": "Enable in cart drawer",
+      "default": false
+    },
+    {
+      "type": "text",
+      "id": "drawer_selector",
+      "label": "Cart drawer CSS selector",
+      "info": "CSS selector matching your theme's cart drawer container. Default covers Dawn and most Online Store 2.0 themes.",
+      "default": "[data-cart-drawer], cart-drawer, #cart-drawer, .cart-drawer, .drawer--cart"
+    },
+    {
+      "type": "text",
+      "id": "heading_text",
+      "label": "Heading",
+      "default": "When would you like your order?"
+    },
+    {
+      "type": "color",
+      "id": "accent_color",
+      "label": "Accent color",
+      "default": "#1a73e8"
+    },
+    {
+      "type": "select",
+      "id": "default_fulfillment",
+      "label": "Default fulfillment",
+      "options": [
+        { "value": "delivery", "label": "Delivery" },
+        { "value": "pickup", "label": "Pickup" }
+      ],
+      "default": "delivery"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_postcode_field",
+      "label": "Show postcode field",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "auto_select_recommended",
+      "label": "Auto-select recommended slot",
+      "default": true
+    }
+  ]
+}
+{% endschema %}
