@@ -88,6 +88,13 @@ export function CartScheduler({ config, rootEl }: Props) {
       state.postcodeChecked.value = true;
 
       if (res.eligible) {
+        // Default the date picker to today so it has a sensible initial value
+        // before slots come back. The user can change it; slot loading is
+        // independent of the picker — slots come for the whole 14-day range
+        // and the picker filters which day to show.
+        if (!state.selectedDate.value) {
+          state.selectedDate.value = dateRangeFromToday.value.start;
+        }
         if (state.fulfillment.value === "pickup") {
           await loadLocations(postcode);
         } else {
@@ -114,8 +121,12 @@ export function CartScheduler({ config, rootEl }: Props) {
       });
       const slots = res.slots.slice().sort((a, b) => b.recommendationScore - a.recommendationScore);
       state.slots.value = slots;
-      const today = slots[0]?.date ?? null;
-      state.selectedDate.value = today;
+      // Only override the date if the user / handleCheckPostcode hasn't set
+      // one yet. The native date input owns the chosen date — we shouldn't
+      // yank it back to whatever the first slot happens to fall on.
+      if (!state.selectedDate.value && slots[0]?.date) {
+        state.selectedDate.value = slots[0].date;
+      }
       if (config.autoSelectRecommended) {
         const top = slots.find((s) => s.recommended && s.capacityRemaining > 0);
         if (top) state.selectedSlot.value = top;
@@ -186,7 +197,6 @@ export function CartScheduler({ config, rootEl }: Props) {
   const slotsForDate = selectedDate
     ? state.slots.value.filter((s) => s.date === selectedDate)
     : state.slots.value;
-  const dates = Array.from(new Set(state.slots.value.map((s) => s.date)));
   const eligible = state.postcodeChecked.value
     ? state.servicesAvailable.value[state.fulfillment.value]
     : null;
@@ -234,12 +244,15 @@ export function CartScheduler({ config, rootEl }: Props) {
       {showSlots ? (
         <>
           <DatePicker
-            dates={dates}
-            selected={selectedDate}
-            onSelect={(iso) => (state.selectedDate.value = iso)}
+            value={selectedDate}
+            onChange={(iso) => (state.selectedDate.value = iso)}
+            label={state.fulfillment.value === "pickup" ? "Pickup date" : "Delivery date"}
+            hint="Monday – Saturday only"
           />
           {state.loading.value.slots ? (
             <p class="ordak-loading" role="status">Loading…</p>
+          ) : slotsForDate.length === 0 ? (
+            <p class="ordak-empty">No slots available for this date. Try another.</p>
           ) : (
             <SlotGrid
               slots={slotsForDate}
