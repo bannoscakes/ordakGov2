@@ -103,7 +103,10 @@ else
     log "Partners config updated."
   else
     err "shopify app deploy failed. Check $LOG_DIR/deploy.log."
-    err "App may still work if Partners URL already matches $APP_URL."
+    err "Tunnel is up but Partners may still be on the old URL — OAuth and"
+    err "the cart-block round-trip will likely fail. Stop with 'npm run"
+    err "dev:down' and investigate before continuing."
+    exit 1
   fi
 fi
 
