@@ -10,9 +10,19 @@ npm run dev:logs    # tail vite + cloudflared logs (Ctrl-C exits tail, processes
 npm run dev:down    # stop both
 ```
 
-That's it. `dev:up` does end-to-end: starts a cloudflared quick-tunnel in the background, parses the live URL out of cloudflared's logs, rewrites `SHOPIFY_APP_URL` in `.env`, builds the cart-block theme extension, pushes the new app URL to Shopify Partners via `shopify app deploy`, and brings up Vite. After deploy it restores `shopify.app.ordak-go.toml` to its placeholder URLs so git stays clean — `.env` (gitignored) keeps the live URL for the running server.
+That's it. `dev:up` runs `cloudflared tunnel run ordak-go-dev` (a stable named tunnel routed via Cloudflare DNS to **`https://dev.ordak.vip`**) in the background, then starts Vite. The tunnel hostname never changes, so `.env`, `shopify.app.ordak-go.toml`, and the Partners app URL are all pinned to `https://dev.ordak.vip` in committed state. The first `dev:up` after a fresh clone (or after toml URL changes) builds the cart-block extension and runs `shopify app deploy` once to push the URL to Partners; subsequent runs skip the deploy via a sentinel file (`.dev-logs/last-pushed-url.txt`).
 
-If `dev:up` breaks (broken tunnel, deploy validation error, etc.), the manual 3-terminal flow below still works — read it for the mental model of what the script does.
+### How the tunnel was set up (one-time, already done)
+
+- `ordak.vip` is registered at GoDaddy; nameservers point at Cloudflare (`jasper.ns.cloudflare.com`, `tara.ns.cloudflare.com`).
+- `cloudflared tunnel login` once → drops `~/.cloudflared/cert.pem`.
+- `cloudflared tunnel create ordak-go-dev` → tunnel UUID `f19b52ae-38bc-4ddd-ad07-92f1c2cdd04d`, credentials in `~/.cloudflared/<uuid>.json`.
+- `cloudflared tunnel route dns ordak-go-dev dev.ordak.vip` → CNAME at Cloudflare.
+- `~/.cloudflared/config.yml` maps `dev.ordak.vip` to `http://localhost:5173`.
+
+If you ever need to recreate this on a different machine, repeat the four `cloudflared` commands above (point the new credential file at the same UUID or create a fresh tunnel + DNS route).
+
+If `dev:up` breaks, the manual 3-terminal flow below still works as a fallback — read it for the mental model of what the script does. Replace `cloudflared tunnel --url http://localhost:5173` with `cloudflared tunnel run ordak-go-dev` in step 2 if your `~/.cloudflared/` is set up; otherwise quick-tunnel is fine for one-off debugging.
 
 The Shopify CLI's `app dev` auto-orchestration **does not work** for this project — its auto-tunnel never starts, it never spawns Vite, and the `--tunnel-url` flag interprets the URL's port as a local-bind port (EACCES on `:443`).
 

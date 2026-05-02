@@ -18,6 +18,7 @@ dist
 
 # Personal Claude Code overrides — not for team distribution
 .claude/settings.local.json
+.claude/*.lock
 
 # Prisma
 prisma/*.db
