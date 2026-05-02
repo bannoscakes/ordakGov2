@@ -5,7 +5,7 @@
 
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json, redirect } from "@remix-run/node";
-import { useActionData, useLoaderData, useNavigate, useNavigation } from "@remix-run/react";
+import { Form, useActionData, useLoaderData, useNavigate, useNavigation } from "@remix-run/react";
 import {
   Page,
   Layout,
@@ -257,7 +257,7 @@ export default function NewRule() {
         )}
 
         <Layout.Section>
-          <form method="post">
+          <Form method="post">
             <FormLayout>
               <Card>
                 <BlockStack gap="400">
@@ -457,7 +457,7 @@ export default function NewRule() {
                 </Button>
               </InlineStack>
             </FormLayout>
-          </form>
+          </Form>
         </Layout.Section>
       </Layout>
     </Page>
