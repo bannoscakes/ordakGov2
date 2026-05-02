@@ -51,6 +51,24 @@ export function CartScheduler({ config, rootEl }: Props) {
     });
   }, [state]);
 
+  // Auto-load pickup locations when fulfillment switches to pickup.
+  // Pickup doesn't need a postcode (the customer comes to the location), so
+  // we kick off the location load immediately rather than waiting for the
+  // postcode field that we hide for pickup mode.
+  useEffect(() => {
+    return effect(() => {
+      const isPickup = state.fulfillment.value === "pickup";
+      const alreadyLoaded = state.pickupLocations.value.length > 0;
+      const isLoading = state.loading.value.locations;
+      if (isPickup && !alreadyLoaded && !isLoading) {
+        if (!state.selectedDate.value) {
+          state.selectedDate.value = dateRangeFromToday.value.start;
+        }
+        void loadLocations();
+      }
+    });
+  }, [state]);
+
   // Re-apply cart attributes if the theme drops them after a re-render.
   useEffect(() => listenForCartUpdates(() => void cartWriter.ensure()), []);
 
@@ -146,11 +164,14 @@ export function CartScheduler({ config, rootEl }: Props) {
     }
   }
 
-  async function loadLocations(postcode: string) {
+  async function loadLocations(postcode?: string) {
     state.loading.value = { ...state.loading.value, locations: true };
     state.error.value = null;
     try {
-      const res = await api.fetchLocations(postcode, state.fulfillment.value);
+      const res = await api.fetchLocations(
+        postcode ?? state.postcode.value ?? undefined,
+        state.fulfillment.value,
+      );
       const sorted = res.locations.slice().sort((a, b) => b.recommendationScore - a.recommendationScore);
       state.pickupLocations.value = sorted;
       const top = sorted.find((l) => l.recommended) ?? sorted[0] ?? null;
@@ -197,13 +218,15 @@ export function CartScheduler({ config, rootEl }: Props) {
   const slotsForDate = selectedDate
     ? state.slots.value.filter((s) => s.date === selectedDate)
     : state.slots.value;
+  const isPickup = state.fulfillment.value === "pickup";
   const eligible = state.postcodeChecked.value
     ? state.servicesAvailable.value[state.fulfillment.value]
     : null;
-  const showSlots =
-    state.postcodeChecked.value &&
-    eligible !== false &&
-    (state.fulfillment.value === "delivery" || state.selectedLocation.value);
+  // Delivery: gated on a successful postcode check.
+  // Pickup: gated on a selected pickup location (no postcode required).
+  const showSlots = isPickup
+    ? !!state.selectedLocation.value
+    : state.postcodeChecked.value && eligible !== false;
 
   const selectedSlot = state.selectedSlot.value;
   const alternatives = selectedSlot && selectedSlot.capacityRemaining <= 0
@@ -223,7 +246,7 @@ export function CartScheduler({ config, rootEl }: Props) {
         }}
       />
 
-      {config.showPostcodeField ? (
+      {!isPickup && config.showPostcodeField ? (
         <PostcodeField
           initial={state.postcode.value}
           loading={state.loading.value.eligibility}
@@ -233,12 +256,22 @@ export function CartScheduler({ config, rootEl }: Props) {
         />
       ) : null}
 
-      {state.fulfillment.value === "pickup" && state.pickupLocations.value.length ? (
+      {isPickup && state.loading.value.locations ? (
+        <p class="ordak-loading" role="status">Loading pickup locations…</p>
+      ) : null}
+
+      {isPickup && state.pickupLocations.value.length ? (
         <LocationList
           locations={state.pickupLocations.value}
           selectedId={state.selectedLocation.value?.locationId ?? null}
           onSelect={handleSelectLocation}
         />
+      ) : null}
+
+      {isPickup &&
+      !state.loading.value.locations &&
+      !state.pickupLocations.value.length ? (
+        <p class="ordak-empty">No pickup locations available.</p>
       ) : null}
 
       {showSlots ? (

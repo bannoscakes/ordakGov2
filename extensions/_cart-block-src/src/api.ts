@@ -61,9 +61,12 @@ export class OrdakApi {
     });
   }
 
-  fetchLocations(postcode: string, fulfillmentType: Fulfillment): Promise<LocationResponse> {
+  fetchLocations(
+    postcode: string | undefined,
+    fulfillmentType: Fulfillment,
+  ): Promise<LocationResponse> {
     return post<LocationResponse>(this.url("/recommendations/locations"), {
-      postcode,
+      postcode: postcode || undefined,
       fulfillmentType,
       shopDomain: this.cfg.shopDomain,
       customerId: this.cfg.customerId ?? undefined,
