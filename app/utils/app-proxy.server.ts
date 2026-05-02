@@ -1,6 +1,7 @@
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
+import { logger } from "./logger.server";
 
 /**
  * Wraps an internal `api.*` action so it can be safely called from the
@@ -21,10 +22,22 @@ export async function appProxyAction(
     return json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // A malformed/non-JSON body is silently downgraded to an empty object so
+  // the downstream handler's Zod validation can produce a normal 400. Log
+  // it so a future serializer regression in the cart-block doesn't debug
+  // as a generic "Invalid input" in production.
   const original = await args.request
     .clone()
     .json()
-    .catch(() => ({} as Record<string, unknown>));
+    .catch((err: unknown) => {
+      logger.warn("appProxyAction: request body was not valid JSON", {
+        url: args.request.url,
+        shop: session.shop,
+        contentType: args.request.headers.get("content-type"),
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return {} as Record<string, unknown>;
+    });
 
   const replayed = new Request(args.request.url, {
     method: "POST",
