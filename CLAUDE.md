@@ -42,7 +42,8 @@ The Shopify CLI's `app dev` auto-orchestration **does not work** for this projec
 The current plan and phase ordering live in [`docs/PLAN.md`](docs/PLAN.md). High-level:
 - ✅ **Phase A** — cart-page theme app extension (PR #39 merged 2026-05-02)
 - ✅ **Phase B** — Carrier Service register + rate callback (PR #40 merged 2026-05-02)
-- 🟡 **Phase C** — order pipeline verification (next; folds in cart-block line-item-property writes)
+- 🟡 **Phase C** — order pipeline verification (in PR #41; folds in cart-block line-item-property writes, drawer placement fixes, native date picker, additive seed script)
+- ⏳ **Phase C.5** — Delivery Customization Function (Shopify Function, target `purchase.delivery-customization.run`). Hides delivery rates when cart picks Pickup, hides pickup rates when cart picks Delivery. **Load-bearing for the "no checkout confusion" product goal — install on Bannos cannot proceed without this.**
 - ⏳ **Phase D** — restore stubbed admin routes
 - ⏳ **Phase E** — App Store readiness
 
