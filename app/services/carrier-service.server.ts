@@ -77,6 +77,18 @@ export async function registerCarrierService(
     );
 
     const json = await response.json();
+
+    // Top-level GraphQL errors (e.g., schema drift, bad input type) live at
+    // `json.errors`, not under `data.*.userErrors`. Surface these distinctly
+    // so a future API-version bump that breaks the input shape doesn't
+    // present as a generic "no carrier service" return.
+    if (Array.isArray(json.errors) && json.errors.length > 0) {
+      logger.error("carrierServiceCreate top-level GraphQL errors", undefined, {
+        errors: json.errors,
+      });
+      return null;
+    }
+
     const result = json.data?.carrierServiceCreate;
 
     if (result?.userErrors?.length) {
@@ -128,9 +140,20 @@ export async function unregisterCarrierService(
     );
 
     const json = await response.json();
+
+    if (Array.isArray(json.errors) && json.errors.length > 0) {
+      logger.error("carrierServiceDelete top-level GraphQL errors", undefined, {
+        errors: json.errors,
+      });
+      return false;
+    }
+
     const result = json.data?.carrierServiceDelete;
 
     if (result?.userErrors?.length) {
+      // Note: "carrier service not found" userErrors are benign on uninstall
+      // (Shopify already deleted it). Caller should pattern-match if it
+      // wants to downgrade those to info — see app/routes/webhooks.tsx.
       logger.error("carrierServiceDelete userErrors", undefined, {
         errors: result.userErrors,
       });

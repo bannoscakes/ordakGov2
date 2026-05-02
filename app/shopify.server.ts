@@ -77,7 +77,16 @@ const shopify = shopifyApp({
       // update the existing row's accessToken/scope. Without this, the
       // first signed proxy request from the cart-block returns "404 Shop
       // not found" even though OAuth succeeded.
-      if (!session.accessToken) return;
+      if (!session.accessToken) {
+        // Should be unreachable under unstable_newEmbeddedAuthStrategy +
+        // token-exchange. Logged so a future SDK regression doesn't silently
+        // skip the bootstrap — the symptom is "404 Shop not found" on every
+        // storefront proxy request with no breadcrumb pointing here.
+        logger.error("afterAuth: session has no accessToken; Shop bootstrap skipped", undefined, {
+          shop: session.shop,
+        });
+        return;
+      }
 
       const dbShop = await prisma.shop.upsert({
         where: { shopifyDomain: session.shop },
@@ -113,9 +122,16 @@ const shopify = shopifyApp({
             callback: cs.callbackUrl,
           });
         } else {
-          logger.warn("Carrier service registration failed; will retry on next install", {
-            shop: session.shop,
-          });
+          // Loud — install completed but checkout will return zero rates
+          // until carrierServiceId is bootstrapped. Operator must null the
+          // field in DB and re-trigger afterAuth (or wait for a real
+          // re-install) to retry. Surfacing this state in the admin home
+          // banner is a tracked follow-up.
+          logger.error(
+            "Carrier service registration failed; install completed but checkout will return zero rates until retry",
+            undefined,
+            { shop: session.shop },
+          );
         }
       }
     },
