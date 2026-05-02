@@ -5,7 +5,7 @@
 
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json, redirect } from "@remix-run/node";
-import { useActionData, useLoaderData, useNavigate, useNavigation, useSubmit } from "@remix-run/react";
+import { Form, useActionData, useLoaderData, useNavigate, useNavigation, useSubmit } from "@remix-run/react";
 import {
   Page,
   Layout,
@@ -278,11 +278,6 @@ export default function EditZone() {
     return "";
   });
 
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    const form = event.target as HTMLFormElement;
-    form.submit();
-  };
 
   const handleDelete = () => {
     const formData = new FormData();
@@ -332,7 +327,7 @@ export default function EditZone() {
         )}
 
         <Layout.Section>
-          <form method="post" onSubmit={handleSubmit}>
+          <Form method="post">
             <FormLayout>
               <Card>
                 <BlockStack gap="400">
@@ -491,7 +486,7 @@ export default function EditZone() {
                 </Button>
               </InlineStack>
             </FormLayout>
-          </form>
+          </Form>
         </Layout.Section>
       </Layout>
 

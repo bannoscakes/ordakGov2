@@ -5,7 +5,7 @@
 
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json, redirect } from "@remix-run/node";
-import { useActionData, useLoaderData, useNavigate, useNavigation, useSubmit } from "@remix-run/react";
+import { Form, useActionData, useLoaderData, useNavigate, useNavigation, useSubmit } from "@remix-run/react";
 import {
   Page,
   Layout,
@@ -180,12 +180,6 @@ export default function EditLocation() {
   const [isActive, setIsActive] = useState(location.isActive);
   const [deleteModalActive, setDeleteModalActive] = useState(false);
 
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    const form = event.target as HTMLFormElement;
-    form.submit();
-  };
-
   const handleDelete = () => {
     const formData = new FormData();
     formData.append("intent", "delete");
@@ -224,7 +218,7 @@ export default function EditLocation() {
         )}
 
         <Layout.Section>
-          <form method="post" onSubmit={handleSubmit}>
+          <Form method="post">
             <FormLayout>
               <Card>
                 <BlockStack gap="400">
@@ -415,7 +409,7 @@ export default function EditLocation() {
                 </Button>
               </InlineStack>
             </FormLayout>
-          </form>
+          </Form>
         </Layout.Section>
       </Layout>
 

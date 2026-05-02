@@ -1,0 +1,29 @@
+{
+  "ui": {
+    "heading": "When would you like your order?",
+    "delivery": "Delivery",
+    "pickup": "Pickup",
+    "postcode_label": "Postcode",
+    "postcode_placeholder": "Enter your postcode",
+    "check_eligibility": "Check availability",
+    "checking": "Checking…",
+    "no_service": "We don't service this postcode yet.",
+    "service_available": "Great news! We service your area.",
+    "choose_date": "Choose a date",
+    "choose_time": "Choose a time",
+    "choose_location": "Choose a pickup location",
+    "today": "Today",
+    "tomorrow": "Tomorrow",
+    "recommended": "Recommended",
+    "fully_booked": "Fully booked",
+    "spots_left": "{count} spots left",
+    "one_spot_left": "1 spot left",
+    "no_slots": "No available slots. Please try a different date.",
+    "alternative_slots_intro": "This time is fully booked. We recommend:",
+    "loading": "Loading…",
+    "error_generic": "Something went wrong. Please try again.",
+    "retry": "Retry",
+    "distance_km": "{km} km away",
+    "selected": "Selected"
+  }
+}

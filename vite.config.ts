@@ -4,11 +4,10 @@ import tsconfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig({
   server: {
-    // Allow the embedded admin to reach our dev server through any cloudflared
-    // quick-tunnel subdomain. Quick-tunnel hostnames change every restart, so
-    // we permit the whole `*.trycloudflare.com` zone rather than pinning one.
-    // Also allow `localhost` for direct local testing.
-    allowedHosts: [".trycloudflare.com", "localhost"],
+    // Stable named tunnel (dev.ordak.vip) is the primary path. The
+    // .trycloudflare.com wildcard stays in case anyone falls back to a quick
+    // tunnel for one-off debugging.
+    allowedHosts: ["dev.ordak.vip", ".trycloudflare.com", "localhost"],
   },
   plugins: [
     remix({
