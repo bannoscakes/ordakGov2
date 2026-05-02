@@ -55,6 +55,7 @@ model Shop {
   locations             Location[]
   zones                 Zone[]
   rules                 Rule[]
+  webhookDestinations   WebhookDestination[]
 
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
@@ -252,6 +253,30 @@ model CustomerPreferences {
 
   @@index([customerId])
   @@index([customerEmail])
+}
+
+// Schema reservation only — no UI, no runtime path yet.
+// Per the "design pluggable now, build later" business rule, this lets
+// merchants register external webhook receivers (e.g. their own ordak
+// dispatch endpoint) for order/scheduling events without a future
+// migration churn. Build the dispatcher in a later phase.
+model WebhookDestination {
+  id          String   @id @default(cuid())
+  shopId      String
+  shop        Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  url         String
+  secret      String   // HMAC signing secret
+  enabled     Boolean  @default(true)
+
+  // Subset of EventLog.eventType values this destination subscribes to.
+  // Empty array means "all events".
+  eventTypes  String[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([shopId])
 }
 
 model RecommendationLog {

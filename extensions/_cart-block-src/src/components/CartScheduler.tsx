@@ -12,7 +12,7 @@ import {
   persistFulfillment,
 } from "../state";
 import { OrdakApi } from "../api";
-import { buildCartAttrs, cartWriter, listenForCartUpdates } from "../cart";
+import { buildCartPayload, cartWriter, listenForCartUpdates } from "../cart";
 import { Toggle } from "./Toggle";
 import { PostcodeField } from "./PostcodeField";
 import { DatePicker } from "./DatePicker";
@@ -62,7 +62,7 @@ export function CartScheduler({ config, rootEl }: Props) {
       const loc = state.selectedLocation.value;
 
       void cartWriter.write(
-        buildCartAttrs({
+        buildCartPayload({
           fulfillment,
           slotId: slot?.slotId ?? null,
           slotDate: slot?.date ?? null,
