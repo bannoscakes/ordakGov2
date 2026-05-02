@@ -24,6 +24,11 @@ export async function action({ request }: ActionFunctionArgs) {
       return new Response("Invalid webhook topic", { status: 400 });
     }
 
+    if (!admin) {
+      // No admin context — webhook is unauthenticated or shop has uninstalled.
+      return new Response("No admin context", { status: 401 });
+    }
+
     // Extract order ID from payload
     const orderId = payload.id?.toString();
     const gid = `gid://shopify/Order/${orderId}`;

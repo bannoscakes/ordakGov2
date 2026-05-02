@@ -40,6 +40,7 @@ export const recommendationLocationSchema = z.object({
   postcode: postcodeSchema,
   fulfillmentType: fulfillmentTypeSchema,
   shopDomain: shopDomainSchema,
+  customerId: z.string().optional(),
   customerEmail: emailSchema,
   deliveryAddress: z.string().optional(),
   latitude: latitudeSchema.optional(),

@@ -14,9 +14,9 @@
 
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import prisma from "../../db.server";
-import { logger } from "../../utils/logger.server";
-import { validateRequest, eligibilityCheckSchema } from "../../utils/validation.server";
+import prisma from "../db.server";
+import { logger } from "../utils/logger.server";
+import { validateRequest, eligibilityCheckSchema } from "../utils/validation.server";
 
 interface EligibilityRequest {
   postcode: string;

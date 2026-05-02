@@ -21,14 +21,14 @@ import {
   Text,
 } from "@shopify/polaris";
 import { useState } from "react";
-import { authenticate } from "../../shopify.server";
-import prisma from "../../db.server";
+import { authenticate } from "../shopify.server";
+import prisma from "../db.server";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const { session } = await authenticate.admin(request);
 
   const shop = await prisma.shop.findUnique({
-    where: { domain: session.shop },
+    where: { shopifyDomain: session.shop },
   });
 
   if (!shop) {
@@ -42,7 +42,7 @@ export async function action({ request }: ActionFunctionArgs) {
   const { session } = await authenticate.admin(request);
 
   const shop = await prisma.shop.findUnique({
-    where: { domain: session.shop },
+    where: { shopifyDomain: session.shop },
   });
 
   if (!shop) {
@@ -332,7 +332,7 @@ export default function NewRule() {
                           value={leadTimeDays}
                           onChange={setLeadTimeDays}
                           type="number"
-                          min="0"
+                          min={0}
                           placeholder="e.g., 1"
                           autoComplete="off"
                           helpText="Minimum days in advance"
@@ -345,7 +345,7 @@ export default function NewRule() {
                           value={leadTimeHours}
                           onChange={setLeadTimeHours}
                           type="number"
-                          min="0"
+                          min={0}
                           placeholder="e.g., 24"
                           autoComplete="off"
                           helpText="Minimum hours in advance"
@@ -407,7 +407,7 @@ export default function NewRule() {
                           value={slotDuration}
                           onChange={setSlotDuration}
                           type="number"
-                          min="1"
+                          min={1}
                           placeholder="e.g., 60"
                           autoComplete="off"
                           helpText="How long is each time slot?"
@@ -421,7 +421,7 @@ export default function NewRule() {
                           value={slotCapacity}
                           onChange={setSlotCapacity}
                           type="number"
-                          min="1"
+                          min={1}
                           placeholder="e.g., 10"
                           autoComplete="off"
                           helpText="Maximum concurrent orders"

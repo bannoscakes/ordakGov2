@@ -21,8 +21,8 @@ import {
   Checkbox,
 } from "@shopify/polaris";
 import { useState, useCallback, useEffect } from "react";
-import { authenticate } from "../../shopify.server";
-import prisma from "../../db.server";
+import { authenticate } from "../shopify.server";
+import prisma from "../db.server";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const { session } = await authenticate.admin(request);
@@ -278,7 +278,7 @@ export default function RecommendationSettings() {
                 <RangeSlider
                   label=""
                   value={capacityWeight}
-                  onChange={setCapacityWeight}
+                  onChange={(v) => setCapacityWeight(v as number)}
                   min={0}
                   max={100}
                   output
@@ -298,7 +298,7 @@ export default function RecommendationSettings() {
                 <RangeSlider
                   label=""
                   value={distanceWeight}
-                  onChange={setDistanceWeight}
+                  onChange={(v) => setDistanceWeight(v as number)}
                   min={0}
                   max={100}
                   output
@@ -318,7 +318,7 @@ export default function RecommendationSettings() {
                 <RangeSlider
                   label=""
                   value={routeEfficiencyWeight}
-                  onChange={setRouteEfficiencyWeight}
+                  onChange={(v) => setRouteEfficiencyWeight(v as number)}
                   min={0}
                   max={100}
                   output
@@ -338,7 +338,7 @@ export default function RecommendationSettings() {
                 <RangeSlider
                   label=""
                   value={personalizationWeight}
-                  onChange={setPersonalizationWeight}
+                  onChange={(v) => setPersonalizationWeight(v as number)}
                   min={0}
                   max={100}
                   output

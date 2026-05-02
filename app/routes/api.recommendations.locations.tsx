@@ -122,12 +122,21 @@ export async function action({ request }: ActionFunctionArgs) {
     );
 
     // Build customer context
+    const hasAddressInfo = Boolean(
+      body.latitude || body.longitude || body.deliveryAddress
+    );
     const customerContext: CustomerContext | undefined =
-      body.customerId || body.customerEmail || body.deliveryAddress
+      body.customerId || body.customerEmail || hasAddressInfo
         ? {
             customerId: body.customerId,
             customerEmail: body.customerEmail,
-            deliveryAddress: body.deliveryAddress,
+            deliveryAddress: hasAddressInfo
+              ? {
+                  latitude: body.latitude,
+                  longitude: body.longitude,
+                  postcode: body.deliveryAddress,
+                }
+              : undefined,
           }
         : undefined;
 
@@ -189,9 +198,7 @@ export async function action({ request }: ActionFunctionArgs) {
       meta: {
         totalLocations: recommendations.length,
         recommendedCount: recommendations.filter((r) => r.recommended).length,
-        hasCoordinates: Boolean(
-          body.deliveryAddress?.latitude && body.deliveryAddress?.longitude
-        ),
+        hasCoordinates: Boolean(body.latitude && body.longitude),
       },
     };
 

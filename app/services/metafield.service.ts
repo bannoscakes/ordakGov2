@@ -3,7 +3,7 @@
  * Manage Shopify metafields for orders
  */
 
-import type { GraphQLClient } from '@shopify/shopify-api';
+
 
 export interface SchedulingMetafields {
   slotId: string;
@@ -22,7 +22,7 @@ const NAMESPACE = 'ordak_scheduling';
  * Add scheduling metafields to an order
  */
 export async function addOrderMetafields(
-  graphql: GraphQLClient,
+  graphql: any, // TODO: tighten once @shopify/shopify-api exports the right GraphQL client type
   orderId: string,
   metafields: SchedulingMetafields
 ): Promise<boolean> {
@@ -127,7 +127,7 @@ export async function addOrderMetafields(
  * Add order tags
  */
 export async function addOrderTags(
-  graphql: GraphQLClient,
+  graphql: any, // TODO: tighten once @shopify/shopify-api exports the right GraphQL client type
   orderId: string,
   tags: string[]
 ): Promise<boolean> {
@@ -169,7 +169,7 @@ export async function addOrderTags(
  * Get order metafields
  */
 export async function getOrderMetafields(
-  graphql: GraphQLClient,
+  graphql: any, // TODO: tighten once @shopify/shopify-api exports the right GraphQL client type
   orderId: string
 ): Promise<Record<string, string> | null> {
   try {
@@ -212,7 +212,7 @@ export async function getOrderMetafields(
  * Update order note with scheduling details
  */
 export async function addOrderNote(
-  graphql: GraphQLClient,
+  graphql: any, // TODO: tighten once @shopify/shopify-api exports the right GraphQL client type
   orderId: string,
   note: string
 ): Promise<boolean> {

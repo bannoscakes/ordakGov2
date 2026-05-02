@@ -39,8 +39,8 @@ export async function action({ request }: ActionFunctionArgs) {
     // Find the current booking
     const orderLink = await prisma.orderLink.findFirst({
       where: {
-        shopId: shop.id,
         shopifyOrderId: orderId,
+        slot: { location: { shopId: shop.id } },
         status: {
           in: ["scheduled", "updated"],
         },

@@ -1,0 +1,25 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "ab729e4046f8cdea55d24bfffd815e6a"
+name = "Ordak Go"
+handle = "ordak-go"
+application_url = "https://example.com/"
+embedded = true
+
+[access_scopes]
+scopes = "write_products,write_orders,read_locations,write_merchant_managed_fulfillment_orders"
+
+[auth]
+redirect_urls = [ "https://example.com/api/auth" ]
+
+[webhooks]
+# Pinned to the current quarter (April 2026). Bumped quarterly via the
+# scheduled stack-rot defense agent (memory/stack_rot_defense.md).
+api_version = "2026-04"
+
+[pos]
+embedded = false
+
+[build]
+automatically_update_urls_on_dev = true
+dev_store_url = "ordak-go-dev.myshopify.com"
