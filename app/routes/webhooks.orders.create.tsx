@@ -23,12 +23,24 @@ interface NameValuePair {
 }
 
 interface ShippingAddress {
+  first_name?: string | null;
+  last_name?: string | null;
+  name?: string | null;
+  company?: string | null;
   address1?: string | null;
   address2?: string | null;
   city?: string | null;
   province?: string | null;
   zip?: string | null;
   country?: string | null;
+  phone?: string | null;
+}
+
+interface CustomerPayload {
+  email?: string | null;
+  phone?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
 }
 
 interface OrderPayload {
@@ -36,9 +48,12 @@ interface OrderPayload {
   order_number?: number | string;
   email?: string | null;
   phone?: string | null;
+  contact_email?: string | null;
+  customer?: CustomerPayload | null;
   note_attributes?: NameValuePair[];
   line_items?: Array<{ properties?: NameValuePair[] }>;
   shipping_address?: ShippingAddress | null;
+  billing_address?: ShippingAddress | null;
 }
 
 interface ExtractedScheduling {
@@ -86,9 +101,39 @@ function extractScheduling(payload: OrderPayload): ExtractedScheduling | null {
 }
 
 function formatAddress(addr: ShippingAddress): string {
-  return [addr.address1, addr.address2, addr.city, addr.province, addr.zip, addr.country]
+  // Customer-name-first format: "Jane Doe, 24 Paine Street, Apt 5,
+  // Maroubra NSW 2035, Australia". Compresses suburb/state/postcode into
+  // one comma-group so it reads like a postal label rather than a list.
+  const name =
+    addr.name ||
+    [addr.first_name, addr.last_name].filter((s) => s && s.trim()).join(" ");
+  const street = [addr.address1, addr.address2]
     .filter((s) => s && s.trim())
     .join(", ");
+  const localityParts = [addr.city, addr.province, addr.zip]
+    .filter((s) => s && s.trim())
+    .join(" ");
+  return [name, street, localityParts, addr.country]
+    .filter((s) => s && s.trim())
+    .join(", ");
+}
+
+// Pull customer email/phone preferring top-level (most reliable) and
+// falling back to nested customer object. Different Shopify integrations
+// (B2B, draft orders, abandoned recovery) populate different paths.
+function extractContact(order: OrderPayload): { email: string | null; phone: string | null } {
+  const email =
+    order.email?.trim() ||
+    order.contact_email?.trim() ||
+    order.customer?.email?.trim() ||
+    null;
+  const phone =
+    order.phone?.trim() ||
+    order.customer?.phone?.trim() ||
+    order.shipping_address?.phone?.trim() ||
+    order.billing_address?.phone?.trim() ||
+    null;
+  return { email: email || null, phone: phone || null };
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -156,6 +201,13 @@ export async function action({ request }: ActionFunctionArgs) {
         return new Response("OK", { status: 200 });
       }
 
+      const contact = extractContact(order);
+      // For pickup orders the customer doesn't fill a shipping address —
+      // checkout uses billing address as the source. Fall back so the
+      // OrderLink always has at least one address record (handy for the
+      // merchant when contacting the customer about an order).
+      const addr = order.shipping_address ?? order.billing_address ?? null;
+
       try {
         const created = await prisma.$transaction(async (tx) => {
           const link = await tx.orderLink.create({
@@ -164,12 +216,10 @@ export async function action({ request }: ActionFunctionArgs) {
               shopifyOrderNumber: order.order_number?.toString() ?? null,
               slotId: slot.id,
               fulfillmentType: scheduling.fulfillmentType,
-              customerEmail: order.email ?? null,
-              customerPhone: order.phone ?? null,
-              deliveryAddress: order.shipping_address
-                ? formatAddress(order.shipping_address)
-                : null,
-              deliveryPostcode: order.shipping_address?.zip ?? null,
+              customerEmail: contact.email,
+              customerPhone: contact.phone,
+              deliveryAddress: addr ? formatAddress(addr) : null,
+              deliveryPostcode: addr?.zip ?? null,
               wasRecommended: scheduling.wasRecommended,
               recommendationScore: scheduling.recommendationScore,
               status: "scheduled",
