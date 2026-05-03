@@ -101,17 +101,32 @@ export function CartScheduler({ config, rootEl }: Props) {
       const fulfillment = state.fulfillment.value;
       const loc = state.selectedLocation.value;
 
-      void cartWriter.write(
-        buildCartPayload({
-          fulfillment,
-          slotId: slot?.slotId ?? null,
-          slotDate: slot?.date ?? null,
-          slotTimeStart: slot?.timeStart ?? null,
-          slotTimeEnd: slot?.timeEnd ?? null,
-          locationId: loc?.locationId ?? slot?.locationId ?? null,
-          wasRecommended: slot?.recommended ?? false,
-        })
-      );
+      // Surface attrsFailed back to the user via the existing error
+      // signal — the previous void-and-forget hid /cart/update.js
+      // failures so the UI showed the slot as selected even when
+      // checkout would have no _delivery_method to filter on. lineProps
+      // failures are non-fatal (the C.5 Function falls back to the
+      // cart-level attr we did write), so we don't surface those.
+      void cartWriter
+        .write(
+          buildCartPayload({
+            fulfillment,
+            slotId: slot?.slotId ?? null,
+            slotDate: slot?.date ?? null,
+            slotTimeStart: slot?.timeStart ?? null,
+            slotTimeEnd: slot?.timeEnd ?? null,
+            locationId: loc?.locationId ?? slot?.locationId ?? null,
+            wasRecommended: slot?.recommended ?? false,
+          })
+        )
+        .then((result) => {
+          if (!result.ok) {
+            state.error.value = `Couldn't save your selection (${result.detail}). Please try again or refresh the page.`;
+          } else if (state.error.value?.startsWith("Couldn't save your selection")) {
+            // Clear our own prior error if a subsequent write succeeds.
+            state.error.value = null;
+          }
+        });
     });
   }, [state]);
 

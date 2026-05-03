@@ -18,6 +18,25 @@ interface Status {
   functionId?: string;
 }
 
+// Shape we re-cast Shopify's GraphQL response into so we can read the
+// top-level `errors` field — the SDK's typed wrapper doesn't expose it.
+interface GqlBody<T = Record<string, unknown>> {
+  data?: T | null;
+  errors?: Array<{ message: string }>;
+}
+
+interface FunctionsData {
+  shopifyFunctions?: {
+    nodes?: Array<{ id: string; title: string; apiType: string; app?: { title?: string } }>;
+  };
+}
+
+interface DeliveryCustomizationsData {
+  deliveryCustomizations?: {
+    nodes?: Array<{ id: string; title: string; functionId: string; enabled: boolean }>;
+  };
+}
+
 const FUNCTION_TITLE = "Ordak Go — hide rates by cart-stage choice";
 
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -32,10 +51,20 @@ export async function loader({ request }: LoaderFunctionArgs) {
           }
         }`,
     );
-    const fnBody = await fnRes.json();
+    // Top-level GraphQL errors (scope missing, throttled, schema drift)
+    // surface at `errors`, not at `data.*.userErrors`. The SDK's
+    // FetchResponseBody type doesn't include the `errors` field, so
+    // re-type to `GqlBody`. Without this check, a missing scope renders
+    // as "No delivery_customization Function found" — wrong action item.
+    const fnBody = (await fnRes.json()) as GqlBody<FunctionsData>;
+    if (Array.isArray(fnBody.errors) && fnBody.errors.length > 0) {
+      return json<Status>({
+        ok: false,
+        message: `GraphQL error querying functions: ${fnBody.errors.map((e) => e.message).join(", ")}`,
+      });
+    }
     const ours = fnBody.data?.shopifyFunctions?.nodes?.find(
-      (f: { apiType: string; app?: { title?: string } }) =>
-        f.apiType === "delivery_customization" && f.app?.title === "Ordak Go",
+      (f) => f.apiType === "delivery_customization" && f.app?.title === "Ordak Go",
     );
     if (!ours) {
       return json<Status>({
@@ -53,9 +82,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
           }
         }`,
     );
-    const existingBody = await existingRes.json();
+    const existingBody = (await existingRes.json()) as GqlBody<DeliveryCustomizationsData>;
+    if (Array.isArray(existingBody.errors) && existingBody.errors.length > 0) {
+      return json<Status>({
+        ok: false,
+        message: `GraphQL error querying customizations: ${existingBody.errors.map((e) => e.message).join(", ")}`,
+      });
+    }
     const dup = existingBody.data?.deliveryCustomizations?.nodes?.find(
-      (c: { functionId: string }) => c.functionId === ours.id,
+      (c) => c.functionId === ours.id,
     );
     if (dup) {
       if (!dup.enabled) {

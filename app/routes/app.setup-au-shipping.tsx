@@ -1,16 +1,41 @@
 // One-shot shipping setup: adds the AU Shop location to the General
-// delivery profile and creates an AU zone with a $10 flat rate. This
-// unblocks the dev-store e2e test (Phase C order pipeline) — without a
-// shipping zone matching the customer's address, Shopify never invokes
-// our carrier service or our delivery customization function.
+// delivery profile and creates an AU zone with both flat rates
+// (Standard delivery $15, Pickup at Annandale $0). Without a shipping
+// zone matching the customer's address, Shopify never invokes our
+// carrier service or our delivery customization function.
 //
 // Phase D will replace this with a proper merchant-facing setup wizard
 // (this route is a dev-store convenience, not a production feature).
+//
+// SECURITY: the destructive mutations live in `action`, not `loader` —
+// loaders fire on every GET, including App Bridge prefetch-on-hover and
+// browser link-preload. Running shipping mutations on hover would
+// silently mutate production delivery configuration. The loader returns
+// only the current state for the form to render.
 
-import { json, type LoaderFunctionArgs } from "@remix-run/node";
-import { useLoaderData } from "@remix-run/react";
-import { Page, Layout, Card, BlockStack, Text, Banner } from "@shopify/polaris";
+import { json, type ActionFunctionArgs, type LoaderFunctionArgs } from "@remix-run/node";
+import { Form, useActionData, useLoaderData, useNavigation } from "@remix-run/react";
+import {
+  Page,
+  Layout,
+  Card,
+  BlockStack,
+  Text,
+  Banner,
+  Button,
+  List,
+} from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
+
+interface CurrentState {
+  hasProfile: boolean;
+  profileName: string | null;
+  hasAuLocation: boolean;
+  auLocationName: string | null;
+  hasAuZone: boolean;
+  hasStandardRate: boolean;
+  hasPickupRate: boolean;
+}
 
 interface Status {
   ok: boolean;
@@ -18,12 +43,97 @@ interface Status {
   error?: string;
 }
 
+interface DeliveryProfile {
+  id: string;
+  name: string;
+  default: boolean;
+  profileLocationGroups?: Array<{
+    locationGroup: { id: string; locations: { nodes: Array<{ id: string; name: string }> } };
+    locationGroupZones: {
+      nodes: Array<{
+        zone: { id: string; name: string };
+        methodDefinitions: { nodes: Array<{ name: string }> };
+      }>;
+    };
+  }>;
+}
+
+interface ShopLocation {
+  id: string;
+  name: string;
+  address: { country: string; countryCode: string };
+}
+
+// Loader: read-only snapshot of current shipping config so the form can
+// show the merchant what state the store is in before they POST.
 export async function loader({ request }: LoaderFunctionArgs) {
+  const { admin } = await authenticate.admin(request);
+
+  const profilesRes = await admin.graphql(
+    `#graphql
+      query OrdakGoDeliveryProfiles {
+        deliveryProfiles(first: 5) {
+          nodes {
+            id
+            name
+            default
+            profileLocationGroups {
+              locationGroup { id locations(first: 25) { nodes { id name } } }
+              locationGroupZones(first: 10) {
+                nodes {
+                  zone { id name }
+                  methodDefinitions(first: 10) { nodes { id name } }
+                }
+              }
+            }
+          }
+        }
+      }`,
+  );
+  const profilesBody = await profilesRes.json();
+  const profile: DeliveryProfile | null =
+    profilesBody.data?.deliveryProfiles?.nodes?.find(
+      (p: DeliveryProfile) => p.default,
+    ) ?? profilesBody.data?.deliveryProfiles?.nodes?.[0] ?? null;
+
+  const locsRes = await admin.graphql(
+    `#graphql
+      query OrdakGoLocations {
+        locations(first: 25) {
+          nodes { id name address { country countryCode } }
+        }
+      }`,
+  );
+  const locsBody = await locsRes.json();
+  const auLocation: ShopLocation | null = locsBody.data?.locations?.nodes?.find(
+    (l: ShopLocation) => l.address.countryCode === "AU",
+  ) ?? null;
+
+  const auZoneEntry = profile?.profileLocationGroups
+    ?.flatMap((g) => g.locationGroupZones.nodes)
+    ?.find((z) => /australia/i.test(z.zone.name));
+  const methodNames = (auZoneEntry?.methodDefinitions?.nodes ?? []).map((m) =>
+    m.name.toLowerCase(),
+  );
+
+  return json<CurrentState>({
+    hasProfile: !!profile,
+    profileName: profile?.name ?? null,
+    hasAuLocation: !!auLocation,
+    auLocationName: auLocation?.name ?? null,
+    hasAuZone: !!auZoneEntry,
+    hasStandardRate: methodNames.some((n) => n.includes("standard")),
+    hasPickupRate: methodNames.some((n) => n.includes("pickup")),
+  });
+}
+
+// Action: the destructive write path. Triggered by an explicit POST from
+// the form below — not on page-load or prefetch.
+export async function action({ request }: ActionFunctionArgs) {
   const { admin } = await authenticate.admin(request);
   const steps: string[] = [];
 
   try {
-    // 1. Find the default delivery profile (the General profile).
     const profilesRes = await admin.graphql(
       `#graphql
         query OrdakGoDeliveryProfiles {
@@ -46,16 +156,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
         }`,
     );
     const profilesBody = await profilesRes.json();
-    const profile =
+    const profile: DeliveryProfile | undefined =
       profilesBody.data?.deliveryProfiles?.nodes?.find(
-        (p: { default: boolean }) => p.default,
+        (p: DeliveryProfile) => p.default,
       ) ?? profilesBody.data?.deliveryProfiles?.nodes?.[0];
     if (!profile) {
       return json<Status>({ ok: false, steps, error: "No delivery profile found" });
     }
     steps.push(`Found delivery profile: ${profile.name} (${profile.id})`);
 
-    // 2. Find the Shop location (the AU one).
     const locsRes = await admin.graphql(
       `#graphql
         query OrdakGoLocations {
@@ -65,8 +174,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
         }`,
     );
     const locsBody = await locsRes.json();
-    const auLocation = locsBody.data?.locations?.nodes?.find(
-      (l: { address: { countryCode: string } }) => l.address.countryCode === "AU",
+    const auLocation: ShopLocation | undefined = locsBody.data?.locations?.nodes?.find(
+      (l: ShopLocation) => l.address.countryCode === "AU",
     );
     if (!auLocation) {
       return json<Status>({
@@ -77,39 +186,27 @@ export async function loader({ request }: LoaderFunctionArgs) {
     }
     steps.push(`Found AU location: ${auLocation.name} (${auLocation.id})`);
 
-    // 3. Find the existing AU zone (if any) plus its method definitions.
-    //    We need to ensure both rates exist:
-    //      - "Standard delivery" $15 — for delivery-mode carts
-    //      - "Pickup at Annandale" $0 — for pickup-mode carts
-    //    Our delivery-rate-filter Function picks which one to show by
-    //    matching on the rate handle (we keep the names with the word
-    //    "Pickup" so the function's regex catches them).
+    // Need both rates so the C.5 Function can pick which to show by name.
+    // Keep "Pickup" in the rate name so the function's regex catches it.
     const existingAuZoneEntry = profile.profileLocationGroups
-      ?.flatMap((g: {
-        locationGroupZones: {
-          nodes: Array<{
-            zone: { id: string; name: string };
-            methodDefinitions: { nodes: Array<{ name: string }> };
-          }>;
-        };
-      }) => g.locationGroupZones.nodes)
-      ?.find((z: { zone: { name: string } }) => /australia/i.test(z.zone.name));
+      ?.flatMap((g) => g.locationGroupZones.nodes)
+      ?.find((z) => /australia/i.test(z.zone.name));
     const existingAuZone = existingAuZoneEntry?.zone;
-    const existingMethodNames = (existingAuZoneEntry?.methodDefinitions?.nodes ?? []).map(
-      (m: { name: string }) => m.name.toLowerCase(),
+    const existingMethodNames = (existingAuZoneEntry?.methodDefinitions?.nodes ?? []).map((m) =>
+      m.name.toLowerCase(),
     );
 
     const ratesToCreate: Array<{
       name: string;
       rateDefinition: { price: { amount: string; currencyCode: string } };
     }> = [];
-    if (!existingMethodNames.some((n: string) => n.includes("standard"))) {
+    if (!existingMethodNames.some((n) => n.includes("standard"))) {
       ratesToCreate.push({
         name: "Standard delivery",
         rateDefinition: { price: { amount: "15.00", currencyCode: "AUD" } },
       });
     }
-    if (!existingMethodNames.some((n: string) => n.includes("pickup"))) {
+    if (!existingMethodNames.some((n) => n.includes("pickup"))) {
       ratesToCreate.push({
         name: "Pickup at Annandale",
         rateDefinition: { price: { amount: "0.00", currencyCode: "AUD" } },
@@ -117,20 +214,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
     }
 
     if (existingAuZone && ratesToCreate.length === 0) {
-      steps.push(`AU zone exists with both rates: Standard delivery + Pickup at Annandale`);
+      steps.push("AU zone exists with both rates: Standard delivery + Pickup at Annandale");
       return json<Status>({ ok: true, steps });
     }
 
-    // 4. Check whether the AU location is already in a location group on
-    //    this profile. If yes, add a zone or update existing zone. If no,
-    //    create a new group containing the location and the zone.
-    const existingGroup = profile.profileLocationGroups?.find(
-      (g: { locationGroup: { locations: { nodes: Array<{ id: string }> } } }) =>
-        g.locationGroup.locations.nodes.some((l) => l.id === auLocation.id),
+    const existingGroup = profile.profileLocationGroups?.find((g) =>
+      g.locationGroup.locations.nodes.some((l) => l.id === auLocation.id),
     );
 
     if (existingAuZone && ratesToCreate.length > 0) {
-      // Zone exists, just need to add missing rates to it.
       const updateRes = await admin.graphql(
         `#graphql
           mutation OrdakGoAddRates($id: ID!, $profile: DeliveryProfileInput!) {
@@ -167,9 +259,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
           error: `Add rates failed: ${errs.map((e: { field: string[]; message: string }) => `${e.field?.join(".")}: ${e.message}`).join(", ")}`,
         });
       }
-      steps.push(`Added ${ratesToCreate.length} rate(s) to existing AU zone: ${ratesToCreate.map((r) => r.name).join(", ")}`);
+      steps.push(
+        `Added ${ratesToCreate.length} rate(s) to existing AU zone: ${ratesToCreate.map((r) => r.name).join(", ")}`,
+      );
     } else if (existingGroup) {
-      // Group exists, zone doesn't — add zone with both rates.
       const updateRes = await admin.graphql(
         `#graphql
           mutation OrdakGoAddZone($id: ID!, $profile: DeliveryProfileInput!) {
@@ -207,9 +300,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
           error: `Add zone failed: ${errs.map((e: { field: string[]; message: string }) => `${e.field?.join(".")}: ${e.message}`).join(", ")}`,
         });
       }
-      steps.push("Added Australia zone with Standard delivery + Pickup at Annandale to existing location group");
+      steps.push(
+        "Added Australia zone with Standard delivery + Pickup at Annandale to existing location group",
+      );
     } else {
-      // Create new group with location + zone + both rates.
       const createRes = await admin.graphql(
         `#graphql
           mutation OrdakGoCreateGroup($id: ID!, $profile: DeliveryProfileInput!) {
@@ -247,7 +341,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
           error: `Create group failed: ${errs.map((e: { field: string[]; message: string }) => `${e.field?.join(".")}: ${e.message}`).join(", ")}`,
         });
       }
-      steps.push("Created new location group with AU location + Australia zone + $10 flat rate");
+      steps.push(
+        "Created new location group with AU location + Australia zone + both flat rates",
+      );
     }
 
     return json<Status>({ ok: true, steps });
@@ -255,8 +351,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     let message = "unknown";
     if (err instanceof Response) {
       try {
-        const body = await err.json();
-        message = JSON.stringify(body);
+        message = JSON.stringify(await err.json());
       } catch {
         message = `${err.status} ${err.statusText}`;
       }
@@ -268,29 +363,65 @@ export async function loader({ request }: LoaderFunctionArgs) {
 }
 
 export default function SetupAuShipping() {
-  const status = useLoaderData<typeof loader>();
+  const state = useLoaderData<typeof loader>();
+  const result = useActionData<typeof action>();
+  const navigation = useNavigation();
+  const isSubmitting = navigation.state === "submitting";
+
+  const allSet =
+    state.hasProfile && state.hasAuLocation && state.hasAuZone && state.hasStandardRate && state.hasPickupRate;
+
   return (
     <Page title="Setup AU shipping (dev convenience)">
       <Layout>
         <Layout.Section>
           <Card>
-            <BlockStack gap="300">
-              <Banner tone={status.ok ? "success" : "critical"}>
-                <Text as="p">
-                  {status.ok ? "Shipping setup complete." : `Failed: ${status.error}`}
-                </Text>
-              </Banner>
-              <BlockStack gap="100">
-                {status.steps.map((s, i) => (
-                  <Text as="p" key={i}>
-                    • {s}
-                  </Text>
-                ))}
-              </BlockStack>
+            <BlockStack gap="400">
+              <Text as="h2" variant="headingMd">
+                Current state
+              </Text>
+              <List type="bullet">
+                <List.Item>
+                  Delivery profile: {state.profileName ?? "none"} {state.hasProfile ? "✓" : "✗"}
+                </List.Item>
+                <List.Item>
+                  AU location: {state.auLocationName ?? "none"} {state.hasAuLocation ? "✓" : "✗"}
+                </List.Item>
+                <List.Item>Australia zone: {state.hasAuZone ? "✓" : "✗"}</List.Item>
+                <List.Item>Standard delivery rate: {state.hasStandardRate ? "✓" : "✗"}</List.Item>
+                <List.Item>Pickup at Annandale rate: {state.hasPickupRate ? "✓" : "✗"}</List.Item>
+              </List>
+              {allSet ? (
+                <Banner tone="success">
+                  <Text as="p">Shipping is fully configured. Re-running is a no-op.</Text>
+                </Banner>
+              ) : null}
+              <Form method="post">
+                <Button submit variant="primary" loading={isSubmitting} disabled={isSubmitting}>
+                  {allSet ? "Re-run setup (no-op)" : "Run setup"}
+                </Button>
+              </Form>
+              {result ? (
+                <BlockStack gap="200">
+                  <Banner tone={result.ok ? "success" : "critical"}>
+                    <Text as="p">
+                      {result.ok ? "Shipping setup complete." : `Failed: ${result.error}`}
+                    </Text>
+                  </Banner>
+                  <BlockStack gap="100">
+                    {result.steps.map((s, i) => (
+                      <Text as="p" key={i}>
+                        • {s}
+                      </Text>
+                    ))}
+                  </BlockStack>
+                </BlockStack>
+              ) : null}
               <Text as="p" tone="subdued">
-                Adds the AU location and an Australia shipping zone with a $10
-                flat rate to the default delivery profile. Re-run anytime; it
-                checks for an existing AU zone and skips if present.
+                Adds the AU location and an Australia shipping zone with two flat
+                rates (Standard delivery $15, Pickup at Annandale $0) to the default
+                delivery profile. Idempotent — checks for existing zone/rates and
+                only creates what's missing.
               </Text>
             </BlockStack>
           </Card>

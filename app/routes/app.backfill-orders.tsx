@@ -15,6 +15,10 @@ import {
   generateOrderTags,
   type SchedulingMetafields,
 } from "../services/metafield.service";
+import {
+  extractScheduling,
+  type ExtractedScheduling,
+} from "../services/scheduling-extract.server";
 
 interface OrderResult {
   orderId: string;
@@ -29,57 +33,26 @@ interface Status {
   results: OrderResult[];
 }
 
-interface NameValuePair {
-  name: string;
-  value: string;
-}
-
-function valueFor(pairs: NameValuePair[] | undefined, key: string): string | undefined {
-  return pairs?.find((p) => p.name === key)?.value;
-}
-
-function parseFulfillment(value: string | undefined): "delivery" | "pickup" {
-  return value === "pickup" ? "pickup" : "delivery";
-}
-
-function parseScore(value: string | undefined): number | null {
-  if (!value) return null;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
-}
-
-interface ExtractedScheduling {
-  slotId: string;
-  fulfillmentType: "delivery" | "pickup";
-  wasRecommended: boolean;
-  recommendationScore: number | null;
-}
-
-function extractScheduling(order: {
+// Adapt the Admin GraphQL response (camelCase customAttributes) into the
+// REST-shaped contract scheduling-extract reads. The webhook handler
+// reads its REST payload directly; this is the only path that needs
+// a shape adapter.
+function extractFromAdminOrder(order: {
   customAttributes?: Array<{ key: string; value: string }>;
   lineItems?: { nodes: Array<{ customAttributes?: Array<{ key: string; value: string }> }> };
 }): ExtractedScheduling | null {
-  for (const line of order.lineItems?.nodes ?? []) {
-    const props = (line.customAttributes ?? []).map((a) => ({ name: a.key, value: a.value }));
-    const slotId = valueFor(props, "_slot_id");
-    if (slotId) {
-      return {
-        slotId,
-        fulfillmentType: parseFulfillment(valueFor(props, "_delivery_method")),
-        wasRecommended: valueFor(props, "_was_recommended") === "true",
-        recommendationScore: parseScore(valueFor(props, "_recommendation_score")),
-      };
-    }
-  }
-  const noteAttrs = (order.customAttributes ?? []).map((a) => ({ name: a.key, value: a.value }));
-  const slotId = valueFor(noteAttrs, "slot_id");
-  if (!slotId) return null;
-  return {
-    slotId,
-    fulfillmentType: parseFulfillment(valueFor(noteAttrs, "delivery_method")),
-    wasRecommended: valueFor(noteAttrs, "was_recommended") === "true",
-    recommendationScore: parseScore(valueFor(noteAttrs, "recommendation_score")),
-  };
+  return extractScheduling({
+    note_attributes: (order.customAttributes ?? []).map((a) => ({
+      name: a.key,
+      value: a.value,
+    })),
+    line_items: (order.lineItems?.nodes ?? []).map((n) => ({
+      properties: (n.customAttributes ?? []).map((a) => ({
+        name: a.key,
+        value: a.value,
+      })),
+    })),
+  });
 }
 
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -126,7 +99,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
         continue;
       }
 
-      const scheduling = extractScheduling(order);
+      const scheduling = extractFromAdminOrder(order);
       if (!scheduling) {
         results.push({
           orderId: orderIdNum,

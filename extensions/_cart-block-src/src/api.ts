@@ -93,7 +93,10 @@ export class OrdakApi {
       customerEmail: this.cfg.customerEmail ?? undefined,
       shopifyDomain: this.cfg.shopDomain,
       recommendations: recs,
-    }).catch(() => {});
+    }).catch((err) => {
+      // eslint-disable-next-line no-console
+      console.warn("[ordak] analytics post failed", err);
+    });
   }
 
   trackSelected(args: {
@@ -115,6 +118,9 @@ export class OrdakApi {
         wasRecommended: args.wasRecommended,
       },
       alternativesShown: args.alternativesShown,
-    }).catch(() => {});
+    }).catch((err) => {
+      // eslint-disable-next-line no-console
+      console.warn("[ordak] analytics post failed", err);
+    });
   }
 }

@@ -1,0 +1,27 @@
+{
+  "payload": {
+    "export": "cart-delivery-options-transform-run",
+    "target": "cart.delivery-options.transform.run",
+    "input": {
+      "cart": {
+        "attribute": { "value": "delivery" },
+        "lines": [
+          { "attribute": null }
+        ],
+        "deliveryGroups": [
+          {
+            "deliveryOptions": [
+              { "handle": "standard-delivery", "deliveryMethodType": "SHIPPING", "title": "Standard delivery", "code": null },
+              { "handle": "pickup-at-annandale", "deliveryMethodType": "SHIPPING", "title": "Pickup at Annandale", "code": null }
+            ]
+          }
+        ]
+      }
+    },
+    "output": {
+      "operations": [
+        { "deliveryOptionHide": { "deliveryOptionHandle": "pickup-at-annandale" } }
+      ]
+    }
+  }
+}
