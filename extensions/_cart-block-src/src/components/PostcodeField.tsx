@@ -22,7 +22,7 @@ export function PostcodeField({ initial, onSubmit, loading, message, eligible }:
       }}
     >
       <label class="ordak-postcode__label" for="ordak-postcode-input">
-        Postcode
+        Delivery postcode
       </label>
       <div class="ordak-postcode__row">
         <input
@@ -43,7 +43,7 @@ export function PostcodeField({ initial, onSubmit, loading, message, eligible }:
           disabled={!canSubmit}
           aria-busy={loading}
         >
-          {loading ? "Checking…" : "Check availability"}
+          {loading ? "Checking…" : "Check"}
         </button>
       </div>
       {message ? (

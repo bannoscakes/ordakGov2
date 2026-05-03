@@ -12,7 +12,7 @@ import {
   persistFulfillment,
 } from "../state";
 import { OrdakApi } from "../api";
-import { buildCartAttrs, cartWriter, listenForCartUpdates } from "../cart";
+import { buildCartPayload, cartWriter, listenForCartUpdates } from "../cart";
 import { Toggle } from "./Toggle";
 import { PostcodeField } from "./PostcodeField";
 import { DatePicker } from "./DatePicker";
@@ -51,6 +51,46 @@ export function CartScheduler({ config, rootEl }: Props) {
     });
   }, [state]);
 
+  // Auto-load pickup locations when fulfillment switches to pickup.
+  // Pickup doesn't need a postcode (the customer comes to the location), so
+  // we kick off the location load immediately rather than waiting for the
+  // postcode field that we hide for pickup mode.
+  useEffect(() => {
+    return effect(() => {
+      const isPickup = state.fulfillment.value === "pickup";
+      const alreadyLoaded = state.pickupLocations.value.length > 0;
+      const isLoading = state.loading.value.locations;
+      if (isPickup && !alreadyLoaded && !isLoading) {
+        if (!state.selectedDate.value) {
+          state.selectedDate.value = dateRangeFromToday.value.start;
+        }
+        void loadLocations();
+      }
+    });
+  }, [state]);
+
+  // Pickup mode hides the time-slot grid (per merchant — pickup is just a
+  // date, the time window is communicated by the merchant-configured banner
+  // text). The backend still needs a slot_id stamped on the cart, so when
+  // slots load OR the date changes for pickup, auto-pick the first slot
+  // that has capacity for the chosen date.
+  useEffect(() => {
+    return effect(() => {
+      if (state.fulfillment.value !== "pickup") return;
+      const date = state.selectedDate.value;
+      if (!date) return;
+      const slots = state.slots.value;
+      if (!slots.length) return;
+      const current = state.selectedSlot.value;
+      if (current && current.date === date && current.capacityRemaining > 0) return;
+      const candidate =
+        slots.find((s) => s.date === date && s.capacityRemaining > 0) ?? null;
+      if (candidate && candidate.slotId !== current?.slotId) {
+        state.selectedSlot.value = candidate;
+      }
+    });
+  }, [state]);
+
   // Re-apply cart attributes if the theme drops them after a re-render.
   useEffect(() => listenForCartUpdates(() => void cartWriter.ensure()), []);
 
@@ -62,7 +102,7 @@ export function CartScheduler({ config, rootEl }: Props) {
       const loc = state.selectedLocation.value;
 
       void cartWriter.write(
-        buildCartAttrs({
+        buildCartPayload({
           fulfillment,
           slotId: slot?.slotId ?? null,
           slotDate: slot?.date ?? null,
@@ -88,6 +128,13 @@ export function CartScheduler({ config, rootEl }: Props) {
       state.postcodeChecked.value = true;
 
       if (res.eligible) {
+        // Default the date picker to today so it has a sensible initial value
+        // before slots come back. The user can change it; slot loading is
+        // independent of the picker — slots come for the whole 14-day range
+        // and the picker filters which day to show.
+        if (!state.selectedDate.value) {
+          state.selectedDate.value = dateRangeFromToday.value.start;
+        }
         if (state.fulfillment.value === "pickup") {
           await loadLocations(postcode);
         } else {
@@ -114,8 +161,12 @@ export function CartScheduler({ config, rootEl }: Props) {
       });
       const slots = res.slots.slice().sort((a, b) => b.recommendationScore - a.recommendationScore);
       state.slots.value = slots;
-      const today = slots[0]?.date ?? null;
-      state.selectedDate.value = today;
+      // Only override the date if the user / handleCheckPostcode hasn't set
+      // one yet. The native date input owns the chosen date — we shouldn't
+      // yank it back to whatever the first slot happens to fall on.
+      if (!state.selectedDate.value && slots[0]?.date) {
+        state.selectedDate.value = slots[0].date;
+      }
       if (config.autoSelectRecommended) {
         const top = slots.find((s) => s.recommended && s.capacityRemaining > 0);
         if (top) state.selectedSlot.value = top;
@@ -135,11 +186,14 @@ export function CartScheduler({ config, rootEl }: Props) {
     }
   }
 
-  async function loadLocations(postcode: string) {
+  async function loadLocations(postcode?: string) {
     state.loading.value = { ...state.loading.value, locations: true };
     state.error.value = null;
     try {
-      const res = await api.fetchLocations(postcode, state.fulfillment.value);
+      const res = await api.fetchLocations(
+        postcode ?? state.postcode.value ?? undefined,
+        state.fulfillment.value,
+      );
       const sorted = res.locations.slice().sort((a, b) => b.recommendationScore - a.recommendationScore);
       state.pickupLocations.value = sorted;
       const top = sorted.find((l) => l.recommended) ?? sorted[0] ?? null;
@@ -186,14 +240,15 @@ export function CartScheduler({ config, rootEl }: Props) {
   const slotsForDate = selectedDate
     ? state.slots.value.filter((s) => s.date === selectedDate)
     : state.slots.value;
-  const dates = Array.from(new Set(state.slots.value.map((s) => s.date)));
+  const isPickup = state.fulfillment.value === "pickup";
   const eligible = state.postcodeChecked.value
     ? state.servicesAvailable.value[state.fulfillment.value]
     : null;
-  const showSlots =
-    state.postcodeChecked.value &&
-    eligible !== false &&
-    (state.fulfillment.value === "delivery" || state.selectedLocation.value);
+  // Delivery: gated on a successful postcode check.
+  // Pickup: gated on a selected pickup location (no postcode required).
+  const showSlots = isPickup
+    ? !!state.selectedLocation.value
+    : state.postcodeChecked.value && eligible !== false;
 
   const selectedSlot = state.selectedSlot.value;
   const alternatives = selectedSlot && selectedSlot.capacityRemaining <= 0
@@ -213,7 +268,7 @@ export function CartScheduler({ config, rootEl }: Props) {
         }}
       />
 
-      {config.showPostcodeField ? (
+      {!isPickup && config.showPostcodeField ? (
         <PostcodeField
           initial={state.postcode.value}
           loading={state.loading.value.eligibility}
@@ -223,7 +278,11 @@ export function CartScheduler({ config, rootEl }: Props) {
         />
       ) : null}
 
-      {state.fulfillment.value === "pickup" && state.pickupLocations.value.length ? (
+      {isPickup && state.loading.value.locations ? (
+        <p class="ordak-loading" role="status">Loading pickup locations…</p>
+      ) : null}
+
+      {isPickup && state.pickupLocations.value.length ? (
         <LocationList
           locations={state.pickupLocations.value}
           selectedId={state.selectedLocation.value?.locationId ?? null}
@@ -231,15 +290,32 @@ export function CartScheduler({ config, rootEl }: Props) {
         />
       ) : null}
 
+      {isPickup &&
+      !state.loading.value.locations &&
+      !state.pickupLocations.value.length ? (
+        <p class="ordak-empty">No pickup locations available.</p>
+      ) : null}
+
       {showSlots ? (
         <>
           <DatePicker
-            dates={dates}
-            selected={selectedDate}
-            onSelect={(iso) => (state.selectedDate.value = iso)}
+            value={selectedDate}
+            onChange={(iso) => (state.selectedDate.value = iso)}
+            label={isPickup ? "Pickup date" : "Delivery date"}
+            hint={config.daysAvailableHint}
           />
           {state.loading.value.slots ? (
             <p class="ordak-loading" role="status">Loading…</p>
+          ) : isPickup ? (
+            slotsForDate.length === 0 ? (
+              <p class="ordak-empty">Pickup not available on this date. Try another.</p>
+            ) : (
+              <p class="ordak-pickup-banner" role="status">
+                {config.pickupInstructions}
+              </p>
+            )
+          ) : slotsForDate.length === 0 ? (
+            <p class="ordak-empty">No slots available for this date. Try another.</p>
           ) : (
             <SlotGrid
               slots={slotsForDate}
@@ -247,7 +323,9 @@ export function CartScheduler({ config, rootEl }: Props) {
               onSelect={handleSelectSlot}
             />
           )}
-          <AlternativeSlots alternatives={alternatives} onPick={handleSelectSlot} />
+          {!isPickup ? (
+            <AlternativeSlots alternatives={alternatives} onPick={handleSelectSlot} />
+          ) : null}
         </>
       ) : null}
 
