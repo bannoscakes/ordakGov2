@@ -110,7 +110,6 @@ export function CartScheduler({ config, rootEl }: Props) {
           slotTimeEnd: slot?.timeEnd ?? null,
           locationId: loc?.locationId ?? slot?.locationId ?? null,
           wasRecommended: slot?.recommended ?? false,
-          recommendationScore: slot?.recommendationScore,
         })
       );
     });

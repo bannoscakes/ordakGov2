@@ -13,22 +13,57 @@ import { useLoaderData } from "@remix-run/react";
 import { Page, Layout, Card, BlockStack, Text, Banner } from "@shopify/polaris";
 import shopify, { authenticate } from "../shopify.server";
 
+interface TopicResult {
+  topic: string;
+  success: boolean;
+  detail?: string;
+}
+
 interface Status {
   ok: boolean;
   message: string;
-  topics?: string[];
+  topics?: TopicResult[];
+}
+
+interface RegisterResultEntry {
+  success?: boolean;
+  deliveryMethod?: string;
+  result?: { errors?: Array<{ message?: string }> } | null;
 }
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const { session } = await authenticate.admin(request);
   try {
-    const result = await shopify.registerWebhooks({ session });
-    // shopify.registerWebhooks returns an object keyed by topic with
-    // `{ success, deliveryMethod }` per result. Surface a summary.
-    const topics = Object.keys(result ?? {});
+    const result = (await shopify.registerWebhooks({ session })) as
+      | Record<string, RegisterResultEntry | RegisterResultEntry[]>
+      | undefined;
+
+    const topics: TopicResult[] = [];
+    for (const [topic, raw] of Object.entries(result ?? {})) {
+      // Some SDK versions return an array per topic (one entry per
+      // delivery method), others return a single object. Normalize.
+      const entries = Array.isArray(raw) ? raw : [raw];
+      for (const entry of entries) {
+        const success = entry?.success !== false;
+        const errs = entry?.result?.errors ?? [];
+        topics.push({
+          topic,
+          success,
+          detail: errs.length
+            ? errs.map((e) => e?.message ?? "unknown").join("; ")
+            : undefined,
+        });
+      }
+    }
+
+    const failures = topics.filter((t) => !t.success);
     return json<Status>({
-      ok: true,
-      message: `Re-registered ${topics.length} webhook subscription(s).`,
+      ok: failures.length === 0,
+      message: failures.length
+        ? `${failures.length} of ${topics.length} subscription(s) failed: ${failures
+            .map((f) => `${f.topic} (${f.detail ?? "no detail"})`)
+            .join("; ")}`
+        : `Re-registered ${topics.length} webhook subscription(s).`,
       topics,
     });
   } catch (err) {
@@ -60,8 +95,9 @@ export default function InstallWebhooks() {
               {status.topics?.length ? (
                 <BlockStack gap="100">
                   {status.topics.map((t) => (
-                    <Text as="p" key={t}>
-                      • {t}
+                    <Text as="p" key={`${t.topic}-${t.success}`}>
+                      {t.success ? "✓" : "✗"} {t.topic}
+                      {t.detail ? ` — ${t.detail}` : ""}
                     </Text>
                   ))}
                 </BlockStack>

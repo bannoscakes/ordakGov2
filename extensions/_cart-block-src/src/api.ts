@@ -19,11 +19,22 @@ async function post<T>(path: string, body: unknown): Promise<T> {
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    let detail = "";
+    // A response body can only be consumed once — read as text first, then
+    // try to parse it as JSON for a `.message`. Falling back to res.text()
+    // after res.json() throws would TypeError on "body already read".
+    let detail = res.statusText;
     try {
-      detail = (await res.json())?.message ?? (await res.text());
+      const raw = await res.text();
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw) as { message?: string };
+          detail = parsed?.message ?? raw;
+        } catch {
+          detail = raw;
+        }
+      }
     } catch {
-      detail = res.statusText;
+      // Network read failed; keep statusText.
     }
     throw new Error(`${res.status} ${detail}`);
   }

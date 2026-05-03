@@ -24,6 +24,7 @@ interface Status {
   message: string;
   carrierServiceId?: string;
   callbackUrl?: string;
+  active?: boolean;
 }
 
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -51,12 +52,16 @@ export async function loader({ request }: LoaderFunctionArgs) {
       const checkBody = await checkRes.json();
       const ours = checkBody.data?.carrierServices?.nodes?.find(
         (c: { id: string }) => c.id === shop.carrierServiceId,
-      );
+      ) as { id: string; active?: boolean } | undefined;
       if (ours) {
         return json<Status>({
-          ok: true,
-          message: "Already registered.",
+          ok: ours.active !== false,
+          message:
+            ours.active === false
+              ? "Registered, but Shopify reports this carrier service as INACTIVE. Customers won't see custom rates until it's activated. Check the Shopify admin → Settings → Shipping & delivery → Carrier accounts."
+              : "Already registered and active.",
           carrierServiceId: ours.id,
+          active: ours.active !== false,
         });
       }
       // Stored id is stale — fall through to re-register.
@@ -78,10 +83,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
     });
 
     return json<Status>({
-      ok: true,
-      message: `Registered "${CARRIER_SERVICE_NAME}" successfully.`,
+      ok: result.active,
+      message: result.active
+        ? `Registered "${CARRIER_SERVICE_NAME}" successfully.`
+        : `Registered "${CARRIER_SERVICE_NAME}" but Shopify returned active=false. Custom rates will not appear at checkout until activated.`,
       carrierServiceId: result.id,
       callbackUrl: result.callbackUrl,
+      active: result.active,
     });
   } catch (err) {
     let message = "unknown";
@@ -110,9 +118,16 @@ export default function InstallCarrierService() {
                 <Text as="p">{status.message}</Text>
               </Banner>
               {status.carrierServiceId ? (
-                <Text as="p">
-                  Carrier service ID: <code>{status.carrierServiceId}</code>
-                </Text>
+                <BlockStack gap="050">
+                  <Text as="p">
+                    Carrier service ID: <code>{status.carrierServiceId}</code>
+                  </Text>
+                  {status.active === false ? (
+                    <Text as="p" tone="critical">
+                      ⚠ Inactive — activate via Admin → Settings → Shipping & delivery → Carrier accounts
+                    </Text>
+                  ) : null}
+                </BlockStack>
               ) : null}
               {status.callbackUrl ? (
                 <Text as="p" tone="subdued">

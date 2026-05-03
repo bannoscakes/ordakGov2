@@ -59,7 +59,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     );
     if (dup) {
       if (!dup.enabled) {
-        await admin.graphql(
+        const updateRes = await admin.graphql(
           `#graphql
             mutation OrdakGoEnableDC($id: ID!, $deliveryCustomization: DeliveryCustomizationInput!) {
               deliveryCustomizationUpdate(id: $id, deliveryCustomization: $deliveryCustomization) {
@@ -69,6 +69,25 @@ export async function loader({ request }: LoaderFunctionArgs) {
             }`,
           { variables: { id: dup.id, deliveryCustomization: { enabled: true } } },
         );
+        const updateBody = await updateRes.json();
+        const updateErrs = updateBody.data?.deliveryCustomizationUpdate?.userErrors ?? [];
+        if (updateErrs.length) {
+          return json<Status>({
+            ok: false,
+            message: `Enable failed: ${updateErrs.map((e: { message: string }) => e.message).join(", ")}`,
+            customizationId: dup.id,
+            enabled: false,
+            functionId: ours.id,
+          });
+        }
+        const updated = updateBody.data?.deliveryCustomizationUpdate?.deliveryCustomization;
+        return json<Status>({
+          ok: true,
+          message: "Re-enabled existing installation.",
+          customizationId: dup.id,
+          enabled: updated?.enabled ?? true,
+          functionId: ours.id,
+        });
       }
       return json<Status>({
         ok: true,

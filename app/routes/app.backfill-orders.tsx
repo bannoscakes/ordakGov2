@@ -12,8 +12,6 @@ import prisma from "../db.server";
 import {
   addOrderMetafields,
   addOrderTags,
-  addOrderNote,
-  generateOrderNote,
   generateOrderTags,
   type SchedulingMetafields,
 } from "../services/metafield.service";
@@ -44,6 +42,12 @@ function parseFulfillment(value: string | undefined): "delivery" | "pickup" {
   return value === "pickup" ? "pickup" : "delivery";
 }
 
+function parseScore(value: string | undefined): number | null {
+  if (!value) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 interface ExtractedScheduling {
   slotId: string;
   fulfillmentType: "delivery" | "pickup";
@@ -59,24 +63,22 @@ function extractScheduling(order: {
     const props = (line.customAttributes ?? []).map((a) => ({ name: a.key, value: a.value }));
     const slotId = valueFor(props, "_slot_id");
     if (slotId) {
-      const score = valueFor(props, "_recommendation_score");
       return {
         slotId,
         fulfillmentType: parseFulfillment(valueFor(props, "_delivery_method")),
         wasRecommended: valueFor(props, "_was_recommended") === "true",
-        recommendationScore: score ? Number(score) : null,
+        recommendationScore: parseScore(valueFor(props, "_recommendation_score")),
       };
     }
   }
   const noteAttrs = (order.customAttributes ?? []).map((a) => ({ name: a.key, value: a.value }));
   const slotId = valueFor(noteAttrs, "slot_id");
   if (!slotId) return null;
-  const score = valueFor(noteAttrs, "recommendation_score");
   return {
     slotId,
     fulfillmentType: parseFulfillment(valueFor(noteAttrs, "delivery_method")),
     wasRecommended: valueFor(noteAttrs, "was_recommended") === "true",
-    recommendationScore: score ? Number(score) : null,
+    recommendationScore: parseScore(valueFor(noteAttrs, "recommendation_score")),
   };
 }
 
@@ -195,24 +197,33 @@ export async function loader({ request }: LoaderFunctionArgs) {
           wasRecommended: scheduling.wasRecommended,
         };
         const tags = generateOrderTags(metafields);
-        const note = generateOrderNote(metafields);
-        await addOrderMetafields(admin.graphql, order.id, metafields);
-        await addOrderTags(admin.graphql, order.id, tags);
-        await addOrderNote(admin.graphql, order.id, note);
+        const metafieldRes = await addOrderMetafields(admin.graphql, order.id, metafields);
+        const tagsRes = await addOrderTags(admin.graphql, order.id, tags);
+
+        const writeFailures: string[] = [];
+        if (!metafieldRes.ok) writeFailures.push(`metafields: ${metafieldRes.reason} — ${metafieldRes.detail}`);
+        if (!tagsRes.ok) writeFailures.push(`tags: ${tagsRes.reason} — ${tagsRes.detail}`);
 
         await prisma.eventLog.create({
           data: {
             orderLinkId: created.id,
-            eventType: "order.metafields_added",
-            payload: JSON.stringify({ orderId: orderIdNum, backfilled: true, tags }),
+            eventType: writeFailures.length ? "order.shopify_writes_partial" : "order.metafields_added",
+            payload: JSON.stringify({
+              orderId: orderIdNum,
+              backfilled: true,
+              tags,
+              ...(writeFailures.length ? { failures: writeFailures } : {}),
+            }),
           },
         });
 
         results.push({
           orderId: orderIdNum,
           orderName: order.name,
-          status: "linked",
-          detail: `${scheduling.fulfillmentType} • slot ${slot.timeStart}-${slot.timeEnd} • tags: ${tags.join(", ")}`,
+          status: writeFailures.length ? "error" : "linked",
+          detail: writeFailures.length
+            ? `OrderLink created but Shopify writes failed: ${writeFailures.join("; ")}`
+            : `${scheduling.fulfillmentType} • slot ${slot.timeStart}-${slot.timeEnd} • tags: ${tags.join(", ")}`,
         });
       } catch (err) {
         if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {

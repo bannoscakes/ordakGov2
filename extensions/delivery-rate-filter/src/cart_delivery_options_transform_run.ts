@@ -32,7 +32,11 @@ function readCustomerChoice(
 // Shopify types as SHIPPING). The handle pattern lets us treat those
 // flat rates as pickup for filtering purposes.
 const PICKUP_METHODS = new Set(["PICK_UP", "PICKUP_POINT"]);
-const PICKUP_PATTERN = /pickup|pick[-_ ]?up|in[-_ ]?store|click[-_ ]?(and|&)[-_ ]?collect|collect/i;
+// Word boundaries on the bare `collect` alternative are critical: without
+// them, rates like "Standard delivery — collection point" or anything
+// containing "collected" would falsely match. `pick[-_ ]?up` already
+// covers "pickup" / "pick up" / "pick-up" etc.
+const PICKUP_PATTERN = /\b(?:pick[-_ ]?up|in[-_ ]?store|click[-_ ]?(?:and|&)[-_ ]?collect|collect)\b/i;
 
 function isPickupOption(option: {
   handle: string;
