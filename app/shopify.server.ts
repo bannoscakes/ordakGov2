@@ -66,6 +66,13 @@ const shopify = shopifyApp({
       deliveryMethod: DeliveryMethod.Http,
       callbackUrl: "/webhooks",
     },
+    // Orders pipeline: orders/create fires when checkout completes. Our
+    // handler at app/routes/webhooks.orders.create.tsx creates an
+    // OrderLink, increments slot.booked, and applies tags/metafields.
+    ORDERS_CREATE: {
+      deliveryMethod: DeliveryMethod.Http,
+      callbackUrl: "/webhooks/orders/create",
+    },
   },
   hooks: {
     afterAuth: async ({ session }) => {

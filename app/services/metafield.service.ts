@@ -1,9 +1,20 @@
 /**
  * Metafield Service
- * Manage Shopify metafields for orders
+ *
+ * Wraps Shopify Admin GraphQL mutations that write order metafields, tags,
+ * and notes. Each helper returns a discriminated result so the caller can
+ * distinguish between "Shopify rejected the input" (userErrors), "the
+ * GraphQL request itself failed" (top-level errors / thrown), and success
+ * — and surface the actual reason in logs and webhook responses.
+ *
+ * Hard rule: callers MUST inspect the returned `ok` flag and decide whether
+ * to retry. Returning a boolean from this layer collapsed too much error
+ * context and led to a real production bug where the webhook returned 200
+ * while metafields silently failed (split-brain between our DB and the
+ * merchant's Shopify admin).
  */
 
-
+import { logger } from "../utils/logger.server";
 
 export interface SchedulingMetafields {
   slotId: string;
@@ -16,241 +27,190 @@ export interface SchedulingMetafields {
   wasRecommended: boolean;
 }
 
+export type MutationResult =
+  | { ok: true }
+  | { ok: false; reason: "graphqlErrors" | "userErrors" | "threw" | "noData"; detail: string };
+
 const NAMESPACE = 'ordak_scheduling';
 
-/**
- * Add scheduling metafields to an order
- */
+interface GraphqlClient {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (query: string, options?: { variables?: Record<string, any> }): Promise<{ json: () => Promise<unknown> }>;
+}
+
+interface GraphqlResponseBody {
+  data?: Record<string, unknown> | null;
+  errors?: Array<{ message: string }>;
+}
+
+interface ResultBlock {
+  userErrors?: Array<{ field?: string[] | null; message: string }>;
+}
+
+async function runMutation(
+  graphql: GraphqlClient,
+  query: string,
+  variables: Record<string, unknown>,
+  resultKey: string,
+  context: Record<string, unknown>,
+): Promise<MutationResult> {
+  let body: GraphqlResponseBody;
+  try {
+    const response = await graphql(query, { variables });
+    body = (await response.json()) as GraphqlResponseBody;
+  } catch (err) {
+    logger.error(`${resultKey}: request threw`, err, context);
+    return { ok: false, reason: "threw", detail: err instanceof Error ? err.message : String(err) };
+  }
+
+  if (Array.isArray(body.errors) && body.errors.length > 0) {
+    const detail = body.errors.map((e) => e.message).join("; ");
+    logger.error(`${resultKey}: top-level GraphQL errors`, undefined, { ...context, errors: body.errors });
+    return { ok: false, reason: "graphqlErrors", detail };
+  }
+
+  const result = body.data?.[resultKey] as ResultBlock | undefined;
+  if (!result) {
+    logger.error(`${resultKey}: no data block in response`, undefined, { ...context, body });
+    return { ok: false, reason: "noData", detail: "Mutation returned no data" };
+  }
+
+  if (result.userErrors && result.userErrors.length > 0) {
+    const detail = result.userErrors
+      .map((e) => `${e.field?.join(".") ?? "?"}: ${e.message}`)
+      .join("; ");
+    logger.error(`${resultKey}: userErrors`, undefined, { ...context, userErrors: result.userErrors });
+    return { ok: false, reason: "userErrors", detail };
+  }
+
+  return { ok: true };
+}
+
 export async function addOrderMetafields(
-  graphql: any, // TODO: tighten once @shopify/shopify-api exports the right GraphQL client type
+  graphql: GraphqlClient,
   orderId: string,
-  metafields: SchedulingMetafields
-): Promise<boolean> {
-  try {
-    const mutation = `
-      mutation orderUpdate($input: OrderInput!) {
-        orderUpdate(input: $input) {
-          order {
-            id
-            metafields(first: 10, namespace: "${NAMESPACE}") {
-              edges {
-                node {
-                  id
-                  key
-                  value
-                }
-              }
-            }
-          }
-          userErrors {
-            field
-            message
+  metafields: SchedulingMetafields,
+): Promise<MutationResult> {
+  const mutation = `#graphql
+    mutation orderUpdate($input: OrderInput!) {
+      orderUpdate(input: $input) {
+        order {
+          id
+          metafields(first: 10, namespace: "${NAMESPACE}") {
+            edges { node { id key value } }
           }
         }
+        userErrors { field message }
       }
-    `;
+    }`;
 
-    const variables = {
-      input: {
-        id: orderId,
-        metafields: [
-          {
-            namespace: NAMESPACE,
-            key: 'slot_id',
-            value: metafields.slotId,
-            type: 'single_line_text_field',
-          },
-          {
-            namespace: NAMESPACE,
-            key: 'slot_date',
-            value: metafields.slotDate,
-            type: 'date',
-          },
-          {
-            namespace: NAMESPACE,
-            key: 'slot_time_start',
-            value: metafields.slotTimeStart,
-            type: 'single_line_text_field',
-          },
-          {
-            namespace: NAMESPACE,
-            key: 'slot_time_end',
-            value: metafields.slotTimeEnd,
-            type: 'single_line_text_field',
-          },
-          {
-            namespace: NAMESPACE,
-            key: 'fulfillment_type',
-            value: metafields.fulfillmentType,
-            type: 'single_line_text_field',
-          },
-          {
-            namespace: NAMESPACE,
-            key: 'location_id',
-            value: metafields.locationId,
-            type: 'single_line_text_field',
-          },
-          {
-            namespace: NAMESPACE,
-            key: 'location_name',
-            value: metafields.locationName,
-            type: 'single_line_text_field',
-          },
-          {
-            namespace: NAMESPACE,
-            key: 'was_recommended',
-            value: metafields.wasRecommended.toString(),
-            type: 'boolean',
-          },
-        ],
-      },
-    };
-
-    const response = await graphql(mutation, { variables });
-
-    if (response.data?.orderUpdate?.userErrors?.length > 0) {
-      console.error(
-        'Metafield errors:',
-        response.data.orderUpdate.userErrors
-      );
-      return false;
-    }
-
-    return true;
-  } catch (error) {
-    console.error('Failed to add metafields:', error);
-    return false;
-  }
-}
-
-/**
- * Add order tags
- */
-export async function addOrderTags(
-  graphql: any, // TODO: tighten once @shopify/shopify-api exports the right GraphQL client type
-  orderId: string,
-  tags: string[]
-): Promise<boolean> {
-  try {
-    const mutation = `
-      mutation tagsAdd($id: ID!, $tags: [String!]!) {
-        tagsAdd(id: $id, tags: $tags) {
-          node {
-            id
-          }
-          userErrors {
-            field
-            message
-          }
-        }
-      }
-    `;
-
-    const variables = {
+  const variables = {
+    input: {
       id: orderId,
-      tags,
-    };
+      metafields: [
+        { namespace: NAMESPACE, key: 'slot_id', value: metafields.slotId, type: 'single_line_text_field' },
+        { namespace: NAMESPACE, key: 'slot_date', value: metafields.slotDate, type: 'date' },
+        { namespace: NAMESPACE, key: 'slot_time_start', value: metafields.slotTimeStart, type: 'single_line_text_field' },
+        { namespace: NAMESPACE, key: 'slot_time_end', value: metafields.slotTimeEnd, type: 'single_line_text_field' },
+        { namespace: NAMESPACE, key: 'fulfillment_type', value: metafields.fulfillmentType, type: 'single_line_text_field' },
+        { namespace: NAMESPACE, key: 'location_id', value: metafields.locationId, type: 'single_line_text_field' },
+        { namespace: NAMESPACE, key: 'location_name', value: metafields.locationName, type: 'single_line_text_field' },
+        { namespace: NAMESPACE, key: 'was_recommended', value: metafields.wasRecommended.toString(), type: 'boolean' },
+      ],
+    },
+  };
 
-    const response = await graphql(mutation, { variables });
+  return runMutation(graphql, mutation, variables, "orderUpdate", { orderId, mutation: "orderUpdate-metafields" });
+}
 
-    if (response.data?.tagsAdd?.userErrors?.length > 0) {
-      console.error('Tag errors:', response.data.tagsAdd.userErrors);
-      return false;
-    }
-
-    return true;
-  } catch (error) {
-    console.error('Failed to add tags:', error);
-    return false;
-  }
+export async function addOrderTags(
+  graphql: GraphqlClient,
+  orderId: string,
+  tags: string[],
+): Promise<MutationResult> {
+  const mutation = `#graphql
+    mutation tagsAdd($id: ID!, $tags: [String!]!) {
+      tagsAdd(id: $id, tags: $tags) {
+        node { id }
+        userErrors { field message }
+      }
+    }`;
+  return runMutation(
+    graphql,
+    mutation,
+    { id: orderId, tags },
+    "tagsAdd",
+    { orderId, mutation: "tagsAdd", tags },
+  );
 }
 
 /**
- * Get order metafields
+ * Get order metafields. Returns null on any failure (not used in critical
+ * path — diagnostic helper only).
  */
 export async function getOrderMetafields(
-  graphql: any, // TODO: tighten once @shopify/shopify-api exports the right GraphQL client type
-  orderId: string
+  graphql: GraphqlClient,
+  orderId: string,
 ): Promise<Record<string, string> | null> {
-  try {
-    const query = `
-      query getOrder($id: ID!) {
-        order(id: $id) {
-          id
-          metafields(first: 20, namespace: "${NAMESPACE}") {
-            edges {
-              node {
-                key
-                value
-              }
-            }
-          }
+  const query = `#graphql
+    query getOrder($id: ID!) {
+      order(id: $id) {
+        id
+        metafields(first: 20, namespace: "${NAMESPACE}") {
+          edges { node { key value } }
         }
       }
-    `;
-
-    const variables = { id: orderId };
-    const response = await graphql(query, { variables });
-
-    if (!response.data?.order) {
+    }`;
+  try {
+    const response = await graphql(query, { variables: { id: orderId } });
+    const body = (await response.json()) as {
+      data?: { order?: { metafields?: { edges?: Array<{ node?: { key?: string; value?: string } }> } } };
+      errors?: Array<{ message: string }>;
+    };
+    if (Array.isArray(body.errors) && body.errors.length) {
+      logger.error("getOrderMetafields: top-level GraphQL errors", undefined, { orderId, errors: body.errors });
       return null;
     }
-
-    const metafields: Record<string, string> = {};
-    response.data.order.metafields.edges.forEach((edge: any) => {
-      metafields[edge.node.key] = edge.node.value;
-    });
-
-    return metafields;
-  } catch (error) {
-    console.error('Failed to get metafields:', error);
+    const edges = body.data?.order?.metafields?.edges ?? [];
+    const out: Record<string, string> = {};
+    for (const edge of edges) {
+      const key = edge?.node?.key;
+      const value = edge?.node?.value;
+      if (key && typeof value === "string") out[key] = value;
+    }
+    return out;
+  } catch (err) {
+    logger.error("getOrderMetafields: request threw", err, { orderId });
     return null;
   }
 }
 
 /**
- * Update order note with scheduling details
+ * Update order note. WARNING: This OVERWRITES any existing note (customer's
+ * cart-stage note, merchant's ops notes, etc.). The orders/create webhook
+ * intentionally does NOT call this — note belongs to customer + merchant,
+ * not us. Kept exported in case a future admin UI needs it for explicit
+ * merchant-initiated edits.
  */
 export async function addOrderNote(
-  graphql: any, // TODO: tighten once @shopify/shopify-api exports the right GraphQL client type
+  graphql: GraphqlClient,
   orderId: string,
-  note: string
-): Promise<boolean> {
-  try {
-    const mutation = `
-      mutation orderUpdate($input: OrderInput!) {
-        orderUpdate(input: $input) {
-          order {
-            id
-            note
-          }
-          userErrors {
-            field
-            message
-          }
-        }
+  note: string,
+): Promise<MutationResult> {
+  const mutation = `#graphql
+    mutation orderUpdate($input: OrderInput!) {
+      orderUpdate(input: $input) {
+        order { id note }
+        userErrors { field message }
       }
-    `;
-
-    const variables = {
-      input: {
-        id: orderId,
-        note,
-      },
-    };
-
-    const response = await graphql(mutation, { variables });
-
-    if (response.data?.orderUpdate?.userErrors?.length > 0) {
-      console.error('Note errors:', response.data.orderUpdate.userErrors);
-      return false;
-    }
-
-    return true;
-  } catch (error) {
-    console.error('Failed to add note:', error);
-    return false;
-  }
+    }`;
+  return runMutation(
+    graphql,
+    mutation,
+    { input: { id: orderId, note } },
+    "orderUpdate",
+    { orderId, mutation: "orderUpdate-note" },
+  );
 }
 
 /**
@@ -267,16 +227,20 @@ export function generateOrderNote(metafields: SchedulingMetafields): string {
   const type =
     metafields.fulfillmentType === 'delivery' ? 'Delivery' : 'Pickup';
 
-  return `
-📅 ${type} Scheduled
-
-Date: ${date}
-Time: ${metafields.slotTimeStart} - ${metafields.slotTimeEnd}
-Location: ${metafields.locationName}
-${metafields.wasRecommended ? '⭐ Recommended slot selected' : ''}
-
-Slot ID: ${metafields.slotId}
-  `.trim();
+  // Merchant-facing summary that lives in the order's Notes field. Keep
+  // it human-readable — internal IDs (slot id, location id) live in the
+  // ordak_scheduling metafields panel for diagnostics, not here.
+  const lines = [
+    `📅 ${type} Scheduled`,
+    "",
+    `Date: ${date}`,
+    `Time: ${metafields.slotTimeStart} - ${metafields.slotTimeEnd}`,
+    `Location: ${metafields.locationName}`,
+  ];
+  if (metafields.wasRecommended) {
+    lines.push("⭐ Recommended slot selected");
+  }
+  return lines.join("\n");
 }
 
 /**
@@ -287,14 +251,7 @@ export function generateOrderTags(metafields: SchedulingMetafields): string[] {
     'ordak-scheduled',
     `ordak-${metafields.fulfillmentType}`,
   ];
-
-  if (metafields.wasRecommended) {
-    tags.push('ordak-recommended');
-  }
-
-  // Add date tag (YYYY-MM-DD)
-  const dateTag = `ordak-date-${metafields.slotDate}`;
-  tags.push(dateTag);
-
+  if (metafields.wasRecommended) tags.push('ordak-recommended');
+  tags.push(`ordak-date-${metafields.slotDate}`);
   return tags;
 }

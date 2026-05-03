@@ -62,20 +62,36 @@ Closes the loop: cart attributes → Shopify order → existing `webhooks.orders
 
 **Estimate:** 0.5–1 day. **Branch:** `feat/order-pipeline`.
 
-### Phase C.5 · Delivery Customization Function — checkout cleanup
+### Phase C.5 · Delivery Customization Function — VERIFIED LIVE (PR #42)
 
-**Why this exists:** one of the *core* product goals is "no confusion at checkout — the pickup vs delivery choice is locked in at the cart stage." Without this phase, a customer who picks Pickup in the cart-block still sees Shopify's standard Delivery address form at checkout (because Carrier Service can only return rates, not toggle checkout mode).
+**Tagged:** `v0.5.0-pickup-checkout-locked` (commit `ec9ed6b`, app version `ordak-go-18`).
 
-The fix is a Shopify Function with target `purchase.delivery-customization.run`, packaged as a new extension at `extensions/delivery-rate-filter/`. Shopify runs the function in the checkout pipeline and lets us hide/reorder/rename delivery options per the customer's cart-stage choice.
+**Headline product goal achieved:** the cart-stage Pickup/Delivery choice locks the checkout shipping options. Customer cannot override at checkout. No native Ship/Pickup tabs. Verified live on `ordak-go-dev`.
 
-- New extension: `extensions/delivery-rate-filter/` (Function — Rust or TypeScript via `@shopify/shopify_function`).
-- Read `_delivery_method` from `cart.deliveryGroups[*].deliveryAddress` line item properties (or cart attributes if the schema exposes them at the function input).
-- If `pickup` → `Operation.hide` every non-pickup delivery option; rename the surviving pickup option to "Pick up at <Location>".
-- If `delivery` → `Operation.hide` every pickup option.
-- Deploys alongside existing extensions via `shopify app deploy`. Surfaces in Shopify admin at **Settings → Shipping and delivery → Delivery customizations** — the merchant adds it via "Add delivery customization → select our app".
-- Pairs with Shopify's native **Local Pickup** at the Location level (Settings → Shipping and delivery → Local pickup) for the proper "no address required" pickup checkout UX. Document this as a merchant setup step.
+What landed (PR #42, branch `feat/delivery-customization`):
+- New extension `extensions/delivery-rate-filter/` — TypeScript Shopify Function (target `cart.delivery-options.transform.run`) compiled to Wasm. Reads `_delivery_method` from cart line item attributes (preferred) OR cart-level `delivery_method` attribute (fallback). Hides delivery options whose `deliveryMethodType` AND handle/title/code don't match the cart-stage choice. Pickup pattern: `pickup|pick-up|in-store|click-and-collect|collect`.
+- 6 vitest fixtures, all passing.
+- Scope additions: `write_delivery_customizations`, `write_shipping`.
+- Self-install convenience routes (Phase D will replace with merchant UI):
+  - `/app/install-delivery-customization` — registers function as active DeliveryCustomization
+  - `/app/install-carrier-service` — re-registers carrier service for shops that missed `afterAuth`
+  - `/app/install-webhooks` — re-runs `shopify.registerWebhooks` for newly-declared topics
+  - `/app/setup-au-shipping` — programs the AU shipping zone with both flat rates
+  - `/app/backfill-orders` — re-runs orders/create handler against orders missed by webhook
+- ORDERS_CREATE webhook topic added to `shopify.server.ts` `webhooks:` config (was missing).
 
-**Estimate:** 0.5 day. **Branch:** `feat/delivery-customization`. **Lands after Phase C** so the cart-block contract (`_delivery_method` line item property) is already in place.
+**Live setup (working baseline, all configured on `ordak-go-dev`):**
+- Markets: Australia enabled
+- Shipping zone "Australia" with flat rates: "Standard delivery" $15 AUD + "Pickup at Annandale" $0 AUD
+- Shopify-native Local Pickup: OFF on every location (otherwise tabs override our lock)
+- Delivery customization installed and enabled
+- Protected Customer Data: "Store management, App functionality" reasons selected (required for ORDERS_CREATE subscription)
+
+**Production install on Bannos** will need:
+- Same shipping zone setup (their existing AU zones likely already cover it)
+- Local Pickup OFF on locations
+- Protected Customer Data approval as part of App Store submission (Phase E)
+- Re-run the install convenience routes once after install
 
 ### Phase D · Restore stubbed admin
 - `app.setup.tsx`: rebuild setup wizard against current schema (use `postalCode` not `postcode`, `type` not `ruleType`, RangeSlider v13 onChange signature, proper discriminated-union narrowing for action data)
