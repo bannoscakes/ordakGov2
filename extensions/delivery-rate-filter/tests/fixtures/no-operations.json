@@ -5,13 +5,25 @@
     "input": {
       "cart": {
         "lines": [
-          { "attribute": null }
+          {
+            "attribute": null
+          }
         ],
         "deliveryGroups": [
           {
             "deliveryOptions": [
-              { "handle": "shipping-standard", "deliveryMethodType": "SHIPPING" },
-              { "handle": "pickup-bannos", "deliveryMethodType": "PICK_UP" }
+              {
+                "handle": "shipping-standard",
+                "deliveryMethodType": "SHIPPING",
+                "title": null,
+                "code": null
+              },
+              {
+                "handle": "pickup-bannos",
+                "deliveryMethodType": "PICK_UP",
+                "title": null,
+                "code": null
+              }
             ]
           }
         ]

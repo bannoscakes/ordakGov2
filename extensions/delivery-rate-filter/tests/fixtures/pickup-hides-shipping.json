@@ -5,16 +5,44 @@
     "input": {
       "cart": {
         "lines": [
-          { "attribute": { "value": "pickup" } },
-          { "attribute": { "value": "pickup" } }
+          {
+            "attribute": {
+              "value": "pickup"
+            }
+          },
+          {
+            "attribute": {
+              "value": "pickup"
+            }
+          }
         ],
         "deliveryGroups": [
           {
             "deliveryOptions": [
-              { "handle": "shipping-standard", "deliveryMethodType": "SHIPPING" },
-              { "handle": "local-delivery", "deliveryMethodType": "LOCAL" },
-              { "handle": "pickup-bannos", "deliveryMethodType": "PICK_UP" },
-              { "handle": "pickup-point-paqo", "deliveryMethodType": "PICKUP_POINT" }
+              {
+                "handle": "shipping-standard",
+                "deliveryMethodType": "SHIPPING",
+                "title": null,
+                "code": null
+              },
+              {
+                "handle": "local-delivery",
+                "deliveryMethodType": "LOCAL",
+                "title": null,
+                "code": null
+              },
+              {
+                "handle": "pickup-bannos",
+                "deliveryMethodType": "PICK_UP",
+                "title": null,
+                "code": null
+              },
+              {
+                "handle": "pickup-point-paqo",
+                "deliveryMethodType": "PICKUP_POINT",
+                "title": null,
+                "code": null
+              }
             ]
           }
         ]
@@ -22,8 +50,16 @@
     },
     "output": {
       "operations": [
-        { "deliveryOptionHide": { "deliveryOptionHandle": "shipping-standard" } },
-        { "deliveryOptionHide": { "deliveryOptionHandle": "local-delivery" } }
+        {
+          "deliveryOptionHide": {
+            "deliveryOptionHandle": "shipping-standard"
+          }
+        },
+        {
+          "deliveryOptionHide": {
+            "deliveryOptionHandle": "local-delivery"
+          }
+        }
       ]
     }
   }

@@ -20,9 +20,28 @@ function readCustomerChoice(
 
 // Shopify's native pickup methods. PICK_UP is in-store Local Pickup;
 // PICKUP_POINT is third-party pickup networks. Everything else (SHIPPING,
-// LOCAL = local delivery, RETAIL, NONE) is treated as "delivery" for the
-// purposes of this filter.
+// LOCAL, RETAIL, NONE) is delivery — UNLESS the rate's handle/title is
+// pickup-coded (used when the merchant doesn't have Carrier-Calculated
+// Shipping and wires a manual "Pickup at <store>" flat rate, which
+// Shopify types as SHIPPING). The handle pattern lets us treat those
+// flat rates as pickup for filtering purposes.
 const PICKUP_METHODS = new Set(["PICK_UP", "PICKUP_POINT"]);
+const PICKUP_PATTERN = /pickup|pick[-_ ]?up|in[-_ ]?store|click[-_ ]?(and|&)[-_ ]?collect|collect/i;
+
+function isPickupOption(option: {
+  handle: string;
+  title?: string | null;
+  code?: string | null;
+  deliveryMethodType: string;
+}): boolean {
+  if (PICKUP_METHODS.has(option.deliveryMethodType)) return true;
+  // Manual flat rates often have auto-generated handles (like
+  // "shopify-Pickup%20at%20Annandale-0.00"); the customer-facing name lives
+  // in `title`. Match on whichever surfaces the merchant's intent.
+  return [option.handle, option.title, option.code]
+    .filter((s): s is string => typeof s === "string" && s.length > 0)
+    .some((s) => PICKUP_PATTERN.test(s));
+}
 
 export function cartDeliveryOptionsTransformRun(
   input: CartDeliveryOptionsTransformRunInput,
@@ -33,7 +52,7 @@ export function cartDeliveryOptionsTransformRun(
   const operations = [] as CartDeliveryOptionsTransformRunResult["operations"];
   for (const group of input.cart.deliveryGroups) {
     for (const option of group.deliveryOptions) {
-      const isPickup = PICKUP_METHODS.has(option.deliveryMethodType);
+      const isPickup = isPickupOption(option);
       const shouldHide =
         (choice === "pickup" && !isPickup) ||
         (choice === "delivery" && isPickup);

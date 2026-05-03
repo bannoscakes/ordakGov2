@@ -7,7 +7,7 @@
         "lines": [
           {
             "attribute": {
-              "value": "delivery"
+              "value": "pickup"
             }
           }
         ],
@@ -15,26 +15,14 @@
           {
             "deliveryOptions": [
               {
-                "handle": "shipping-standard",
+                "handle": "standard-delivery",
                 "deliveryMethodType": "SHIPPING",
                 "title": null,
                 "code": null
               },
               {
-                "handle": "local-delivery",
-                "deliveryMethodType": "LOCAL",
-                "title": null,
-                "code": null
-              },
-              {
-                "handle": "pickup-bannos",
-                "deliveryMethodType": "PICK_UP",
-                "title": null,
-                "code": null
-              },
-              {
-                "handle": "pickup-point-paqo",
-                "deliveryMethodType": "PICKUP_POINT",
+                "handle": "pickup-at-annandale",
+                "deliveryMethodType": "SHIPPING",
                 "title": null,
                 "code": null
               }
@@ -47,12 +35,7 @@
       "operations": [
         {
           "deliveryOptionHide": {
-            "deliveryOptionHandle": "pickup-bannos"
-          }
-        },
-        {
-          "deliveryOptionHide": {
-            "deliveryOptionHandle": "pickup-point-paqo"
+            "deliveryOptionHandle": "standard-delivery"
           }
         }
       ]

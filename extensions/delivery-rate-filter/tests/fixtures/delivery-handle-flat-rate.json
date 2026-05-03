@@ -15,26 +15,20 @@
           {
             "deliveryOptions": [
               {
-                "handle": "shipping-standard",
+                "handle": "standard-delivery",
                 "deliveryMethodType": "SHIPPING",
                 "title": null,
                 "code": null
               },
               {
-                "handle": "local-delivery",
-                "deliveryMethodType": "LOCAL",
+                "handle": "pickup-at-annandale",
+                "deliveryMethodType": "SHIPPING",
                 "title": null,
                 "code": null
               },
               {
-                "handle": "pickup-bannos",
-                "deliveryMethodType": "PICK_UP",
-                "title": null,
-                "code": null
-              },
-              {
-                "handle": "pickup-point-paqo",
-                "deliveryMethodType": "PICKUP_POINT",
+                "handle": "in-store-collect",
+                "deliveryMethodType": "SHIPPING",
                 "title": null,
                 "code": null
               }
@@ -47,12 +41,12 @@
       "operations": [
         {
           "deliveryOptionHide": {
-            "deliveryOptionHandle": "pickup-bannos"
+            "deliveryOptionHandle": "pickup-at-annandale"
           }
         },
         {
           "deliveryOptionHide": {
-            "deliveryOptionHandle": "pickup-point-paqo"
+            "deliveryOptionHandle": "in-store-collect"
           }
         }
       ]

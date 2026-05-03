@@ -8,6 +8,8 @@ query CartDeliveryOptionsTransformRunInput {
     deliveryGroups {
       deliveryOptions {
         handle
+        title
+        code
         deliveryMethodType
       }
     }
