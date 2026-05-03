@@ -4,6 +4,7 @@
     "target": "cart.delivery-options.transform.run",
     "input": {
       "cart": {
+        "attribute": null,
         "lines": [
           {
             "attribute": {

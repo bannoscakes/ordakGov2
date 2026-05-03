@@ -1,5 +1,13 @@
 query CartDeliveryOptionsTransformRunInput {
   cart {
+    # Cart-level attribute is the cart-block's first write — always set
+    # before any line interaction. Used as a fallback when the per-line
+    # `_`-prefixed mirror is missing (which happens if items were added
+    # to the cart via a path that didn't trigger our line writer, e.g.
+    # Shopify-API add or theme quick-add).
+    attribute(key: "delivery_method") {
+      value
+    }
     lines {
       attribute(key: "_delivery_method") {
         value

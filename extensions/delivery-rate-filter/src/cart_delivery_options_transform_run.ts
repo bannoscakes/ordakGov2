@@ -5,9 +5,13 @@ import type {
 
 const NO_CHANGES: CartDeliveryOptionsTransformRunResult = { operations: [] };
 
-// The cart-block stamps `_delivery_method` (value `"delivery"` or `"pickup"`)
-// onto every line item. We pull the value off the first line — the cart-block
-// writes the same value to every line.
+// The cart-block stamps `_delivery_method` ("delivery" | "pickup") onto every
+// line item AND mirrors it as a cart-level `delivery_method` attribute. We
+// prefer line-level (it's the seam Carrier Service uses) but fall back to
+// cart-level if a line happens to lack the `_`-prefixed property — which can
+// happen when items are added via a path that doesn't trigger our line
+// writer (e.g. Shopify-API add or a theme quick-add that fires before the
+// cart-block has had a chance to stamp).
 function readCustomerChoice(
   input: CartDeliveryOptionsTransformRunInput,
 ): "delivery" | "pickup" | null {
@@ -15,6 +19,8 @@ function readCustomerChoice(
     const v = line.attribute?.value;
     if (v === "delivery" || v === "pickup") return v;
   }
+  const cartAttr = input.cart.attribute?.value;
+  if (cartAttr === "delivery" || cartAttr === "pickup") return cartAttr;
   return null;
 }
 
