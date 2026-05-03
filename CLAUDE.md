@@ -44,8 +44,9 @@ The current plan and phase ordering live in [`docs/PLAN.md`](docs/PLAN.md). High
 - ✅ **Phase B** — Carrier Service register + rate callback (PR #40 merged 2026-05-02)
 - ✅ **Phase C** — order pipeline verification (PR #41 merged 2026-05-03; cart-block line-item-property writes, drawer placement fixes, native date picker, pickup-as-banner, additive seed script). Verified end-to-end with orders #1007–#1013 on `ordak-go-dev`.
 - ✅ **Phase C.5** — Delivery Customization Function (PR #42 merged 2026-05-03, tag `v0.5.0-pickup-checkout-locked`, app version `ordak-go-18`). Cart-stage choice locks checkout shipping options, no override path. Verified live on `ordak-go-dev`. PR #42 review hardening (commit `c3160b7`) included: `MutationResult` discriminated union for metafield service, cart writer surfaces failures + recovers from 422, webhook returns 503 on Shopify failure (was 200 split-brain), word-boundary on `\bcollect\b`. See `memory/checkpoint_pickup_checkout_locked.md` for the recoverable baseline.
-- 🚀 **Promote Dev → main** — Dev is currently 39 commits ahead of main with all four phases verified live. The promotion PR has not been opened yet; see `gh pr create --base main --head Dev`. **This is the immediate next action before installing on Bannos.**
-- ⏳ **Phase D** — restore stubbed admin routes (`app.setup.tsx`, `app.orders.$orderId.reschedule.tsx`)
+- ✅ **Dev → main promotion** — PR #43 merged 2026-05-03 (all four phases shipped to `main`). PR #44 (pre-main review fixes from 6 agents, commit `524c79f`) merged the same day. `Dev` and `main` are in sync.
+- 🚀 **Install on Bannos as the canary** — production-ready code is on `main`. Walk through the live-setup checklist in `docs/PLAN.md` §Phase C.5. **This is the immediate next action.**
+- ⏳ **Phase D** — restore stubbed admin routes (`app.setup.tsx`, `app.orders.$orderId.reschedule.tsx`); parallelizable with the Bannos rollout.
 - ⏳ **Phase E** — App Store readiness
 
 ## Key directories

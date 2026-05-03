@@ -1,6 +1,6 @@
 # PLAN — what's next for Ordak Go
 
-Last updated: 2026-05-03 — Phase C (PR #41) and Phase C.5 (PR #42) merged into `Dev` and verified live on `ordak-go-dev`. Dev is ahead of `main` by 39 commits — promotion PR pending.
+Last updated: 2026-05-04 — Phases A–C.5 all merged into `main` via PR #43 (Dev → main promotion, 2026-05-03), followed by PR #44 (pre-main review fixes from 6 agents, commit `524c79f`). `Dev` and `main` are in sync. Next milestone: install on Bannos as the canary.
 
 ## Where we are
 
@@ -71,8 +71,9 @@ What landed:
 2. ~~No Carrier Service~~ — Phase B ✓
 3. ~~No verified end-to-end order pipeline~~ — Phase C ✓
 4. ~~No checkout-mode lock~~ — Phase C.5 ✓
-5. **Dev → main promotion PR not yet merged** — `Dev` is 39 commits ahead of `main`; production-ready code lives on Dev. Open the PR, smoke on dev store, merge.
-6. Two admin routes stubbed (setup wizard, reschedule) — usable but feature-incomplete (Phase D)
+5. ~~Dev → main promotion PR not yet merged~~ — PR #43 merged 2026-05-03; PR #44 (pre-main review fixes from 6 agents) merged the same day ✓
+6. **Bannos canary install not yet done** — production-ready code is on `main`. Walk through the live-setup checklist in §Phase C.5 above on the real shop.
+7. Two admin routes stubbed (setup wizard, reschedule) — usable but feature-incomplete (Phase D)
 
 ⚠️ **Deferred (not v1 blockers):**
 - Privacy policy contact info, App Store icon/screenshots/listing — for v2
@@ -131,7 +132,7 @@ Defer until A–D land and dev-store testing is solid.
 2. ~~**Phase B** (carrier service)~~ — done
 3. ~~**Phase C** (order pipeline)~~ — done
 4. ~~**Phase C.5** (delivery customization function)~~ — done
-5. **Promote Dev → main** — open the PR, run smoke on dev store, merge so production-ready code is on the default branch
+5. ~~**Promote Dev → main**~~ — done (PR #43 + PR #44, 2026-05-03)
 6. **Install on Bannos as the canary** — manual smoke testing on a real shop with real (test) orders. Walk through the live-setup checklist above.
 7. **Install on Flour Lane** once Bannos is stable
 8. **Phase D** in parallel with Bannos rollout (admin gaps don't block customer-facing flow)
