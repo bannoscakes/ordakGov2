@@ -5,7 +5,7 @@
 
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json, redirect } from "@remix-run/node";
-import { useActionData, useLoaderData, useNavigate, useNavigation, useSubmit } from "@remix-run/react";
+import { Form, useActionData, useLoaderData, useNavigate, useNavigation, useSubmit } from "@remix-run/react";
 import {
   Page,
   Layout,
@@ -22,8 +22,8 @@ import {
   Text,
 } from "@shopify/polaris";
 import { useState } from "react";
-import { authenticate } from "../../shopify.server";
-import prisma from "../../db.server";
+import { authenticate } from "../shopify.server";
+import prisma from "../db.server";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
   await authenticate.admin(request);
@@ -101,7 +101,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   // Handle update
   const shop = await prisma.shop.findUnique({
-    where: { domain: session.shop },
+    where: { shopifyDomain: session.shop },
   });
 
   if (!shop) {
@@ -278,11 +278,6 @@ export default function EditZone() {
     return "";
   });
 
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    const form = event.target as HTMLFormElement;
-    form.submit();
-  };
 
   const handleDelete = () => {
     const formData = new FormData();
@@ -332,7 +327,7 @@ export default function EditZone() {
         )}
 
         <Layout.Section>
-          <form method="post" onSubmit={handleSubmit}>
+          <Form method="post">
             <FormLayout>
               <Card>
                 <BlockStack gap="400">
@@ -459,8 +454,8 @@ export default function EditZone() {
                       value={radiusKm}
                       onChange={setRadiusKm}
                       type="number"
-                      step="0.1"
-                      min="0"
+                      step={0.1}
+                      min={0}
                       placeholder="e.g., 10"
                       autoComplete="off"
                       helpText="Distance from the location in kilometers"
@@ -491,7 +486,7 @@ export default function EditZone() {
                 </Button>
               </InlineStack>
             </FormLayout>
-          </form>
+          </Form>
         </Layout.Section>
       </Layout>
 

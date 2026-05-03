@@ -1,0 +1,103 @@
+{%- comment -%}
+  Ordak Cart Scheduler — app block.
+  Merchants add this block to the cart page through the theme editor.
+{%- endcomment -%}
+
+<div
+  class="ordak-cart-scheduler"
+  data-ordak-cart-scheduler="{{ block.id }}"
+  style="--ordak-accent: {{ block.settings.accent_color | default: '#1a73e8' }}; padding: {{ block.settings.block_padding | default: 16 }}px;"
+>
+  <script type="application/json" data-ordak-config>
+    {
+      "surface": "cart-page",
+      "blockId": {{ block.id | json }},
+      "shopDomain": {{ shop.permanent_domain | json }},
+      "currency": {{ shop.currency | json }},
+      "locale": {{ request.locale.iso_code | json }},
+      "customerId": {{ customer.id | json }},
+      "customerEmail": {{ customer.email | json }},
+      "headingText": {{ block.settings.heading_text | default: 'When would you like your order?' | json }},
+      "defaultFulfillment": {{ block.settings.default_fulfillment | default: 'delivery' | json }},
+      "showPostcodeField": {{ block.settings.show_postcode_field | default: true | json }},
+      "autoSelectRecommended": {{ block.settings.auto_select_recommended | default: true | json }},
+      "pickupInstructions": {{ block.settings.pickup_instructions | default: 'Pick up any time during store hours.' | json }},
+      "daysAvailableHint": {{ block.settings.days_available_hint | default: 'Monday – Saturday only' | json }},
+      "proxyBase": "/apps/ordak-go"
+    }
+  </script>
+  <noscript>
+    <p>Please enable JavaScript to schedule your delivery or pickup.</p>
+  </noscript>
+</div>
+
+{{ 'cart-scheduler.css' | asset_url | stylesheet_tag }}
+<script src="{{ 'cart-scheduler.js' | asset_url }}" defer></script>
+
+{% schema %}
+{
+  "name": "Ordak Cart Scheduler",
+  "target": "section",
+  "templates": ["cart"],
+  "settings": [
+    {
+      "type": "text",
+      "id": "heading_text",
+      "label": "Heading",
+      "default": "When would you like your order?"
+    },
+    {
+      "type": "color",
+      "id": "accent_color",
+      "label": "Accent color",
+      "default": "#1a73e8"
+    },
+    {
+      "type": "select",
+      "id": "default_fulfillment",
+      "label": "Default fulfillment",
+      "options": [
+        { "value": "delivery", "label": "Delivery" },
+        { "value": "pickup", "label": "Pickup" }
+      ],
+      "default": "delivery"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_postcode_field",
+      "label": "Show postcode field",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "auto_select_recommended",
+      "label": "Auto-select recommended slot",
+      "default": true
+    },
+    {
+      "type": "text",
+      "id": "pickup_instructions",
+      "label": "Pickup banner text",
+      "info": "Shown to customers who choose Pickup, in place of delivery time slots. Example: \"Pick up any time between 9 - 4\".",
+      "default": "Pick up any time during store hours."
+    },
+    {
+      "type": "text",
+      "id": "days_available_hint",
+      "label": "Days available hint",
+      "info": "Small hint shown under the date picker. Example: \"Monday – Saturday only\".",
+      "default": "Monday – Saturday only"
+    },
+    {
+      "type": "range",
+      "id": "block_padding",
+      "label": "Padding",
+      "min": 0,
+      "max": 48,
+      "step": 4,
+      "unit": "px",
+      "default": 16
+    }
+  ]
+}
+{% endschema %}

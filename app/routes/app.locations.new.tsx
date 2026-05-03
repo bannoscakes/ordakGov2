@@ -5,7 +5,7 @@
 
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json, redirect } from "@remix-run/node";
-import { useActionData, useNavigate, useNavigation } from "@remix-run/react";
+import { Form, useActionData, useNavigate, useNavigation } from "@remix-run/react";
 import {
   Page,
   Layout,
@@ -19,8 +19,8 @@ import {
   InlineStack,
 } from "@shopify/polaris";
 import { useState } from "react";
-import { authenticate } from "../../shopify.server";
-import prisma from "../../db.server";
+import { authenticate } from "../shopify.server";
+import prisma from "../db.server";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   await authenticate.admin(request);
@@ -108,15 +108,6 @@ export default function NewLocation() {
   const [supportsPickup, setSupportsPickup] = useState(true);
   const [isActive, setIsActive] = useState(true);
 
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    const form = event.target as HTMLFormElement;
-    const formData = new FormData(form);
-
-    // Submit form
-    form.submit();
-  };
-
   return (
     <Page
       title="Add Location"
@@ -130,7 +121,7 @@ export default function NewLocation() {
         )}
 
         <Layout.Section>
-          <form method="post" onSubmit={handleSubmit}>
+          <Form method="post">
             <FormLayout>
               <Card>
                 <BlockStack gap="400">
@@ -217,7 +208,7 @@ export default function NewLocation() {
                         onChange={setLatitude}
                         placeholder="-33.8688"
                         type="number"
-                        step="any"
+                        step={0.000001}
                         autoComplete="off"
                       />
                     </div>
@@ -229,7 +220,7 @@ export default function NewLocation() {
                         onChange={setLongitude}
                         placeholder="151.2093"
                         type="number"
-                        step="any"
+                        step={0.000001}
                         autoComplete="off"
                       />
                     </div>
@@ -321,7 +312,7 @@ export default function NewLocation() {
                 </Button>
               </InlineStack>
             </FormLayout>
-          </form>
+          </Form>
         </Layout.Section>
       </Layout>
     </Page>

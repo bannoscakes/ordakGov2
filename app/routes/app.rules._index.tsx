@@ -18,14 +18,14 @@ import {
   InlineStack,
   Text,
 } from "@shopify/polaris";
-import { authenticate } from "../../shopify.server";
-import prisma from "../../db.server";
+import { authenticate } from "../shopify.server";
+import prisma from "../db.server";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const { session } = await authenticate.admin(request);
 
   const shop = await prisma.shop.findUnique({
-    where: { domain: session.shop },
+    where: { shopifyDomain: session.shop },
   });
 
   if (!shop) {

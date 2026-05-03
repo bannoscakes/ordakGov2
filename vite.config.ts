@@ -3,6 +3,12 @@ import { defineConfig } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig({
+  server: {
+    // Stable named tunnel (dev.ordak.vip) is the primary path. The
+    // .trycloudflare.com wildcard stays in case anyone falls back to a quick
+    // tunnel for one-off debugging.
+    allowedHosts: ["dev.ordak.vip", ".trycloudflare.com", "localhost"],
+  },
   plugins: [
     remix({
       ignoredRouteFiles: ["**/.*"],

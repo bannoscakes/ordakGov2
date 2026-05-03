@@ -5,7 +5,7 @@
 
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json, redirect } from "@remix-run/node";
-import { useActionData, useLoaderData, useNavigate, useNavigation, useSubmit } from "@remix-run/react";
+import { Form, useActionData, useLoaderData, useNavigate, useNavigation, useSubmit } from "@remix-run/react";
 import {
   Page,
   Layout,
@@ -22,8 +22,8 @@ import {
   Text,
 } from "@shopify/polaris";
 import { useState } from "react";
-import { authenticate } from "../../shopify.server";
-import prisma from "../../db.server";
+import { authenticate } from "../shopify.server";
+import prisma from "../db.server";
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
   await authenticate.admin(request);
@@ -74,7 +74,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
   // Handle update
   const shop = await prisma.shop.findUnique({
-    where: { domain: session.shop },
+    where: { shopifyDomain: session.shop },
   });
 
   if (!shop) {
@@ -278,7 +278,7 @@ export default function EditRule() {
 
   const [blackoutDates, setBlackoutDates] = useState(() => {
     if (rule.type === "blackout" && rule.blackoutDates && rule.blackoutDates.length > 0) {
-      return rule.blackoutDates.map((d: Date) => {
+      return rule.blackoutDates.map((d) => {
         const date = new Date(d);
         return date.toISOString().split("T")[0];
       }).join(", ");
@@ -294,11 +294,6 @@ export default function EditRule() {
     return rule.type === "capacity" && rule.slotCapacity ? rule.slotCapacity.toString() : "";
   });
 
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    const form = event.target as HTMLFormElement;
-    form.submit();
-  };
 
   const handleDelete = () => {
     const formData = new FormData();
@@ -334,7 +329,7 @@ export default function EditRule() {
         )}
 
         <Layout.Section>
-          <form method="post" onSubmit={handleSubmit}>
+          <Form method="post">
             <FormLayout>
               <Card>
                 <BlockStack gap="400">
@@ -409,7 +404,7 @@ export default function EditRule() {
                           value={leadTimeDays}
                           onChange={setLeadTimeDays}
                           type="number"
-                          min="0"
+                          min={0}
                           placeholder="e.g., 1"
                           autoComplete="off"
                           helpText="Minimum days in advance"
@@ -422,7 +417,7 @@ export default function EditRule() {
                           value={leadTimeHours}
                           onChange={setLeadTimeHours}
                           type="number"
-                          min="0"
+                          min={0}
                           placeholder="e.g., 24"
                           autoComplete="off"
                           helpText="Minimum hours in advance"
@@ -484,7 +479,7 @@ export default function EditRule() {
                           value={slotDuration}
                           onChange={setSlotDuration}
                           type="number"
-                          min="1"
+                          min={1}
                           placeholder="e.g., 60"
                           autoComplete="off"
                           helpText="How long is each time slot?"
@@ -498,7 +493,7 @@ export default function EditRule() {
                           value={slotCapacity}
                           onChange={setSlotCapacity}
                           type="number"
-                          min="1"
+                          min={1}
                           placeholder="e.g., 10"
                           autoComplete="off"
                           helpText="Maximum concurrent orders"
@@ -534,7 +529,7 @@ export default function EditRule() {
                 </Button>
               </InlineStack>
             </FormLayout>
-          </form>
+          </Form>
         </Layout.Section>
       </Layout>
 

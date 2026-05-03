@@ -1,0 +1,37 @@
+{
+  "payload": {
+    "export": "cart-delivery-options-transform-run",
+    "target": "cart.delivery-options.transform.run",
+    "input": {
+      "cart": {
+        "attribute": null,
+        "lines": [
+          {
+            "attribute": null
+          }
+        ],
+        "deliveryGroups": [
+          {
+            "deliveryOptions": [
+              {
+                "handle": "shipping-standard",
+                "deliveryMethodType": "SHIPPING",
+                "title": null,
+                "code": null
+              },
+              {
+                "handle": "pickup-bannos",
+                "deliveryMethodType": "PICK_UP",
+                "title": null,
+                "code": null
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "output": {
+      "operations": []
+    }
+  }
+}

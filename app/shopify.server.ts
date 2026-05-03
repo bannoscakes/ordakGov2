@@ -2,52 +2,153 @@ import "@shopify/shopify-app-remix/adapters/node";
 import {
   ApiVersion,
   AppDistribution,
+  DeliveryMethod,
   shopifyApp,
 } from "@shopify/shopify-app-remix/server";
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
-import { restResources } from "@shopify/shopify-api/rest/admin/2024-01";
 import prisma from "./db.server";
 import { getEnv } from "./utils/env.server";
+import { logger } from "./utils/logger.server";
+import {
+  buildCallbackUrl,
+  registerCarrierService,
+} from "./services/carrier-service.server";
 
-// Validate environment variables at startup
 const env = getEnv();
+const API_VERSION = ApiVersion.April26;
+
+/**
+ * Build a fetch-based admin GraphQL caller compatible with the
+ * `graphql: any` shape used by app/services/*.server.ts. Used from
+ * afterAuth where we have a session.accessToken but no request context to
+ * call `authenticate.admin(request)` on.
+ */
+function adminGraphqlFn(shop: string, accessToken: string) {
+  return async (
+    query: string,
+    options?: { variables?: Record<string, unknown> },
+  ) =>
+    fetch(`https://${shop}/admin/api/${API_VERSION}/graphql.json`, {
+      method: "POST",
+      headers: {
+        "X-Shopify-Access-Token": accessToken,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ query, variables: options?.variables }),
+    });
+}
 
 const shopify = shopifyApp({
   apiKey: env.SHOPIFY_API_KEY,
   apiSecretKey: env.SHOPIFY_API_SECRET,
-  apiVersion: ApiVersion.January24,
+  // Pinned to the current quarter (April 2026). Bumped quarterly via the
+  // scheduled stack-rot defense agent — see memory/stack_rot_defense.md.
+  apiVersion: ApiVersion.April26,
   scopes: env.SCOPES.split(","),
   appUrl: env.SHOPIFY_APP_URL,
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(prisma),
   distribution: AppDistribution.AppStore,
-  restResources,
   webhooks: {
     APP_UNINSTALLED: {
-      deliveryMethod: "http",
+      deliveryMethod: DeliveryMethod.Http,
       callbackUrl: "/webhooks",
     },
     CUSTOMERS_DATA_REQUEST: {
-      deliveryMethod: "http",
+      deliveryMethod: DeliveryMethod.Http,
       callbackUrl: "/webhooks",
     },
     CUSTOMERS_REDACT: {
-      deliveryMethod: "http",
+      deliveryMethod: DeliveryMethod.Http,
       callbackUrl: "/webhooks",
     },
     SHOP_REDACT: {
-      deliveryMethod: "http",
+      deliveryMethod: DeliveryMethod.Http,
       callbackUrl: "/webhooks",
+    },
+    // Orders pipeline: orders/create fires when checkout completes. Our
+    // handler at app/routes/webhooks.orders.create.tsx creates an
+    // OrderLink, increments slot.booked, and applies tags/metafields.
+    ORDERS_CREATE: {
+      deliveryMethod: DeliveryMethod.Http,
+      callbackUrl: "/webhooks/orders/create",
     },
   },
   hooks: {
     afterAuth: async ({ session }) => {
-      shopify.registerWebhooks({ session });
+      await shopify.registerWebhooks({ session });
+
+      // Bootstrap a Shop row so the storefront-facing api.* handlers
+      // (eligibility/check, recommendations/*, events/*) can scope queries
+      // to this shop. Idempotent — re-installs and token refreshes simply
+      // update the existing row's accessToken/scope. Without this, the
+      // first signed proxy request from the cart-block returns "404 Shop
+      // not found" even though OAuth succeeded.
+      if (!session.accessToken) {
+        // Should be unreachable under unstable_newEmbeddedAuthStrategy +
+        // token-exchange. Logged so a future SDK regression doesn't silently
+        // skip the bootstrap — the symptom is "404 Shop not found" on every
+        // storefront proxy request with no breadcrumb pointing here.
+        logger.error("afterAuth: session has no accessToken; Shop bootstrap skipped", undefined, {
+          shop: session.shop,
+        });
+        return;
+      }
+
+      const dbShop = await prisma.shop.upsert({
+        where: { shopifyDomain: session.shop },
+        update: {
+          accessToken: session.accessToken,
+          scope: session.scope ?? null,
+        },
+        create: {
+          shopifyDomain: session.shop,
+          accessToken: session.accessToken,
+          scope: session.scope ?? null,
+        },
+      });
+
+      // Register the carrier service if we don't already have an ID for
+      // this shop. Idempotent: re-installs find the row and skip the call.
+      // If a previous registration was deleted out-of-band on Shopify's
+      // side, the next checkout would surface zero rates — operator can
+      // null `carrierServiceId` in DB to retry.
+      if (!dbShop.carrierServiceId) {
+        const cs = await registerCarrierService(
+          adminGraphqlFn(session.shop, session.accessToken),
+          buildCallbackUrl(env.SHOPIFY_APP_URL),
+        );
+        if (cs) {
+          await prisma.shop.update({
+            where: { shopifyDomain: session.shop },
+            data: { carrierServiceId: cs.id },
+          });
+          logger.info("Carrier service registered", {
+            shop: session.shop,
+            id: cs.id,
+            callback: cs.callbackUrl,
+          });
+        } else {
+          // Loud — install completed but checkout will return zero rates
+          // until carrierServiceId is bootstrapped. Operator must null the
+          // field in DB and re-trigger afterAuth (or wait for a real
+          // re-install) to retry. Surfacing this state in the admin home
+          // banner is a tracked follow-up.
+          logger.error(
+            "Carrier service registration failed; install completed but checkout will return zero rates until retry",
+            undefined,
+            { shop: session.shop },
+          );
+        }
+      }
     },
   },
   future: {
-    v3_webhookAdminContext: true,
-    v3_authenticatePublic: true,
+    // Use OAuth token exchange instead of cookie-based redirect OAuth.
+    // Required because modern browsers block third-party cookies, which
+    // breaks the legacy embedded-app auth flow inside Shopify admin iframes.
+    // Pairs with Shopify-managed installation in Partners.
+    unstable_newEmbeddedAuthStrategy: true,
   },
   ...(process.env.SHOP_CUSTOM_DOMAIN
     ? { customShopDomains: [process.env.SHOP_CUSTOM_DOMAIN] }
@@ -55,7 +156,7 @@ const shopify = shopifyApp({
 });
 
 export default shopify;
-export const apiVersion = ApiVersion.January24;
+export const apiVersion = API_VERSION;
 export const addDocumentResponseHeaders = shopify.addDocumentResponseHeaders;
 export const authenticate = shopify.authenticate;
 export const unauthenticated = shopify.unauthenticated;

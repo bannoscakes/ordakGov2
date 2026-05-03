@@ -11,9 +11,9 @@
 
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { authenticate } from "../../shopify.server";
-import prisma from "../../db.server";
-import { logger } from "../../utils/logger.server";
+import { authenticate } from "../shopify.server";
+import prisma from "../db.server";
+import { logger } from "../utils/logger.server";
 import {
   addOrderMetafields,
   addOrderTags,
@@ -21,7 +21,7 @@ import {
   generateOrderNote,
   generateOrderTags,
   type SchedulingMetafields,
-} from "../../services/metafield.service";
+} from "../services/metafield.service";
 
 interface UpdateScheduleRequest {
   orderId: string;

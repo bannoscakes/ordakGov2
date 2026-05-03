@@ -2,6 +2,7 @@ import type { ActionFunctionArgs } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { logger } from "../utils/logger.server";
+import { unregisterCarrierService } from "../services/carrier-service.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { topic, shop, session, admin, payload } = await authenticate.webhook(request);
@@ -11,8 +12,48 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   try {
     switch (topic) {
       case "APP_UNINSTALLED":
-        // Clean up shop data on uninstall
+        // Decoupled cleanup: the carrier-service unregister and the Shop
+        // delete are independent. Shopify can revoke the access token
+        // before sending APP_UNINSTALLED, in which case `admin` is
+        // undefined — but we still need to delete the Shop row, otherwise
+        // a future reinstall hits afterAuth's `if (!dbShop.carrierServiceId)`
+        // guard with the OLD ID, skips registration, and the merchant
+        // ends up with no shipping options at checkout.
         if (session) {
+          // Best-effort unregister (only if we have admin context AND a
+          // stored ID). Failures are logged distinctly so operators can
+          // tell "already gone, benign" from "real error, possible orphan."
+          if (admin) {
+            const dbShop = await prisma.shop.findUnique({
+              where: { shopifyDomain: shop },
+              select: { carrierServiceId: true },
+            });
+            if (dbShop?.carrierServiceId) {
+              const ok = await unregisterCarrierService(
+                admin.graphql,
+                dbShop.carrierServiceId,
+              );
+              if (ok) {
+                logger.info("Carrier service unregistered on uninstall", {
+                  shop,
+                  id: dbShop.carrierServiceId,
+                });
+              } else {
+                // Could be already-deleted on Shopify's side (benign) or
+                // a real failure (orphan registration left pointing at
+                // our now-dead callback). Log loud so it's grep-able.
+                logger.error(
+                  "Carrier service unregister failed; possible orphan registration on Shopify side",
+                  undefined,
+                  { shop, id: dbShop.carrierServiceId },
+                );
+              }
+            }
+          }
+
+          // Always delete the Shop row regardless of unregister outcome
+          // or admin availability — leaving it would block re-registration
+          // on the next install.
           await prisma.shop.deleteMany({
             where: { shopifyDomain: shop },
           });

@@ -19,8 +19,8 @@ import {
   Icon,
 } from "@shopify/polaris";
 import { PlusIcon, EditIcon, DeleteIcon } from "@shopify/polaris-icons";
-import { authenticate } from "../../shopify.server";
-import prisma from "../../db.server";
+import { authenticate } from "../shopify.server";
+import prisma from "../db.server";
 import { useState } from "react";
 
 export async function loader({ request }: LoaderFunctionArgs) {

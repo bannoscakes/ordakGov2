@@ -1,0 +1,19 @@
+{
+  "name": "Ordak Cart Scheduler",
+  "settings": {
+    "heading_text": { "label": "Heading" },
+    "accent_color": { "label": "Accent color" },
+    "default_fulfillment": {
+      "label": "Default fulfillment",
+      "options": {
+        "delivery": "Delivery",
+        "pickup": "Pickup"
+      }
+    },
+    "show_postcode_field": { "label": "Show postcode field" },
+    "auto_select_recommended": { "label": "Auto-select recommended slot" },
+    "block_padding": { "label": "Padding" },
+    "drawer_selector": { "label": "Cart drawer CSS selector" },
+    "enabled": { "label": "Enable in cart drawer" }
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "payload": {
+    "export": "cart-delivery-options-transform-run",
+    "target": "cart.delivery-options.transform.run",
+    "input": {
+      "cart": {
+        "attribute": null,
+        "lines": [
+          {
+            "attribute": {
+              "value": "delivery"
+            }
+          }
+        ],
+        "deliveryGroups": [
+          {
+            "deliveryOptions": [
+              {
+                "handle": "shipping-standard",
+                "deliveryMethodType": "SHIPPING",
+                "title": null,
+                "code": null
+              },
+              {
+                "handle": "local-delivery",
+                "deliveryMethodType": "LOCAL",
+                "title": null,
+                "code": null
+              },
+              {
+                "handle": "pickup-bannos",
+                "deliveryMethodType": "PICK_UP",
+                "title": null,
+                "code": null
+              },
+              {
+                "handle": "pickup-point-paqo",
+                "deliveryMethodType": "PICKUP_POINT",
+                "title": null,
+                "code": null
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "output": {
+      "operations": [
+        {
+          "deliveryOptionHide": {
+            "deliveryOptionHandle": "pickup-bannos"
+          }
+        },
+        {
+          "deliveryOptionHide": {
+            "deliveryOptionHandle": "pickup-point-paqo"
+          }
+        }
+      ]
+    }
+  }
+}

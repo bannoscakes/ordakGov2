@@ -3,6 +3,8 @@ node_modules
 /build
 /public/build
 .env
+.env.save
+.env.local
 *.db
 .shopify
 *.log
@@ -10,6 +12,13 @@ node_modules
 dist
 .vercel
 .output
+
+# Auto-plumbing dev loop (scripts/dev-up.sh) — runtime state for vite + cloudflared
+.dev-logs/
+
+# Personal Claude Code overrides — not for team distribution
+.claude/settings.local.json
+.claude/*.lock
 
 # Prisma
 prisma/*.db

@@ -170,12 +170,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
     if (postcode) {
       const matchingZones = shop.zones.filter((zone) => {
-        if (zone.zoneType === "postcode_range" && zone.postcodeStart && zone.postcodeEnd) {
+        if (zone.type === "postcode_range" && zone.postcodes[0] && zone.postcodes[1]) {
           const normalizedPostcode = postcode.replace(/\s/g, "").toUpperCase();
-          const start = zone.postcodeStart.replace(/\s/g, "").toUpperCase();
-          const end = zone.postcodeEnd.replace(/\s/g, "").toUpperCase();
+          const start = zone.postcodes[0].replace(/\s/g, "").toUpperCase();
+          const end = zone.postcodes[1].replace(/\s/g, "").toUpperCase();
           return normalizedPostcode >= start && normalizedPostcode <= end;
-        } else if (zone.zoneType === "postcode_list" && zone.postcodes) {
+        } else if (zone.type === "postcode_list" && zone.postcodes) {
           const normalizedPostcode = postcode.replace(/\s/g, "").toUpperCase();
           return zone.postcodes.some(
             (zp) => zp.replace(/\s/g, "").toUpperCase() === normalizedPostcode
@@ -227,7 +227,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       message: `${activeRulesCount} active rule(s)`,
       details:
         activeRulesCount > 0
-          ? shop.rules.map((r) => `${r.name} (${r.ruleType})`).join(", ")
+          ? shop.rules.map((r) => `${r.name} (${r.type})`).join(", ")
           : "No business rules are restricting availability",
     };
 
@@ -421,18 +421,18 @@ export default function Diagnostics() {
                     Quick Summary
                   </Text>
                   <InlineStack gap="400">
-                    <Badge tone="info">{diagnosticReport.summary.totalSlots} Total Slots</Badge>
+                    <Badge tone="info">{`${diagnosticReport.summary.totalSlots} Total Slots`}</Badge>
                     <Badge tone="success">
-                      {diagnosticReport.summary.availableSlots} Available
+                      {`${diagnosticReport.summary.availableSlots} Available`}
                     </Badge>
                     <Badge tone="warning">
-                      {diagnosticReport.summary.fullyBookedSlots} Fully Booked
+                      {`${diagnosticReport.summary.fullyBookedSlots} Fully Booked`}
                     </Badge>
                   </InlineStack>
                   <InlineStack gap="400">
-                    <Badge>{diagnosticReport.summary.locations} Locations</Badge>
-                    <Badge>{diagnosticReport.summary.zones} Zones</Badge>
-                    <Badge>{diagnosticReport.summary.activeRules} Active Rules</Badge>
+                    <Badge>{`${diagnosticReport.summary.locations} Locations`}</Badge>
+                    <Badge>{`${diagnosticReport.summary.zones} Zones`}</Badge>
+                    <Badge>{`${diagnosticReport.summary.activeRules} Active Rules`}</Badge>
                   </InlineStack>
                 </BlockStack>
               </Card>

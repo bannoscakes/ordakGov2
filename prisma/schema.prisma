@@ -12,21 +12,23 @@ datasource db {
 
 // Shopify session storage
 model Session {
-  id          String    @id
-  shop        String
-  state       String
-  isOnline    Boolean   @default(false)
-  scope       String?
-  expires     DateTime?
-  accessToken String
-  userId      BigInt?
-  firstName   String?
-  lastName    String?
-  email       String?
-  accountOwner Boolean  @default(false)
-  locale      String?
-  collaborator Boolean? @default(false)
-  emailVerified Boolean? @default(false)
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
 }
 
 // Core entities
@@ -35,6 +37,12 @@ model Shop {
   shopifyDomain         String    @unique
   accessToken           String
   scope                 String?
+
+  // Carrier Service: Shopify-assigned ID returned by carrierServiceCreate.
+  // Stored so APP_UNINSTALLED can call carrierServiceDelete and avoid
+  // orphaning the registration. Null means "not yet registered" (e.g. mid
+  // afterAuth, or Carrier Service registration failed and we'll retry).
+  carrierServiceId      String?
 
   // Recommendation settings
   recommendationsEnabled Boolean  @default(true)
@@ -47,6 +55,7 @@ model Shop {
   locations             Location[]
   zones                 Zone[]
   rules                 Rule[]
+  webhookDestinations   WebhookDestination[]
 
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
@@ -244,6 +253,30 @@ model CustomerPreferences {
 
   @@index([customerId])
   @@index([customerEmail])
+}
+
+// Schema reservation only — no UI, no runtime path yet.
+// Per the "design pluggable now, build later" business rule, this lets
+// merchants register external webhook receivers (e.g. their own ordak
+// dispatch endpoint) for order/scheduling events without a future
+// migration churn. Build the dispatcher in a later phase.
+model WebhookDestination {
+  id          String   @id @default(cuid())
+  shopId      String
+  shop        Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  url         String
+  secret      String   // HMAC signing secret
+  enabled     Boolean  @default(true)
+
+  // Subset of EventLog.eventType values this destination subscribes to.
+  // Empty array means "all events".
+  eventTypes  String[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([shopId])
 }
 
 model RecommendationLog {

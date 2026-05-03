@@ -1,0 +1,126 @@
+import { sessionId } from "./analytics";
+import type {
+  BlockConfig,
+  EligibilityResponse,
+  LocationResponse,
+  SlotResponse,
+  Fulfillment,
+} from "./types";
+
+async function post<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      "X-Ordak-Session": sessionId(),
+    },
+    credentials: "same-origin",
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    // A response body can only be consumed once — read as text first, then
+    // try to parse it as JSON for a `.message`. Falling back to res.text()
+    // after res.json() throws would TypeError on "body already read".
+    let detail = res.statusText;
+    try {
+      const raw = await res.text();
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw) as { message?: string };
+          detail = parsed?.message ?? raw;
+        } catch {
+          detail = raw;
+        }
+      }
+    } catch {
+      // Network read failed; keep statusText.
+    }
+    throw new Error(`${res.status} ${detail}`);
+  }
+  return (await res.json()) as T;
+}
+
+export class OrdakApi {
+  constructor(private cfg: BlockConfig) {}
+
+  private url(suffix: string) {
+    return `${this.cfg.proxyBase}${suffix}`;
+  }
+
+  checkEligibility(postcode: string, fulfillmentType: Fulfillment): Promise<EligibilityResponse> {
+    return post<EligibilityResponse>(this.url("/eligibility/check"), {
+      postcode,
+      fulfillmentType,
+      shopDomain: this.cfg.shopDomain,
+    });
+  }
+
+  fetchSlots(args: {
+    fulfillmentType: Fulfillment;
+    locationId?: string;
+    postcode?: string;
+    dateRange: { startDate: string; endDate: string };
+  }): Promise<SlotResponse> {
+    return post<SlotResponse>(this.url("/recommendations/slots"), {
+      fulfillmentType: args.fulfillmentType,
+      locationId: args.locationId,
+      postcode: args.postcode,
+      customerId: this.cfg.customerId ?? undefined,
+      customerEmail: this.cfg.customerEmail ?? undefined,
+      dateRange: args.dateRange,
+    });
+  }
+
+  fetchLocations(
+    postcode: string | undefined,
+    fulfillmentType: Fulfillment,
+  ): Promise<LocationResponse> {
+    return post<LocationResponse>(this.url("/recommendations/locations"), {
+      postcode: postcode || undefined,
+      fulfillmentType,
+      shopDomain: this.cfg.shopDomain,
+      customerId: this.cfg.customerId ?? undefined,
+      customerEmail: this.cfg.customerEmail ?? undefined,
+    });
+  }
+
+  trackViewed(recs: { type: "slot" | "location"; id: string; recommendationScore: number }[]): void {
+    if (!recs.length) return;
+    void post(this.url("/events/recommendation-viewed"), {
+      sessionId: sessionId(),
+      customerId: this.cfg.customerId ?? undefined,
+      customerEmail: this.cfg.customerEmail ?? undefined,
+      shopifyDomain: this.cfg.shopDomain,
+      recommendations: recs,
+    }).catch((err) => {
+      // eslint-disable-next-line no-console
+      console.warn("[ordak] analytics post failed", err);
+    });
+  }
+
+  trackSelected(args: {
+    type: "slot" | "location";
+    id: string;
+    recommendationScore?: number;
+    wasRecommended: boolean;
+    alternativesShown?: string[];
+  }): void {
+    void post(this.url("/events/recommendation-selected"), {
+      sessionId: sessionId(),
+      customerId: this.cfg.customerId ?? undefined,
+      customerEmail: this.cfg.customerEmail ?? undefined,
+      shopifyDomain: this.cfg.shopDomain,
+      selected: {
+        type: args.type,
+        id: args.id,
+        recommendationScore: args.recommendationScore,
+        wasRecommended: args.wasRecommended,
+      },
+      alternativesShown: args.alternativesShown,
+    }).catch((err) => {
+      // eslint-disable-next-line no-console
+      console.warn("[ordak] analytics post failed", err);
+    });
+  }
+}

@@ -1,0 +1,7 @@
+api_version = "2026-04"
+uid = "c9e975ac-5a87-7a0c-c4f8-a5b69a342ca6a3e4e584"
+
+[[extensions]]
+type = "theme"
+name = "Ordak Cart Scheduler"
+handle = "cart-block"

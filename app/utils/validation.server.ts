@@ -37,14 +37,21 @@ export const eligibilityCheckSchema = z.object({
  * Recommendation requests validation
  */
 export const recommendationLocationSchema = z.object({
-  postcode: postcodeSchema,
+  // Pickup doesn't need a postcode (the customer comes to the location), so
+  // postcode is only required when fulfillmentType is "delivery". Refined
+  // below.
+  postcode: postcodeSchema.optional(),
   fulfillmentType: fulfillmentTypeSchema,
   shopDomain: shopDomainSchema,
+  customerId: z.string().optional(),
   customerEmail: emailSchema,
   deliveryAddress: z.string().optional(),
   latitude: latitudeSchema.optional(),
   longitude: longitudeSchema.optional(),
-});
+}).refine(
+  (data) => data.fulfillmentType !== "delivery" || !!data.postcode,
+  { message: "postcode is required for delivery", path: ["postcode"] },
+);
 
 export const recommendationSlotSchema = z.object({
   locationId: z.string().cuid(),
