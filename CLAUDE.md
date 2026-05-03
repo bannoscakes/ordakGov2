@@ -43,7 +43,7 @@ The current plan and phase ordering live in [`docs/PLAN.md`](docs/PLAN.md). High
 - ✅ **Phase A** — cart-page theme app extension (PR #39 merged 2026-05-02)
 - ✅ **Phase B** — Carrier Service register + rate callback (PR #40 merged 2026-05-02)
 - 🟡 **Phase C** — order pipeline verification (in PR #41; folds in cart-block line-item-property writes, drawer placement fixes, native date picker, additive seed script)
-- ⏳ **Phase C.5** — Delivery Customization Function (Shopify Function, target `purchase.delivery-customization.run`). Hides delivery rates when cart picks Pickup, hides pickup rates when cart picks Delivery. **Load-bearing for the "no checkout confusion" product goal — install on Bannos cannot proceed without this.**
+- ✅ **Phase C.5** — Delivery Customization Function (PR #42, tag `v0.5.0-pickup-checkout-locked`, app version `ordak-go-18`). Cart-stage choice locks checkout shipping options, no override path. Verified live on `ordak-go-dev`. See `memory/checkpoint_pickup_checkout_locked.md` for the recoverable baseline.
 - ⏳ **Phase D** — restore stubbed admin routes
 - ⏳ **Phase E** — App Store readiness
 
