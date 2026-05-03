@@ -13,12 +13,9 @@ import {
   generateOrderTags,
   type SchedulingMetafields,
 } from "../services/metafield.service";
+import { extractScheduling } from "../services/scheduling-extract.server";
+import type { NameValuePair } from "../services/scheduling-extract.server";
 import { logger } from "../utils/logger.server";
-
-interface NameValuePair {
-  name: string;
-  value: string;
-}
 
 interface ShippingAddress {
   first_name?: string | null;
@@ -52,57 +49,6 @@ interface OrderPayload {
   line_items?: Array<{ properties?: NameValuePair[] }>;
   shipping_address?: ShippingAddress | null;
   billing_address?: ShippingAddress | null;
-}
-
-interface ExtractedScheduling {
-  slotId: string;
-  fulfillmentType: "delivery" | "pickup";
-  wasRecommended: boolean;
-  recommendationScore: number | null;
-}
-
-function valueFor(pairs: NameValuePair[] | undefined, key: string): string | undefined {
-  return pairs?.find((p) => p.name === key)?.value;
-}
-
-function parseFulfillment(value: string | undefined): "delivery" | "pickup" {
-  return value === "pickup" ? "pickup" : "delivery";
-}
-
-// Read scheduling info from the order. Line item properties win because they
-// match what the Carrier Service callback saw at checkout — note_attributes
-// (cart attributes) are the fallback for orders that bypassed shipping (e.g.
-// pickup) where carrier service didn't run.
-function parseScore(raw: string | undefined): number | null {
-  if (!raw) return null;
-  const n = Number(raw);
-  // Number("foo") => NaN, Number("Infinity") => Infinity. Postgres
-  // accepts NaN in DOUBLE PRECISION which then poisons sort/compare
-  // queries; coerce both to null.
-  return Number.isFinite(n) ? n : null;
-}
-
-function extractScheduling(payload: OrderPayload): ExtractedScheduling | null {
-  for (const line of payload.line_items ?? []) {
-    const slotId = valueFor(line.properties, "_slot_id");
-    if (slotId) {
-      return {
-        slotId,
-        fulfillmentType: parseFulfillment(valueFor(line.properties, "_delivery_method")),
-        wasRecommended: valueFor(line.properties, "_was_recommended") === "true",
-        recommendationScore: parseScore(valueFor(line.properties, "_recommendation_score")),
-      };
-    }
-  }
-
-  const slotId = valueFor(payload.note_attributes, "slot_id");
-  if (!slotId) return null;
-  return {
-    slotId,
-    fulfillmentType: parseFulfillment(valueFor(payload.note_attributes, "delivery_method")),
-    wasRecommended: valueFor(payload.note_attributes, "was_recommended") === "true",
-    recommendationScore: parseScore(valueFor(payload.note_attributes, "recommendation_score")),
-  };
 }
 
 function formatAddress(addr: ShippingAddress): string {

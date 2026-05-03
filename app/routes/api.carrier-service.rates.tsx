@@ -102,103 +102,119 @@ function readLineItemProperty(
 }
 
 export async function action({ request }: ActionFunctionArgs) {
-  if (request.method !== "POST") {
-    return json({ error: "Method not allowed" }, { status: 405 });
-  }
-
-  const shopifyDomain = request.headers.get("x-shopify-shop-domain");
-  if (!shopifyDomain) {
-    logger.warn("Carrier service request missing X-Shopify-Shop-Domain header");
-    return json({ rates: [] });
-  }
-
-  let body: RateRequest;
+  // Wrap the entire callback in try/catch returning `{ rates: [] }` on
+  // any uncaught throw. The deliberate failure mode for THIS endpoint is
+  // "no rates" (which gates checkout intentionally) — NOT a 500. Shopify
+  // treats repeated 5xx responses as a carrier-service health failure
+  // and can suppress the carrier service entirely, breaking checkout
+  // for every customer until the merchant manually re-enables it. A
+  // null-traversal in the locations.find chain or a transient Prisma
+  // timeout shouldn't have that blast radius. See
+  // app/services/carrier-service.server.ts for the registration side.
+  let shopifyDomain = request.headers.get("x-shopify-shop-domain") ?? undefined;
   try {
-    body = (await request.json()) as RateRequest;
-  } catch (err) {
-    logger.error("Carrier service: invalid JSON body", err, { shopifyDomain });
-    return json({ rates: [] });
-  }
+    if (request.method !== "POST") {
+      return json({ error: "Method not allowed" }, { status: 405 });
+    }
 
-  const { rate } = body;
-  if (!rate?.destination || !Array.isArray(rate.items)) {
-    logger.warn("Carrier service: malformed rate body", { shopifyDomain });
-    return json({ rates: [] });
-  }
-
-  const shop = await prisma.shop.findUnique({
-    where: { shopifyDomain },
-    include: { locations: true, zones: true },
-  });
-  if (!shop) {
-    logger.warn("Carrier service: unknown shop", { shopifyDomain });
-    return json({ rates: [] });
-  }
-
-  const deliveryMethod = readLineItemProperty(rate.items, "_delivery_method");
-  const requestedLocationId = readLineItemProperty(rate.items, "_location_id");
-  const requestedSlotId = readLineItemProperty(rate.items, "_slot_id");
-
-  // Pickup branch: customer picked pickup at a specific location in the cart.
-  // Return a single $0 rate for that location only — no delivery options.
-  if (deliveryMethod === "pickup") {
-    const pickupLocation = shop.locations.find(
-      (l) =>
-        (requestedLocationId ? l.id === requestedLocationId : l.supportsPickup) &&
-        l.isActive &&
-        l.supportsPickup,
-    );
-
-    if (!pickupLocation) {
-      logger.info("Carrier service: pickup requested but no eligible location", {
-        shopifyDomain,
-        requestedLocationId,
-      });
+    if (!shopifyDomain) {
+      logger.warn("Carrier service request missing X-Shopify-Shop-Domain header");
       return json({ rates: [] });
     }
 
-    const rates: RateResponse[] = [
-      {
-        service_name: `Pickup at ${pickupLocation.name}`,
-        service_code: `ORDAK_PICKUP_${pickupLocation.id}`,
-        total_price: "0",
-        description: `Pick up your order from ${pickupLocation.name}`,
+    let body: RateRequest;
+    try {
+      body = (await request.json()) as RateRequest;
+    } catch (err) {
+      logger.error("Carrier service: invalid JSON body", err, { shopifyDomain });
+      return json({ rates: [] });
+    }
+
+    const { rate } = body;
+    if (!rate?.destination || !Array.isArray(rate.items)) {
+      logger.warn("Carrier service: malformed rate body", { shopifyDomain });
+      return json({ rates: [] });
+    }
+
+    const shop = await prisma.shop.findUnique({
+      where: { shopifyDomain },
+      include: { locations: true, zones: true },
+    });
+    if (!shop) {
+      logger.warn("Carrier service: unknown shop", { shopifyDomain });
+      return json({ rates: [] });
+    }
+
+    const deliveryMethod = readLineItemProperty(rate.items, "_delivery_method");
+    const requestedLocationId = readLineItemProperty(rate.items, "_location_id");
+    const requestedSlotId = readLineItemProperty(rate.items, "_slot_id");
+
+    // Pickup branch: customer picked pickup at a specific location in the cart.
+    // Return a single $0 rate for that location only — no delivery options.
+    if (deliveryMethod === "pickup") {
+      const pickupLocation = shop.locations.find(
+        (l) =>
+          (requestedLocationId ? l.id === requestedLocationId : l.supportsPickup) &&
+          l.isActive &&
+          l.supportsPickup,
+      );
+
+      if (!pickupLocation) {
+        logger.info("Carrier service: pickup requested but no eligible location", {
+          shopifyDomain,
+          requestedLocationId,
+        });
+        return json({ rates: [] });
+      }
+
+      const rates: RateResponse[] = [
+        {
+          service_name: `Pickup at ${pickupLocation.name}`,
+          service_code: `ORDAK_PICKUP_${pickupLocation.id}`,
+          total_price: "0",
+          description: `Pick up your order from ${pickupLocation.name}`,
+          currency: rate.currency,
+        },
+      ];
+      return json({ rates });
+    }
+
+    // Delivery branch (default when delivery_method is "delivery" or absent):
+    // match the destination postcode against active zones and return a rate
+    // per matching zone's location.
+    const destinationPostcode = rate.destination.postal_code;
+    const matchingZones = shop.zones.filter(
+      (z) => z.isActive && postcodeMatchesZone(destinationPostcode ?? "", z),
+    );
+
+    if (matchingZones.length === 0) {
+      return json({ rates: [] });
+    }
+
+    const ratesByLocation = new Map<string, RateResponse>();
+    for (const zone of matchingZones) {
+      const location = shop.locations.find(
+        (l) => l.id === zone.locationId && l.isActive && l.supportsDelivery,
+      );
+      if (!location) continue;
+      if (ratesByLocation.has(location.id)) continue;
+
+      ratesByLocation.set(location.id, {
+        service_name: `Delivery from ${location.name}`,
+        service_code: `ORDAK_DELIVERY_${location.id}`,
+        total_price: String(DEFAULT_DELIVERY_PRICE_CENTS),
+        description: requestedSlotId
+          ? `Scheduled delivery (slot ${requestedSlotId})`
+          : "Scheduled delivery",
         currency: rate.currency,
-      },
-    ];
-    return json({ rates });
-  }
+      });
+    }
 
-  // Delivery branch (default when delivery_method is "delivery" or absent):
-  // match the destination postcode against active zones and return a rate
-  // per matching zone's location.
-  const destinationPostcode = rate.destination.postal_code;
-  const matchingZones = shop.zones.filter(
-    (z) => z.isActive && postcodeMatchesZone(destinationPostcode ?? "", z),
-  );
-
-  if (matchingZones.length === 0) {
+    return json({ rates: Array.from(ratesByLocation.values()) });
+  } catch (err) {
+    logger.error("Carrier service: uncaught throw — returning empty rates", err, {
+      shopifyDomain,
+    });
     return json({ rates: [] });
   }
-
-  const ratesByLocation = new Map<string, RateResponse>();
-  for (const zone of matchingZones) {
-    const location = shop.locations.find(
-      (l) => l.id === zone.locationId && l.isActive && l.supportsDelivery,
-    );
-    if (!location) continue;
-    if (ratesByLocation.has(location.id)) continue;
-
-    ratesByLocation.set(location.id, {
-      service_name: `Delivery from ${location.name}`,
-      service_code: `ORDAK_DELIVERY_${location.id}`,
-      total_price: String(DEFAULT_DELIVERY_PRICE_CENTS),
-      description: requestedSlotId
-        ? `Scheduled delivery (slot ${requestedSlotId})`
-        : "Scheduled delivery",
-      currency: rate.currency,
-    });
-  }
-
-  return json({ rates: Array.from(ratesByLocation.values()) });
 }
