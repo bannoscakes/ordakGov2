@@ -10,8 +10,6 @@ import prisma from "../db.server";
 import {
   addOrderMetafields,
   addOrderTags,
-  addOrderNote,
-  generateOrderNote,
   generateOrderTags,
   type SchedulingMetafields,
 } from "../services/metafield.service";
@@ -270,11 +268,12 @@ export async function action({ request }: ActionFunctionArgs) {
       wasRecommended: orderLink.wasRecommended,
     };
 
-    // Generate tags and note
+    // Generate tags only — we do NOT touch the order note. The note field
+    // belongs to the customer (cart-stage notes) and the merchant (their
+    // own ops notes); writing scheduling info there would overwrite both.
+    // All scheduling data lives in the ordak_scheduling metafields panel.
     const tags = generateOrderTags(metafields);
-    const note = generateOrderNote(metafields);
 
-    // Add metafields to order
     const metafieldsSuccess = await addOrderMetafields(
       admin.graphql,
       gid,
@@ -285,21 +284,12 @@ export async function action({ request }: ActionFunctionArgs) {
       logger.warn("Failed to add metafields to order", { orderId, shop });
     }
 
-    // Add tags to order
     const tagsSuccess = await addOrderTags(admin.graphql, gid, tags);
 
     if (!tagsSuccess) {
       logger.warn("Failed to add tags to order", { orderId, shop });
     }
 
-    // Add note to order
-    const noteSuccess = await addOrderNote(admin.graphql, gid, note);
-
-    if (!noteSuccess) {
-      logger.warn("Failed to add note to order", { orderId, shop });
-    }
-
-    // Log the completion
     await prisma.eventLog.create({
       data: {
         orderLinkId: orderLink.id,
@@ -308,7 +298,6 @@ export async function action({ request }: ActionFunctionArgs) {
           orderId,
           metafieldsAdded: metafieldsSuccess,
           tagsAdded: tagsSuccess,
-          noteAdded: noteSuccess,
           tags,
         }),
       },

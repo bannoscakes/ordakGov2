@@ -189,18 +189,19 @@ export function buildCartPayload(args: {
   wasRecommended?: boolean;
   recommendationScore?: number;
 }): CartPayload {
+  // Cart attributes propagate to the order's note_attributes and Shopify
+  // surfaces them under the order's "Additional details" panel — visible
+  // to the merchant. Keep this set merchant-friendly: only the four
+  // pieces of info the merchant actually needs to see at a glance.
+  // Internal IDs (slot_id, location_id) and analytics signals
+  // (was_recommended, recommendation_score) live in the
+  // ordak_scheduling metafields panel, not here.
   const attrs: CartAttributes = {
     delivery_method: args.fulfillment,
   };
-  if (args.slotId) attrs.slot_id = args.slotId;
   if (args.slotDate) attrs.slot_date = args.slotDate;
   if (args.slotTimeStart) attrs.slot_time_start = args.slotTimeStart;
   if (args.slotTimeEnd) attrs.slot_time_end = args.slotTimeEnd;
-  if (args.locationId) attrs.location_id = args.locationId;
-  if (args.wasRecommended !== undefined) attrs.was_recommended = String(args.wasRecommended);
-  if (args.recommendationScore !== undefined) {
-    attrs.recommendation_score = String(args.recommendationScore);
-  }
 
   // Line item properties show in the Shopify admin order under "Additional
   // details" (one row per line × per property). Stamping all 8 cart attrs
