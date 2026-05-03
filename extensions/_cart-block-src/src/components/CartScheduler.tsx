@@ -69,6 +69,28 @@ export function CartScheduler({ config, rootEl }: Props) {
     });
   }, [state]);
 
+  // Pickup mode hides the time-slot grid (per merchant — pickup is just a
+  // date, the time window is communicated by the merchant-configured banner
+  // text). The backend still needs a slot_id stamped on the cart, so when
+  // slots load OR the date changes for pickup, auto-pick the first slot
+  // that has capacity for the chosen date.
+  useEffect(() => {
+    return effect(() => {
+      if (state.fulfillment.value !== "pickup") return;
+      const date = state.selectedDate.value;
+      if (!date) return;
+      const slots = state.slots.value;
+      if (!slots.length) return;
+      const current = state.selectedSlot.value;
+      if (current && current.date === date && current.capacityRemaining > 0) return;
+      const candidate =
+        slots.find((s) => s.date === date && s.capacityRemaining > 0) ?? null;
+      if (candidate && candidate.slotId !== current?.slotId) {
+        state.selectedSlot.value = candidate;
+      }
+    });
+  }, [state]);
+
   // Re-apply cart attributes if the theme drops them after a re-render.
   useEffect(() => listenForCartUpdates(() => void cartWriter.ensure()), []);
 
@@ -279,11 +301,19 @@ export function CartScheduler({ config, rootEl }: Props) {
           <DatePicker
             value={selectedDate}
             onChange={(iso) => (state.selectedDate.value = iso)}
-            label={state.fulfillment.value === "pickup" ? "Pickup date" : "Delivery date"}
-            hint="Monday – Saturday only"
+            label={isPickup ? "Pickup date" : "Delivery date"}
+            hint={config.daysAvailableHint}
           />
           {state.loading.value.slots ? (
             <p class="ordak-loading" role="status">Loading…</p>
+          ) : isPickup ? (
+            slotsForDate.length === 0 ? (
+              <p class="ordak-empty">Pickup not available on this date. Try another.</p>
+            ) : (
+              <p class="ordak-pickup-banner" role="status">
+                {config.pickupInstructions}
+              </p>
+            )
           ) : slotsForDate.length === 0 ? (
             <p class="ordak-empty">No slots available for this date. Try another.</p>
           ) : (
@@ -293,7 +323,9 @@ export function CartScheduler({ config, rootEl }: Props) {
               onSelect={handleSelectSlot}
             />
           )}
-          <AlternativeSlots alternatives={alternatives} onPick={handleSelectSlot} />
+          {!isPickup ? (
+            <AlternativeSlots alternatives={alternatives} onPick={handleSelectSlot} />
+          ) : null}
         </>
       ) : null}
 

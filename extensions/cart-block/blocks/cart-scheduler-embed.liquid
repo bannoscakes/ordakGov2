@@ -25,6 +25,8 @@
         "defaultFulfillment": {{ block.settings.default_fulfillment | default: 'delivery' | json }},
         "showPostcodeField": {{ block.settings.show_postcode_field | default: true | json }},
         "autoSelectRecommended": {{ block.settings.auto_select_recommended | default: true | json }},
+        "pickupInstructions": {{ block.settings.pickup_instructions | default: 'Pick up any time during store hours.' | json }},
+        "daysAvailableHint": {{ block.settings.days_available_hint | default: 'Monday – Saturday only' | json }},
         "proxyBase": "/apps/ordak-go"
       }
     </script>
@@ -85,6 +87,20 @@
       "id": "auto_select_recommended",
       "label": "Auto-select recommended slot",
       "default": true
+    },
+    {
+      "type": "text",
+      "id": "pickup_instructions",
+      "label": "Pickup banner text",
+      "info": "Shown to customers who choose Pickup, in place of delivery time slots. Example: \"Pick up any time between 9 - 4\".",
+      "default": "Pick up any time during store hours."
+    },
+    {
+      "type": "text",
+      "id": "days_available_hint",
+      "label": "Days available hint",
+      "info": "Small hint shown under the date picker. Example: \"Monday – Saturday only\".",
+      "default": "Monday – Saturday only"
     }
   ]
 }

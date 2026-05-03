@@ -12,6 +12,11 @@ export interface BlockConfig {
   defaultFulfillment: Fulfillment;
   showPostcodeField: boolean;
   autoSelectRecommended: boolean;
+  // Pickup-mode banner shown in place of the time-slot grid. Configurable
+  // by the merchant in the theme editor; we never gate the storefront copy
+  // on developer-set defaults. See memory/no_hardcoded_strings.md.
+  pickupInstructions: string;
+  daysAvailableHint: string;
   proxyBase: string;
 }
 

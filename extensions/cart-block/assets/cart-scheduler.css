@@ -131,6 +131,16 @@
   color: var(--ordak-muted);
 }
 
+.ordak-pickup-banner {
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--ordak-accent-soft);
+  border: 1px solid var(--ordak-accent);
+  border-radius: 6px;
+  color: var(--ordak-text);
+  font-weight: 500;
+}
+
 .ordak-slots,
 .ordak-locations {
   list-style: none;

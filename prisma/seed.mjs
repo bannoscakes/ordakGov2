@@ -42,13 +42,21 @@ const DELIVERY_POSTCODES = [
   "2037", "2038", "2039", "2040", "2041",
 ];
 
-// 4 windows per day, 2 hours each.
-const TIME_WINDOWS = [
+// Delivery: 4 windows per day, 2 hours each. Merchant can override via the
+// admin Rules UI (Phase D will expose the schedule editor).
+const DELIVERY_WINDOWS = [
   { start: "09:00", end: "11:00" },
   { start: "11:00", end: "13:00" },
   { start: "13:00", end: "15:00" },
   { start: "15:00", end: "17:00" },
 ];
+
+// Pickup: ONE slot per date covering the whole pickup window. Per the
+// product decision (no time slots for pickup), the customer just picks a
+// date — the merchant communicates the time window via the cart-block
+// "pickup banner text" theme editor setting. Capacity is the per-day cap.
+const PICKUP_WINDOW = { start: "09:00", end: "17:00" };
+const PICKUP_DAILY_CAPACITY = 20;
 
 const SLOT_CAPACITY = 5;
 const DAYS_AHEAD = 14;
@@ -145,20 +153,19 @@ async function main() {
   let created = 0;
   let skipped = 0;
   for (const day of nextDays(today, DAYS_AHEAD)) {
-    for (const win of TIME_WINDOWS) {
-      for (const ft of ["delivery", "pickup"]) {
-        const existing = await prisma.slot.findFirst({
-          where: {
-            locationId: location.id,
-            date: day,
-            timeStart: win.start,
-            fulfillmentType: ft,
-          },
-        });
-        if (existing) {
-          skipped++;
-          continue;
-        }
+    // Delivery: per-window slots so the customer can pick a 2-hour band.
+    for (const win of DELIVERY_WINDOWS) {
+      const existing = await prisma.slot.findFirst({
+        where: {
+          locationId: location.id,
+          date: day,
+          timeStart: win.start,
+          fulfillmentType: "delivery",
+        },
+      });
+      if (existing) {
+        skipped++;
+      } else {
         await prisma.slot.create({
           data: {
             locationId: location.id,
@@ -167,12 +174,39 @@ async function main() {
             timeEnd: win.end,
             capacity: SLOT_CAPACITY,
             booked: 0,
-            fulfillmentType: ft,
+            fulfillmentType: "delivery",
             recommendationScore: 0.5,
           },
         });
         created++;
       }
+    }
+    // Pickup: a single full-day slot. Customer just picks a date; merchant
+    // describes the actual hours via the cart-block "pickup banner text"
+    // theme editor setting. Capacity is total pickups for the day.
+    const existingPickup = await prisma.slot.findFirst({
+      where: {
+        locationId: location.id,
+        date: day,
+        fulfillmentType: "pickup",
+      },
+    });
+    if (existingPickup) {
+      skipped++;
+    } else {
+      await prisma.slot.create({
+        data: {
+          locationId: location.id,
+          date: day,
+          timeStart: PICKUP_WINDOW.start,
+          timeEnd: PICKUP_WINDOW.end,
+          capacity: PICKUP_DAILY_CAPACITY,
+          booked: 0,
+          fulfillmentType: "pickup",
+          recommendationScore: 0.5,
+        },
+      });
+      created++;
     }
   }
   console.log(`  slots: ${created} created, ${skipped} already existed`);
