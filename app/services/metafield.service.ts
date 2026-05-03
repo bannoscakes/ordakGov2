@@ -267,16 +267,20 @@ export function generateOrderNote(metafields: SchedulingMetafields): string {
   const type =
     metafields.fulfillmentType === 'delivery' ? 'Delivery' : 'Pickup';
 
-  return `
-📅 ${type} Scheduled
-
-Date: ${date}
-Time: ${metafields.slotTimeStart} - ${metafields.slotTimeEnd}
-Location: ${metafields.locationName}
-${metafields.wasRecommended ? '⭐ Recommended slot selected' : ''}
-
-Slot ID: ${metafields.slotId}
-  `.trim();
+  // Merchant-facing summary that lives in the order's Notes field. Keep
+  // it human-readable — internal IDs (slot id, location id) live in the
+  // ordak_scheduling metafields panel for diagnostics, not here.
+  const lines = [
+    `📅 ${type} Scheduled`,
+    "",
+    `Date: ${date}`,
+    `Time: ${metafields.slotTimeStart} - ${metafields.slotTimeEnd}`,
+    `Location: ${metafields.locationName}`,
+  ];
+  if (metafields.wasRecommended) {
+    lines.push("⭐ Recommended slot selected");
+  }
+  return lines.join("\n");
 }
 
 /**

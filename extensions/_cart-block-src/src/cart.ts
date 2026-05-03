@@ -202,9 +202,22 @@ export function buildCartPayload(args: {
     attrs.recommendation_score = String(args.recommendationScore);
   }
 
-  const lineProps: CartAttributes = {};
-  for (const [k, v] of Object.entries(attrs)) {
-    lineProps[`_${k}`] = v;
+  // Line item properties show in the Shopify admin order under "Additional
+  // details" (one row per line × per property). Stamping all 8 cart attrs
+  // makes that section noisy for the merchant. We only mirror the
+  // essentials onto lines:
+  //   - _delivery_method: read by the C.5 delivery-customization Function
+  //     to filter checkout rates (and as fallback for the cart-level attr)
+  //   - _slot_id: read by webhooks/orders/create to look up the Slot row
+  //   - _was_recommended: provenance flag the webhook records on OrderLink
+  // The rest (date, time, location, score) are derivable from the slot row
+  // once we have _slot_id, so they don't need to be on every line item.
+  const lineProps: CartAttributes = {
+    _delivery_method: args.fulfillment,
+  };
+  if (args.slotId) lineProps._slot_id = args.slotId;
+  if (args.wasRecommended !== undefined) {
+    lineProps._was_recommended = String(args.wasRecommended);
   }
 
   return { attrs, lineProps };
