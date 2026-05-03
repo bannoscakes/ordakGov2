@@ -42,9 +42,10 @@ The Shopify CLI's `app dev` auto-orchestration **does not work** for this projec
 The current plan and phase ordering live in [`docs/PLAN.md`](docs/PLAN.md). High-level:
 - ✅ **Phase A** — cart-page theme app extension (PR #39 merged 2026-05-02)
 - ✅ **Phase B** — Carrier Service register + rate callback (PR #40 merged 2026-05-02)
-- 🟡 **Phase C** — order pipeline verification (in PR #41; folds in cart-block line-item-property writes, drawer placement fixes, native date picker, additive seed script)
-- ✅ **Phase C.5** — Delivery Customization Function (PR #42, tag `v0.5.0-pickup-checkout-locked`, app version `ordak-go-18`). Cart-stage choice locks checkout shipping options, no override path. Verified live on `ordak-go-dev`. See `memory/checkpoint_pickup_checkout_locked.md` for the recoverable baseline.
-- ⏳ **Phase D** — restore stubbed admin routes
+- ✅ **Phase C** — order pipeline verification (PR #41 merged 2026-05-03; cart-block line-item-property writes, drawer placement fixes, native date picker, pickup-as-banner, additive seed script). Verified end-to-end with orders #1007–#1013 on `ordak-go-dev`.
+- ✅ **Phase C.5** — Delivery Customization Function (PR #42 merged 2026-05-03, tag `v0.5.0-pickup-checkout-locked`, app version `ordak-go-18`). Cart-stage choice locks checkout shipping options, no override path. Verified live on `ordak-go-dev`. PR #42 review hardening (commit `c3160b7`) included: `MutationResult` discriminated union for metafield service, cart writer surfaces failures + recovers from 422, webhook returns 503 on Shopify failure (was 200 split-brain), word-boundary on `\bcollect\b`. See `memory/checkpoint_pickup_checkout_locked.md` for the recoverable baseline.
+- 🚀 **Promote Dev → main** — Dev is currently 39 commits ahead of main with all four phases verified live. The promotion PR has not been opened yet; see `gh pr create --base main --head Dev`. **This is the immediate next action before installing on Bannos.**
+- ⏳ **Phase D** — restore stubbed admin routes (`app.setup.tsx`, `app.orders.$orderId.reschedule.tsx`)
 - ⏳ **Phase E** — App Store readiness
 
 ## Key directories
@@ -86,9 +87,19 @@ Don't accept these as "done" — they need real implementations as part of Phase
 
 ## Carrier Service contract — read before touching
 
-Shopify's Carrier Service rate-request body does **not** include cart `note_attributes`. Only `origin / destination / items / currency`. The cart-block (Phase A scaffold; full property writes are Phase C) is expected to mirror the cart attributes onto every line as `_`-prefixed properties (`_delivery_method`, `_slot_id`, etc.), which DO appear at `rate.items[*].properties` in the carrier service callback. Document and enforce that contract — it's the seam between Phase A's UI selection and Phase B's checkout-lock.
+Shopify's Carrier Service rate-request body does **not** include cart `note_attributes`. Only `origin / destination / items / currency`. The cart-block mirrors the cart attributes onto every line as `_`-prefixed properties (`_delivery_method`, `_slot_id`, `_was_recommended`), which DO appear at `rate.items[*].properties` in the carrier service callback AND at `order.line_items[*].properties` for the `webhooks.orders.create` handler. This contract is enforced as of Phase C (PR #41) — don't strip any of those three writes without checking Phase B + Phase C readers.
 
-The carrier service is registered automatically in `afterAuth` and unregistered on `APP_UNINSTALLED`. The Shopify-assigned ID lives at `Shop.carrierServiceId`. Existing installs created BEFORE the afterAuth bootstrap landed need uninstall+reinstall to register — known limitation under token-exchange (which doesn't re-fire afterAuth).
+The carrier service is registered automatically in `afterAuth` and unregistered on `APP_UNINSTALLED`. The Shopify-assigned ID lives at `Shop.carrierServiceId`. Existing installs created BEFORE the afterAuth bootstrap landed need uninstall+reinstall to register — known limitation under token-exchange (which doesn't re-fire afterAuth). The `/app/install-carrier-service` convenience route is the manual workaround until Phase D / E delivers a reconciliation cron.
+
+## Checkout-lock invariants (Phase C.5) — DO NOT regress
+
+The "no checkout confusion" headline goal is delivered by combining:
+1. The C.5 Function (`extensions/delivery-rate-filter/`) hiding rates that don't match the cart-stage choice.
+2. The C.5 Function's input query reading EITHER `_delivery_method` line property OR cart-level `delivery_method` attribute (the cart-level fallback handles items added via theme quick-add or Shopify-API paths that bypass the cart-block).
+3. Shopify-native Local Pickup OFF on every Location. **Never re-enable this.** It re-introduces the Ship/Pickup tab toggle at checkout, which lets the customer override the cart-stage choice and defeats the entire app. The user has explicitly rejected this path twice — see `memory/checkpoint_pickup_checkout_locked.md` and `memory/no_shopify_plus.md`.
+4. Manual flat rates in the AU shipping zone with names that match the C.5 regex `\b(?:pick[-_ ]?up|in[-_ ]?store|click[-_ ]?(?:and|&)[-_ ]?collect|collect)\b` for pickup, anything else for delivery. Don't rename the rates away from those keywords.
+
+If checkout filtering ever breaks, restore from `git tag v0.5.0-pickup-checkout-locked` (commit `ec9ed6b`, app version `ordak-go-18`) and follow the recovery checklist in `memory/checkpoint_pickup_checkout_locked.md`.
 
 ## What NOT to do (learned the hard way)
 
@@ -108,5 +119,15 @@ The carrier service is registered automatically in `afterAuth` and unregistered 
 - `docs/app/PRD.md`, `FEATURES.md`, `CHECKOUT_SPEC.md`, `RECOMMENDATIONS.md` — original product spec
 - `SHOPIFY_APP_STORE_CHECKLIST.md` — App Store submission requirements (Phase E)
 - `IMPROVEMENTS.md` — historical record of pre-2026-05 cleanup (don't re-do these)
+
+## Self-install convenience routes (Phase D will replace)
+
+When a shop misses an `afterAuth` bootstrap step (because token-exchange refresh doesn't re-fire `afterAuth`, or because a webhook topic was added after install), these routes let an admin self-heal by visiting them once:
+
+- `/app/install-carrier-service` — re-registers the Carrier Service and updates `Shop.carrierServiceId`. Reports `active=false` if Shopify returns the registration as inactive.
+- `/app/install-delivery-customization` — registers the C.5 Function as an active DeliveryCustomization (or re-enables an existing-but-disabled one).
+- `/app/install-webhooks` — re-runs `shopify.registerWebhooks(session)` and surfaces per-topic `success`.
+- `/app/setup-au-shipping` — programs the AU shipping zone with both flat rates.
+- `/app/backfill-orders` — re-runs the orders/create handler against the most recent 10 orders that don't have an OrderLink. Useful after webhook subscriptions land late.
 
 The user's per-project memory (auto-loaded) covers business context (Bannos/Flour Lane/ordak), the Partners app config, the integration target architecture, the named-tunnel infrastructure (UUID, credentials paths), and the working-style preferences (autonomy, no permission-asking inside an established workflow). Read those memory files for the "why" behind decisions.
