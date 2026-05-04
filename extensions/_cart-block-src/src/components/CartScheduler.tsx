@@ -25,6 +25,39 @@ interface Props {
   rootEl: Element;
 }
 
+// CSS selector union for theme checkout buttons. Covers the common shapes
+// (Dawn `[name="checkout"]`, button-link `a[href="/checkout"]`, drawer
+// `.cart__checkout-button`, common `[data-checkout]` data-attribute). Some
+// themes wrap the button in a form that submits to `/checkout`, in which
+// case clicks on the inner button still bubble up to a matching ancestor.
+const CHECKOUT_BUTTON_SELECTOR =
+  '[name="checkout"], button[name="checkout"], a[href="/checkout"], a[href*="/checkout?"], [data-checkout], .cart__checkout, .cart__checkout-button, .cart-checkout-button, .shopify-payment-button__button, button[type="submit"][form="cart"]';
+
+// Returns null when the cart has all required scheduling selections, or a
+// human-readable reason when something is missing. Mirrors the rules in the
+// Cart Validation Function so the customer sees the same message in either
+// layer.
+function describeMissingSelections(state: import("../state").AppState): string | null {
+  const fulfillment = state.fulfillment.value;
+  if (!fulfillment) return "Please choose Delivery or Pickup before checkout.";
+  if (fulfillment === "delivery") {
+    if (!state.postcodeChecked.value) {
+      return "Please enter a delivery postcode before checkout.";
+    }
+    if (state.servicesAvailable.value.delivery !== true) {
+      return "Delivery isn't available for the entered postcode.";
+    }
+  } else {
+    if (!state.selectedLocation.value) {
+      return "Please choose a pickup location before checkout.";
+    }
+  }
+  if (!state.selectedSlot.value) {
+    return "Please choose a delivery date and time slot before checkout.";
+  }
+  return null;
+}
+
 function composeEligibilityMessage(
   apiMessage: string | null,
   matchedZone: { basePrice: string } | null,
@@ -111,6 +144,28 @@ export function CartScheduler({ config, rootEl }: Props) {
 
   // Re-apply cart attributes if the theme drops them after a re-render.
   useEffect(() => listenForCartUpdates(() => void cartWriter.ensure()), []);
+
+  // Intercept clicks on theme checkout buttons. The Cart Validation Function
+  // is the authoritative backstop (it blocks express buttons too) but
+  // intercepting in the cart gives the customer immediate inline feedback
+  // and avoids the "click checkout, get redirected, see error" round-trip
+  // for the regular cart → checkout path.
+  useEffect(() => {
+    function handler(event: Event) {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const checkoutEl = target.closest(CHECKOUT_BUTTON_SELECTOR);
+      if (!checkoutEl) return;
+      const missing = describeMissingSelections(state);
+      if (!missing) return;
+      event.preventDefault();
+      event.stopPropagation();
+      state.error.value = missing;
+      rootEl.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    document.addEventListener("click", handler, true);
+    return () => document.removeEventListener("click", handler, true);
+  }, [state, rootEl]);
 
   // Whenever the selected slot changes, write attributes.
   useEffect(() => {

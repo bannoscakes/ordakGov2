@@ -7,7 +7,7 @@ application_url = "https://dev.ordak.vip/"
 embedded = true
 
 [access_scopes]
-scopes = "write_products,write_orders,read_locations,write_merchant_managed_fulfillment_orders,write_delivery_customizations,write_shipping"
+scopes = "write_products,write_orders,read_locations,write_merchant_managed_fulfillment_orders,write_delivery_customizations,write_shipping,write_validations"
 
 [auth]
 redirect_urls = [ "https://dev.ordak.vip/api/auth" ]

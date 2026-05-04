@@ -1,0 +1,34 @@
+{
+  "payload": {
+    "export": "cart-validations-generate-run",
+    "target": "cart.validations.generate.run",
+    "input": {
+      "cart": {
+        "cartDeliveryMethod": { "value": "delivery" },
+        "lines": [
+          {
+            "id": "gid://shopify/CartLine/1",
+            "lineDeliveryMethod": { "value": "delivery" },
+            "slotId": { "value": "slot_abc" },
+            "locationId": null,
+            "zoneId": null
+          }
+        ]
+      }
+    },
+    "output": {
+      "operations": [
+        {
+          "validationAdd": {
+            "errors": [
+              {
+                "message": "Please enter a delivery postcode in your cart and choose a delivery slot before checkout.",
+                "target": "$.cart"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

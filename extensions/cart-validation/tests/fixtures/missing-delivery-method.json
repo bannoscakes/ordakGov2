@@ -1,0 +1,34 @@
+{
+  "payload": {
+    "export": "cart-validations-generate-run",
+    "target": "cart.validations.generate.run",
+    "input": {
+      "cart": {
+        "cartDeliveryMethod": null,
+        "lines": [
+          {
+            "id": "gid://shopify/CartLine/1",
+            "lineDeliveryMethod": null,
+            "slotId": null,
+            "locationId": null,
+            "zoneId": null
+          }
+        ]
+      }
+    },
+    "output": {
+      "operations": [
+        {
+          "validationAdd": {
+            "errors": [
+              {
+                "message": "Please choose Delivery or Pickup before checkout. Add this item to your cart and complete the scheduling step.",
+                "target": "$.cart"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
