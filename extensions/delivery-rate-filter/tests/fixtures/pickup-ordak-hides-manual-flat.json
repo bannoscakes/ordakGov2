@@ -1,0 +1,56 @@
+{
+  "payload": {
+    "export": "cart-delivery-options-transform-run",
+    "target": "cart.delivery-options.transform.run",
+    "input": {
+      "cart": {
+        "attribute": null,
+        "lines": [
+          {
+            "attribute": {
+              "value": "pickup"
+            }
+          }
+        ],
+        "deliveryGroups": [
+          {
+            "deliveryOptions": [
+              {
+                "handle": "shopify-Pickup%20at%20Annandale-0.00",
+                "deliveryMethodType": "SHIPPING",
+                "title": "Pickup at Annandale",
+                "code": null
+              },
+              {
+                "handle": "shopify-ORDAK_PICKUP_loc456-5.00",
+                "deliveryMethodType": "SHIPPING",
+                "title": "Pickup at Annandale",
+                "code": "ORDAK_PICKUP_loc456"
+              },
+              {
+                "handle": "shopify-Standard%20delivery-15.00",
+                "deliveryMethodType": "SHIPPING",
+                "title": "Standard delivery",
+                "code": null
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "output": {
+      "operations": [
+        {
+          "deliveryOptionHide": {
+            "deliveryOptionHandle": "shopify-Pickup%20at%20Annandale-0.00"
+          }
+        },
+        {
+          "deliveryOptionHide": {
+            "deliveryOptionHandle": "shopify-Standard%20delivery-15.00"
+          }
+        }
+      ]
+    }
+  }
+}
