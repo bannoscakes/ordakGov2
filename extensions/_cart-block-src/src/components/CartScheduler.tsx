@@ -25,6 +25,18 @@ interface Props {
   rootEl: Element;
 }
 
+function composeEligibilityMessage(
+  apiMessage: string | null,
+  matchedZone: { basePrice: string } | null,
+  fulfillment: "delivery" | "pickup",
+): string | null {
+  if (fulfillment !== "delivery" || !matchedZone) return apiMessage;
+  const fee = Number(matchedZone.basePrice);
+  if (!Number.isFinite(fee)) return apiMessage;
+  const feeLabel = fee > 0 ? `Delivery fee: $${fee.toFixed(2)}` : "Delivery fee: free";
+  return apiMessage ? `${apiMessage} · ${feeLabel}` : feeLabel;
+}
+
 export function CartScheduler({ config, rootEl }: Props) {
   const state = useMemo(() => createState(config.defaultFulfillment), [config.defaultFulfillment]);
   const api = useMemo(() => new OrdakApi(config), [config]);
@@ -138,7 +150,14 @@ export function CartScheduler({ config, rootEl }: Props) {
       const res = await api.checkEligibility(postcode, state.fulfillment.value);
       state.eligibilityLocations.value = res.locations;
       state.servicesAvailable.value = res.services;
-      state.eligibilityMessage.value = res.message ?? null;
+      // Customer-facing copy lives in the cart-block, not in the API. When
+      // a delivery zone is matched, append the merchant's basePrice so the
+      // customer sees what they'll be charged before picking a slot.
+      state.eligibilityMessage.value = composeEligibilityMessage(
+        res.message ?? null,
+        res.matchedZone ?? null,
+        state.fulfillment.value,
+      );
       state.postcodeChecked.value = true;
 
       if (res.eligible) {

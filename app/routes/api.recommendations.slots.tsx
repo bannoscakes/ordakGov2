@@ -8,6 +8,7 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { logger } from "../utils/logger.server";
 import { scoreSlots } from "../services";
+import { postcodeMatchesZone } from "../utils/postcode-match.server";
 import type {
   SlotRecommendationInput,
   CustomerContext,
@@ -76,13 +77,10 @@ export async function action({ request }: ActionFunctionArgs) {
       ? new Date(body.dateRange.endDate)
       : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-    // For delivery: resolve the customer's postcode to a single Zone (highest
-    // priority match that respects excludePostcodes) and filter slots to that
-    // zone only. Without this, a customer in zone A would see slots from
-    // every other zone at the same location too.
-    //
-    // For pickup: zone is irrelevant (no postcode-bound area). Filter by
-    // location only — pickup slots intentionally have zoneId=null in the schema.
+    // For delivery, narrow slot results to the single zone matching the
+    // customer's postcode (highest priority, ties broken by id ascending so
+    // the result agrees with eligibility check and carrier service).
+    // Pickup ignores zoneId — pickup slots aren't postcode-bound.
     let zoneIdFilter: string | null = null;
     if (body.fulfillmentType === "delivery" && body.postcode) {
       const candidates = await prisma.zone.findMany({
@@ -91,64 +89,37 @@ export async function action({ request }: ActionFunctionArgs) {
           isActive: true,
           location: { isActive: true, supportsDelivery: true },
         },
-        orderBy: { priority: "desc" },
+        orderBy: [{ priority: "desc" }, { id: "asc" }],
         select: { id: true, type: true, postcodes: true, excludePostcodes: true },
       });
-      const target = body.postcode.trim().toUpperCase().replace(/\s+/g, "");
-      const matched = candidates.find((z) => {
-        if (z.excludePostcodes?.some((p) => p.trim().toUpperCase().replace(/\s+/g, "") === target)) {
-          return false;
-        }
-        if (z.type === "postcode_list") {
-          return z.postcodes.some((p) => p.trim().toUpperCase().replace(/\s+/g, "") === target);
-        }
-        if (z.type === "postcode_range" && z.postcodes.length >= 2) {
-          const start = z.postcodes[0].trim().toUpperCase().replace(/\s+/g, "");
-          const end = z.postcodes[1].trim().toUpperCase().replace(/\s+/g, "");
-          return target >= start && target <= end;
-        }
-        return false;
-      });
+      const matched = candidates.find((z) => postcodeMatchesZone(body.postcode!, z));
       if (matched) {
         zoneIdFilter = matched.id;
       } else {
-        // Postcode doesn't match any active delivery zone — return no slots.
+        logger.info("Slots API: no matching delivery zone", {
+          shopDomain: session?.shop,
+          postcode: body.postcode,
+          candidateCount: candidates.length,
+        });
         return json({ slots: [], message: "No service available for this postcode" });
       }
     }
 
-    // Fetch available slots from database
     const slots = await prisma.slot.findMany({
       where: {
-        date: {
-          gte: startDate,
-          lte: endDate,
-        },
+        date: { gte: startDate, lte: endDate },
         fulfillmentType: body.fulfillmentType,
         isActive: true,
-        booked: {
-          lt: prisma.slot.fields.capacity, // Available capacity
-        },
-        // Delivery: scope to the matched zone (set above). Pickup: zoneId is
-        // null on every slot, but we filter only when locationId is supplied.
-        ...(body.fulfillmentType === "delivery"
-          ? { zoneId: zoneIdFilter }
-          : {}),
+        booked: { lt: prisma.slot.fields.capacity },
+        ...(body.fulfillmentType === "delivery" ? { zoneId: zoneIdFilter } : {}),
         ...(body.locationId ? { locationId: body.locationId } : {}),
       },
       include: {
         location: {
-          select: {
-            id: true,
-            name: true,
-            latitude: true,
-            longitude: true,
-          },
+          select: { id: true, name: true, latitude: true, longitude: true },
         },
       },
-      orderBy: {
-        date: "asc",
-      },
+      orderBy: { date: "asc" },
     });
 
     if (slots.length === 0) {
@@ -258,9 +229,8 @@ export async function action({ request }: ActionFunctionArgs) {
       otherDeliveries
     );
 
-    // Slot.priceAdjustment isn't part of the recommendation engine's input
-    // type — look it up from the original DB rows by id so the cart-block can
-    // render "+$X" on tiles with a non-zero adjustment.
+    // priceAdjustment isn't on SlotRecommendationInput — re-attach from the
+    // source rows so consumers can format it on the tile.
     const priceAdjustmentById = new Map<string, string>();
     for (const s of slots) {
       priceAdjustmentById.set(s.id, s.priceAdjustment.toString());

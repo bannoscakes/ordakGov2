@@ -389,10 +389,10 @@ export function buildCartPayload(args: {
   };
   if (args.slotId) lineProps._slot_id = args.slotId;
   if (args.locationId) lineProps._location_id = args.locationId;
-  // _zone_id lets the Carrier Service callback look up the merchant's
-  // configured basePrice for the zone the customer matched in the cart,
-  // rather than re-running postcode matching server-side. Falls back to
-  // postcode matching if absent (older cart-block builds).
+  // Optional: when the cart-block has resolved a zoneId, the Carrier
+  // Service callback can skip its own postcode re-match (it still verifies
+  // the postcode falls in the supplied zone — line item properties are
+  // customer-writable).
   if (args.zoneId) lineProps._zone_id = args.zoneId;
   if (args.wasRecommended !== undefined) {
     lineProps._was_recommended = String(args.wasRecommended);

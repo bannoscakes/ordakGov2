@@ -34,9 +34,7 @@ export interface EligibilityResponse {
   eligible: boolean;
   locations: EligibilityLocation[];
   services: { delivery: boolean; pickup: boolean };
-  // Set for delivery requests when a zone matches — the matched zone's
-  // basePrice is already baked into `message`, but surfacing the fields
-  // separately lets the UI display the fee elsewhere if we want to later.
+  // Matched delivery zone with its basePrice. Null for pickup or no match.
   matchedZone?: { id: string; name: string; basePrice: string } | null;
   message?: string;
 }
@@ -51,8 +49,8 @@ export interface Slot {
   reason: string;
   capacityRemaining: number;
   capacity: number;
-  // Per-slot price premium added to the zone base price (e.g. "10.00" = +$10).
-  // Decimal serialized as a string by Prisma — render as a number when displaying.
+  // Per-slot premium added to the zone base price. Prisma serializes
+  // Decimal as a string (e.g. "10.00").
   priceAdjustment: string;
   locationId: string;
   fulfillmentType: Fulfillment;
