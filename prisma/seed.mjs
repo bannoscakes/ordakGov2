@@ -115,23 +115,25 @@ async function main() {
     console.log(`  reusing location: ${location.name} (${location.id})`);
   }
 
-  const existingZone = await prisma.zone.findFirst({
+  let zone = await prisma.zone.findFirst({
     where: { shopId: shop.id, locationId: location.id, name: "Inner West Sydney" },
   });
-  if (!existingZone) {
-    await prisma.zone.create({
+  if (!zone) {
+    zone = await prisma.zone.create({
       data: {
         shopId: shop.id,
         locationId: location.id,
         name: "Inner West Sydney",
         type: "postcode_list",
         postcodes: DELIVERY_POSTCODES,
+        excludePostcodes: [],
+        basePrice: 15.0, // AUD; matches the legacy "Standard delivery" Shopify flat rate
         priority: 1,
       },
     });
-    console.log(`  created zone: ${DELIVERY_POSTCODES.length} postcodes`);
+    console.log(`  created zone: ${DELIVERY_POSTCODES.length} postcodes, basePrice $${zone.basePrice}`);
   } else {
-    console.log(`  reusing zone: ${existingZone.name}`);
+    console.log(`  reusing zone: ${zone.name} (basePrice $${zone.basePrice})`);
   }
 
   for (const ruleSpec of [
@@ -154,10 +156,13 @@ async function main() {
   let skipped = 0;
   for (const day of nextDays(today, DAYS_AHEAD)) {
     // Delivery: per-window slots so the customer can pick a 2-hour band.
+    // Delivery slots are scoped to the zone (per the D1 model) so the merchant
+    // can configure different windows / pricing per zone in admin.
     for (const win of DELIVERY_WINDOWS) {
       const existing = await prisma.slot.findFirst({
         where: {
           locationId: location.id,
+          zoneId: zone.id,
           date: day,
           timeStart: win.start,
           fulfillmentType: "delivery",
@@ -169,11 +174,13 @@ async function main() {
         await prisma.slot.create({
           data: {
             locationId: location.id,
+            zoneId: zone.id,
             date: day,
             timeStart: win.start,
             timeEnd: win.end,
             capacity: SLOT_CAPACITY,
             booked: 0,
+            priceAdjustment: 0, // free; merchant can edit in admin to charge premiums
             fulfillmentType: "delivery",
             recommendationScore: 0.5,
           },
