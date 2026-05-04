@@ -123,6 +123,19 @@ export async function action({ request }: ActionFunctionArgs) {
     });
 
     if (slots.length === 0) {
+      // Distinct from "no zone matches" — here a zone DID match but no live
+      // Slot rows exist in the requested date range. Most likely cause:
+      // merchant configured the zone but hasn't run the slot generator
+      // (D3 Time slots & limits) for any day yet. Logging at info so the
+      // merchant can audit "service available but nothing bookable" cases.
+      logger.info("Slots API: zone matched but no available slots", {
+        shopDomain: session?.shop,
+        postcode: body.postcode,
+        zoneIdFilter,
+        fulfillmentType: body.fulfillmentType,
+        startDate: startDate.toISOString().slice(0, 10),
+        endDate: endDate.toISOString().slice(0, 10),
+      });
       return json({
         slots: [],
         message: "No available slots found in the specified date range",

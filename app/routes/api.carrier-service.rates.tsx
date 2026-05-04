@@ -92,6 +92,12 @@ function toCents(amount: { toString(): string } | number | null | undefined): nu
 
 export async function action({ request }: ActionFunctionArgs) {
   let shopifyDomain = request.headers.get("x-shopify-shop-domain") ?? undefined;
+  // Captured outside the try so the catch can pin a thrown
+  // InvalidPriceError to the specific entity that contained the bad value
+  // (instead of just "something in this request had a corrupt decimal").
+  let matchedZoneForLog: Pick<Zone, "id"> | null = null;
+  let selectedSlotForLog: Pick<Slot, "id"> | null = null;
+  let destinationPostcodeForLog: string | undefined;
   try {
     if (request.method !== "POST") {
       return json({ error: "Method not allowed" }, { status: 405 });
@@ -144,6 +150,8 @@ export async function action({ request }: ActionFunctionArgs) {
           shopifyDomain,
           requestedSlotId,
         });
+      } else {
+        selectedSlotForLog = selectedSlot;
       }
     }
 
@@ -206,6 +214,7 @@ export async function action({ request }: ActionFunctionArgs) {
     // a customer in zone B point at zone A and pay zone A's basePrice.
     let matchedZone: Zone | null = null;
     const destinationPostcode = rate.destination.postal_code ?? "";
+    destinationPostcodeForLog = destinationPostcode;
 
     if (requestedZoneId) {
       const candidate = await prisma.zone.findFirst({
@@ -267,6 +276,7 @@ export async function action({ request }: ActionFunctionArgs) {
       }
     }
 
+    matchedZoneForLog = matchedZone;
     const baseCents = toCents(matchedZone.basePrice);
     const adjustmentCents = toCents(selectedSlot?.priceAdjustment);
     const totalCents = baseCents + adjustmentCents;
@@ -289,6 +299,9 @@ export async function action({ request }: ActionFunctionArgs) {
     if (err instanceof InvalidPriceError) {
       logger.error("Carrier service: invalid price input — gating checkout", err, {
         shopifyDomain,
+        matchedZoneId: matchedZoneForLog?.id,
+        selectedSlotId: selectedSlotForLog?.id,
+        destinationPostcode: destinationPostcodeForLog,
       });
     } else {
       logger.error("Carrier service: uncaught throw — returning empty rates", err, {

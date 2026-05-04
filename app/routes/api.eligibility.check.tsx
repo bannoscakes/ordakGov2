@@ -158,14 +158,20 @@ export async function action({ request }: ActionFunctionArgs) {
       pickup: eligibleLocations.some((loc) => loc.supportsPickup),
     };
 
+    // Only set matchedZone for delivery requests where the location can
+    // actually fulfill a delivery — otherwise the cart-block would render
+    // "Delivery fee: $X" alongside "no service" copy, and the carrier
+    // service callback would correctly produce no rate at checkout.
     let matchedZone: EligibilityResponse["matchedZone"] = null;
-    if (fulfillmentType === "delivery" && matchingZones.length > 0) {
-      const top = matchingZones[0];
-      matchedZone = {
-        id: top.id,
-        name: top.name,
-        basePrice: top.basePrice.toString(),
-      };
+    if (fulfillmentType === "delivery") {
+      const top = matchingZones.find((z) => z.location.supportsDelivery);
+      if (top) {
+        matchedZone = {
+          id: top.id,
+          name: top.name,
+          basePrice: top.basePrice.toString(),
+        };
+      }
     }
 
     // Generic message kept short. The cart-block composes the

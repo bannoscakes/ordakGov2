@@ -32,7 +32,13 @@ function composeEligibilityMessage(
 ): string | null {
   if (fulfillment !== "delivery" || !matchedZone) return apiMessage;
   const fee = Number(matchedZone.basePrice);
-  if (!Number.isFinite(fee)) return apiMessage;
+  // Mirror the server-side toCents rule: NaN / non-finite / negative are
+  // data corruption. The carrier-service throws InvalidPriceError for
+  // these, so don't quietly render a misleading fee in the cart either.
+  if (!Number.isFinite(fee) || fee < 0) {
+    console.warn(`[ordak] invalid matchedZone.basePrice: ${matchedZone.basePrice}`);
+    return apiMessage;
+  }
   const feeLabel = fee > 0 ? `Delivery fee: $${fee.toFixed(2)}` : "Delivery fee: free";
   return apiMessage ? `${apiMessage} · ${feeLabel}` : feeLabel;
 }
