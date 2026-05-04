@@ -65,8 +65,18 @@ export async function loader({ request }: LoaderFunctionArgs) {
   }
 
   const url = new URL(request.url);
+  const stepParam = url.searchParams.get("step");
+
+  // Once the merchant has at least one location AND one zone, the wizard's
+  // job is done — the Setup Guide on /app picks up slot configuration,
+  // Function installs, and theme verification. Bypass the wizard unless
+  // the merchant explicitly asked for a step (e.g. ?step=1 to add another).
+  if (!stepParam && shop.locations.length > 0 && shop.zones.length > 0) {
+    return redirect("/app");
+  }
+
   const step = pickStep(
-    url.searchParams.get("step"),
+    stepParam,
     shop.locations.length > 0,
     shop.zones.length > 0,
   );
@@ -199,7 +209,7 @@ export async function action({ request }: ActionFunctionArgs) {
           return json<ActionResult>({ ok: false, error: "Invalid zone type" }, { status: 400 });
         }
 
-        await prisma.zone.create({
+        const created = await prisma.zone.create({
           data: {
             shopId: shop.id,
             locationId,
@@ -211,7 +221,10 @@ export async function action({ request }: ActionFunctionArgs) {
           },
         });
 
-        return redirect("/app/setup?step=3");
+        // Hand off to the per-zone admin's slots tab so the merchant
+        // configures time slots immediately after creating the zone.
+        // The Setup Guide on /app picks up the rest of the checklist.
+        return redirect(`/app/zones/${created.id}?section=slots&from=wizard`);
       }
 
       case "create-rule": {
