@@ -95,27 +95,42 @@ model Location {
 }
 
 model Zone {
-  id            String   @id @default(cuid())
-  shopId        String
-  shop          Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  id                String   @id @default(cuid())
+  shopId            String
+  shop              Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
-  locationId    String
-  location      Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  locationId        String
+  location          Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
 
-  name          String
-  type          String   // 'postcode_range', 'postcode_list', 'radius'
+  name              String
+  type              String   // 'postcode_range', 'postcode_list', 'radius'
 
   // For postcode ranges/lists
-  postcodes     String[] // Array of postcodes or ranges
+  postcodes         String[] // Array of postcodes or ranges
+
+  // Postcodes within `postcodes` (or matched by radius) that are explicitly
+  // EXCLUDED from this zone. Lets the merchant cover "all of Sydney except
+  // these specific postcodes" without listing every included postcode.
+  excludePostcodes  String[] @default([])
 
   // For radius
-  radiusKm      Float?
+  radiusKm          Float?
 
-  isActive      Boolean  @default(true)
-  priority      Int      @default(0)
+  // Per-zone delivery base price in the merchant's currency.
+  // Total delivery charge at checkout = zone.basePrice + slot.priceAdjustment.
+  // Defaults to 0 so existing zones remain valid post-migration; merchant
+  // must edit in admin to set the real price.
+  basePrice         Decimal  @default(0) @db.Decimal(10, 2)
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  isActive          Boolean  @default(true)
+  priority          Int      @default(0)
+
+  // Slots scoped to this zone (delivery slots only — pickup slots leave
+  // zoneId null and use locationId).
+  slots             Slot[]
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@index([shopId])
   @@index([locationId])
@@ -153,8 +168,16 @@ model Rule {
 
 model Slot {
   id                  String   @id @default(cuid())
+
+  // Slots are always parented to a Location. Delivery slots ALSO carry a
+  // zoneId so the merchant can configure different time windows / capacity /
+  // pricing per zone. Pickup slots leave zoneId null because pickup has no
+  // postcode-bound zone.
   locationId          String
   location            Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  zoneId              String?
+  zone                Zone?    @relation(fields: [zoneId], references: [id], onDelete: Cascade)
 
   date                DateTime
   timeStart           String   // "09:00"
@@ -162,6 +185,11 @@ model Slot {
 
   capacity            Int      @default(10)
   booked              Int      @default(0)
+
+  // Optional per-slot price premium added on top of the zone base price.
+  // Lets the merchant charge extra for priority windows (e.g. 9am-11am +$10).
+  // Defaults to 0; the cart-block only renders the badge when > 0.
+  priceAdjustment     Decimal  @default(0) @db.Decimal(10, 2)
 
   // Recommendation score (0.0 - 1.0)
   recommendationScore Float?
@@ -176,6 +204,7 @@ model Slot {
   updatedAt           DateTime @updatedAt
 
   @@index([locationId])
+  @@index([zoneId])
   @@index([date])
   @@index([recommendationScore])
 }
