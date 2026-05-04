@@ -278,25 +278,25 @@ export async function action({ request }: ActionFunctionArgs) {
           start: startDate.toISOString().split("T")[0],
           end: endDate.toISOString().split("T")[0],
         },
-        // Widget appearance flags from Shop settings (D7). Cart-block uses
-        // these to toggle the RECOMMENDED badge and the
-        // "Most available capacity" reason text on slot tiles.
+        // Widget appearance flags from Shop settings. Coalesce defaults so
+        // an unapplied D7 migration (or a future column rename) can't
+        // silently serialize undefined into the cart-block's state and
+        // break the badge toggles. Defaults match post-D5 behavior.
         widgetAppearance: {
-          showRecommendedBadge: shop.showRecommendedBadge,
-          showMostAvailableBadge: shop.showMostAvailableBadge,
+          showRecommendedBadge: shop.showRecommendedBadge ?? false,
+          showMostAvailableBadge: shop.showMostAvailableBadge ?? true,
         },
       },
     };
 
     return json(response);
   } catch (error) {
-    logger.error("Error in recommendations/slots API", error);
-    return json(
-      {
-        error: "Internal server error",
-        message: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 }
-    );
+    // Don't leak Prisma error messages (column names, query shapes) to
+    // the storefront. Log the actual error server-side, return a generic
+    // 500 to the cart-block.
+    logger.error("Error in recommendations/slots API", error, {
+      shopDomain: session?.shop,
+    });
+    return json({ error: "Internal server error" }, { status: 500 });
   }
 }

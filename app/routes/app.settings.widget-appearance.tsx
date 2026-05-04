@@ -1,6 +1,6 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json, redirect } from "@remix-run/node";
-import { Form, useActionData, useLoaderData, useNavigation } from "@remix-run/react";
+import { Form, useActionData, useLoaderData, useNavigation, useSearchParams } from "@remix-run/react";
 import {
   Page,
   Layout,
@@ -14,6 +14,7 @@ import {
   InlineStack,
 } from "@shopify/polaris";
 import { useState } from "react";
+import { Prisma } from "@prisma/client";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { logger } from "../utils/logger.server";
@@ -44,6 +45,13 @@ export async function action({ request }: ActionFunctionArgs) {
     });
     return redirect("/app/settings/widget-appearance?saved=1");
   } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+      logger.error("Widget appearance save: shop row missing", error, { shop: session.shop });
+      return json<ActionResult>(
+        { ok: false, error: "Shop record missing — please reinstall the app." },
+        { status: 404 },
+      );
+    }
     logger.error("Widget appearance save failed", error, { shop: session.shop });
     return json<ActionResult>(
       { ok: false, error: "Save failed. Please try again." },
@@ -60,9 +68,10 @@ export default function WidgetAppearance() {
 
   const [showRecommendedBadge, setShowRecommendedBadge] = useState(shop.showRecommendedBadge);
   const [showMostAvailableBadge, setShowMostAvailableBadge] = useState(shop.showMostAvailableBadge);
+  const [searchParams] = useSearchParams();
 
   const errorMessage = actionData && actionData.ok === false ? actionData.error : null;
-  const justSaved = typeof window !== "undefined" && new URL(window.location.href).searchParams.get("saved") === "1";
+  const justSaved = searchParams.get("saved") === "1";
 
   return (
     <Page

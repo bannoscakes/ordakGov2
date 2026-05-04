@@ -54,7 +54,7 @@ export default function SettingsIntegrations() {
               <InstallRow
                 label="Carrier Service"
                 description="Returns the delivery rate at checkout (zone basePrice + slot priceAdjustment)."
-                status={carrierServiceRegistered ? "active" : "unknown"}
+                status={carrierServiceRegistered ? "configured" : "unknown"}
                 cta="Re-install"
                 onCta={() => navigate("/app/install-carrier-service")}
               />
@@ -124,7 +124,7 @@ function InstallRow({
 }: {
   label: string;
   description: string;
-  status: "active" | "unknown";
+  status: "configured" | "unknown";
   cta: string;
   onCta: () => void;
 }) {
@@ -133,8 +133,8 @@ function InstallRow({
       <BlockStack gap="100">
         <InlineStack gap="200" blockAlign="center">
           <Text as="p" fontWeight="semibold">{label}</Text>
-          <Badge tone={status === "active" ? "success" : undefined}>
-            {status === "active" ? "Registered" : "Status unknown"}
+          <Badge tone={status === "configured" ? "success" : undefined}>
+            {status === "configured" ? "Configured" : "Status unknown"}
           </Badge>
         </InlineStack>
         <Text as="p" tone="subdued" variant="bodySm">{description}</Text>
