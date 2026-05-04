@@ -38,6 +38,15 @@ const PICKUP_METHODS = new Set(["PICK_UP", "PICKUP_POINT"]);
 // covers "pickup" / "pick up" / "pick-up" etc.
 const PICKUP_PATTERN = /\b(?:pick[-_ ]?up|in[-_ ]?store|click[-_ ]?(?:and|&)[-_ ]?collect|collect)\b/i;
 
+// Service codes our Carrier Service returns (api.carrier-service.rates.tsx).
+// When an option carries one of these codes, the price is the authoritative
+// zone.basePrice + slot.priceAdjustment computed in our backend; any sibling
+// manual flat rate of the same mode (e.g. the $15 "Standard delivery" rate
+// the setup-au-shipping route creates) is a stale duplicate and must be
+// hidden so the customer doesn't see two delivery rates and pick the cheaper
+// (wrong) one at checkout.
+const ORDAK_CODE_PATTERN = /^ORDAK_(DELIVERY|PICKUP)_/i;
+
 function isPickupOption(option: {
   handle: string;
   title?: string | null;
@@ -53,6 +62,10 @@ function isPickupOption(option: {
     .some((s) => PICKUP_PATTERN.test(s));
 }
 
+function isOrdakCarrierOption(option: { code?: string | null }): boolean {
+  return typeof option.code === "string" && ORDAK_CODE_PATTERN.test(option.code);
+}
+
 export function cartDeliveryOptionsTransformRun(
   input: CartDeliveryOptionsTransformRunInput,
 ): CartDeliveryOptionsTransformRunResult {
@@ -61,12 +74,31 @@ export function cartDeliveryOptionsTransformRun(
 
   const operations = [] as CartDeliveryOptionsTransformRunResult["operations"];
   for (const group of input.cart.deliveryGroups) {
+    // Did our Carrier Service return a rate for the chosen mode in this
+    // group? If yes, suppress sibling manual flat rates of the same mode
+    // (they are setup-au-shipping fallbacks that would otherwise appear
+    // alongside the carrier rate and let the customer pick the cheaper
+    // one). If no, leave manual rates visible so checkout still works
+    // when the carrier callback is silent.
+    let ordakDeliveryPresent = false;
+    let ordakPickupPresent = false;
+    for (const option of group.deliveryOptions) {
+      if (!isOrdakCarrierOption(option)) continue;
+      if (isPickupOption(option)) ordakPickupPresent = true;
+      else ordakDeliveryPresent = true;
+    }
+
     for (const option of group.deliveryOptions) {
       const isPickup = isPickupOption(option);
-      const shouldHide =
+      const isOrdak = isOrdakCarrierOption(option);
+      const wrongMode =
         (choice === "pickup" && !isPickup) ||
         (choice === "delivery" && isPickup);
-      if (shouldHide) {
+      const duplicateOfOrdak =
+        !isOrdak &&
+        ((choice === "delivery" && !isPickup && ordakDeliveryPresent) ||
+          (choice === "pickup" && isPickup && ordakPickupPresent));
+      if (wrongMode || duplicateOfOrdak) {
         operations.push({
           deliveryOptionHide: { deliveryOptionHandle: option.handle },
         });
