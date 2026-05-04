@@ -65,11 +65,21 @@ export async function loader({ request }: LoaderFunctionArgs) {
   }
 
   const url = new URL(request.url);
-  const step = pickStep(
-    url.searchParams.get("step"),
-    shop.locations.length > 0,
-    shop.zones.length > 0,
-  );
+  const stepParam = url.searchParams.get("step");
+
+  const hasActiveLocation = shop.locations.some((l) => l.isActive);
+  const hasActiveZone = shop.zones.some((z) => z.isActive);
+
+  // Once the merchant has at least one ACTIVE location AND one ACTIVE zone,
+  // the wizard's job is done — the Setup Guide on /app takes over. Inactive
+  // entries don't count: a merchant who deactivated everything came here
+  // because they need to fix it. Bypass the wizard only when the merchant
+  // didn't explicitly request a step (e.g. ?step=1 to add another).
+  if (!stepParam && hasActiveLocation && hasActiveZone) {
+    return redirect("/app");
+  }
+
+  const step = pickStep(stepParam, hasActiveLocation, hasActiveZone);
 
   return json({
     shop: { domain: session.shop },
@@ -199,7 +209,7 @@ export async function action({ request }: ActionFunctionArgs) {
           return json<ActionResult>({ ok: false, error: "Invalid zone type" }, { status: 400 });
         }
 
-        await prisma.zone.create({
+        const created = await prisma.zone.create({
           data: {
             shopId: shop.id,
             locationId,
@@ -211,7 +221,10 @@ export async function action({ request }: ActionFunctionArgs) {
           },
         });
 
-        return redirect("/app/setup?step=3");
+        // Hand off to the per-zone admin's slots tab so the merchant
+        // configures time slots immediately after creating the zone.
+        // The Setup Guide on /app picks up the rest of the checklist.
+        return redirect(`/app/zones/${created.id}?section=slots&from=wizard`);
       }
 
       case "create-rule": {

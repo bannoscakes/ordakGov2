@@ -333,6 +333,7 @@ export default function ZoneAdmin() {
   const errorMessage = actionData && actionData.ok === false ? actionData.error : null;
   const justSaved = searchParams.get("saved") === "1";
   const copiedTo = searchParams.get("copied");
+  const fromWizard = searchParams.get("from") === "wizard";
 
   const goToSection = (s: Section) => {
     navigate(`/app/zones/${zone.id}?section=${s}`, { replace: true });
@@ -355,6 +356,21 @@ export default function ZoneAdmin() {
       ]}
     >
       <Layout>
+        {fromWizard && (
+          <Layout.Section>
+            <Banner
+              tone="info"
+              title="Zone created — finish setup"
+              action={{ content: "Back to dashboard", url: "/app" }}
+            >
+              <p>
+                Set the base delivery price under <strong>Pricing</strong> and configure
+                time slots under <strong>Time slots & limits</strong>. The dashboard
+                tracks your remaining setup steps.
+              </p>
+            </Banner>
+          </Layout.Section>
+        )}
         {errorMessage && (
           <Layout.Section>
             <Banner tone="critical">{errorMessage}</Banner>
