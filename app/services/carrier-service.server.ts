@@ -26,6 +26,10 @@ export interface CarrierServiceRecord {
   active: boolean;
 }
 
+export type RegisterCarrierServiceResult =
+  | { ok: true; record: CarrierServiceRecord }
+  | { ok: false; error: string };
+
 /**
  * Build the absolute callback URL Shopify will POST to. Single source of
  * truth — keep this in sync with the Remix route at
@@ -46,7 +50,7 @@ export async function registerCarrierService(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   graphql: any,
   callbackUrl: string,
-): Promise<CarrierServiceRecord | null> {
+): Promise<RegisterCarrierServiceResult> {
   try {
     const response = await graphql(
       `#graphql
@@ -86,7 +90,8 @@ export async function registerCarrierService(
       logger.error("carrierServiceCreate top-level GraphQL errors", undefined, {
         errors: json.errors,
       });
-      return null;
+      const msg = (json.errors[0]?.message as string | undefined) ?? "GraphQL error";
+      return { ok: false, error: msg };
     }
 
     const result = json.data?.carrierServiceCreate;
@@ -95,20 +100,22 @@ export async function registerCarrierService(
       logger.error("carrierServiceCreate userErrors", undefined, {
         errors: result.userErrors,
       });
-      return null;
+      const msg =
+        (result.userErrors[0]?.message as string | undefined) ?? "Carrier service creation rejected";
+      return { ok: false, error: msg };
     }
 
     if (!result?.carrierService) {
       logger.error("carrierServiceCreate returned no carrierService", undefined, {
         response: json,
       });
-      return null;
+      return { ok: false, error: "Shopify returned no carrierService" };
     }
 
-    return result.carrierService as CarrierServiceRecord;
+    return { ok: true, record: result.carrierService as CarrierServiceRecord };
   } catch (err) {
     logger.error("carrierServiceCreate threw", err);
-    return null;
+    return { ok: false, error: err instanceof Error ? err.message : "carrierServiceCreate threw" };
   }
 }
 
