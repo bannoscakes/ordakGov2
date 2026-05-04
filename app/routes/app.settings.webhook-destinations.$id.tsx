@@ -24,7 +24,6 @@ import {
   Badge,
 } from "@shopify/polaris";
 import { useState } from "react";
-import { Prisma } from "@prisma/client";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { logger } from "../utils/logger.server";
@@ -58,11 +57,10 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     dest: {
       id: dest.id,
       url: dest.url,
-      // Secret is sensitive — only the masked tail is sent to the client.
-      // The merchant can rotate by entering a new value (or blank → keep).
-      secretMasked: dest.secret.length > 8
-        ? `…${dest.secret.slice(-8)}`
-        : "(short secret)",
+      // Length-only hint — last-N reveal cuts brute-force search space and
+      // the URL is the better identifier anyway. The merchant can rotate by
+      // entering a new value (or blank → keep).
+      secretLength: dest.secret.length,
       enabled: dest.enabled,
       eventTypes: dest.eventTypes,
       consecutiveFailures: dest.consecutiveFailures,
@@ -125,6 +123,10 @@ export async function action({ request, params }: ActionFunctionArgs) {
         );
       }
 
+      // Multi-tenant scope — updateMany lets us filter by shopId without
+      // declaring a compound unique constraint. count===0 means either the
+      // row was deleted between load and save OR the merchant's session
+      // doesn't own this destination.
       const updateData: { url: string; enabled: boolean; eventTypes: string[]; secret?: string } = {
         url,
         enabled,
@@ -132,23 +134,15 @@ export async function action({ request, params }: ActionFunctionArgs) {
       };
       if (newSecret) updateData.secret = newSecret;
 
-      // Reset failure counters on save so the merchant can confirm a fix
-      // by saving (e.g. correcting a URL) without manually clearing
-      // counters elsewhere.
-      try {
-        await prisma.webhookDestination.update({
-          where: { id, shopId: shop.id } as unknown as Prisma.WebhookDestinationWhereUniqueInput,
-          data: { ...updateData, consecutiveFailures: 0, lastError: null },
-        });
-      } catch {
-        // findFirst→update is the typical "scope by shop" pattern for
-        // multi-tenant updates. If the destination was deleted between
-        // load and save, fail loudly.
-        const exists = await prisma.webhookDestination.findFirst({ where: { id, shopId: shop.id } });
-        if (!exists) {
-          return json<ActionResult>({ ok: false, error: "Destination no longer exists" }, { status: 404 });
-        }
-        throw new Error("Update failed");
+      const updated = await prisma.webhookDestination.updateMany({
+        where: { id, shopId: shop.id },
+        data: updateData,
+      });
+      if (updated.count === 0) {
+        return json<ActionResult>(
+          { ok: false, error: "Destination no longer exists" },
+          { status: 404 },
+        );
       }
       return redirect(`/app/settings/webhook-destinations/${id}?saved=1`);
     }
@@ -263,7 +257,7 @@ export default function EditWebhookDestination() {
                     value={secret}
                     onChange={setSecret}
                     placeholder="Leave blank to keep existing secret"
-                    helpText={`Existing secret ends in ${dest.secretMasked}. Enter at least 16 characters to rotate.`}
+                    helpText={`Existing secret is ${dest.secretLength} characters. Enter at least 16 characters to rotate; leave blank to keep the current value.`}
                     autoComplete="off"
                     type="password"
                   />

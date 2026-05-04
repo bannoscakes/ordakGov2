@@ -110,10 +110,13 @@ async function postOne(
   }
 }
 
-async function recordResult(result: DispatchResult): Promise<void> {
+async function recordResult(shopId: string, result: DispatchResult): Promise<void> {
+  // Scope by shopId — defensive symmetry with the dispatcher's load query.
+  // updateMany accepts non-unique where; count===0 means the destination was
+  // deleted between dispatch and record.
   if (result.ok) {
-    await prisma.webhookDestination.update({
-      where: { id: result.destinationId },
+    await prisma.webhookDestination.updateMany({
+      where: { id: result.destinationId, shopId },
       data: {
         lastSuccessAt: new Date(),
         consecutiveFailures: 0,
@@ -122,8 +125,8 @@ async function recordResult(result: DispatchResult): Promise<void> {
     });
     return;
   }
-  await prisma.webhookDestination.update({
-    where: { id: result.destinationId },
+  await prisma.webhookDestination.updateMany({
+    where: { id: result.destinationId, shopId },
     data: {
       lastFailureAt: new Date(),
       lastError: result.error ?? "Unknown error",
@@ -145,7 +148,11 @@ export async function dispatchEvent(shopId: string, event: DispatchableEvent): P
       where: { shopId, enabled: true },
     });
   } catch (err) {
-    logger.error("Webhook dispatcher: failed to load destinations", err, {
+    // Distinct from "no destinations configured" — the merchant has receivers
+    // but a transient DB failure prevented dispatch. The EventLog row still
+    // committed; receivers won't get this event. Log loudly with a stable
+    // key so this can be alarmed on.
+    logger.error("webhook_dispatch_lookup_failed: destinations query failed", err, {
       shopId,
       eventType: event.eventType,
     });
@@ -169,11 +176,16 @@ export async function dispatchEvent(shopId: string, event: DispatchableEvent): P
     matched.map(async (d) => {
       const result = await postOne(d, body, event);
       try {
-        await recordResult(result);
+        await recordResult(shopId, result);
       } catch (err) {
-        logger.error("Webhook dispatcher: failed to record result", err, {
+        // recordResult failure desyncs admin counters from reality. The
+        // delivery itself already happened (or failed); we just couldn't
+        // bump the counter. Log loudly so an operator can reconcile.
+        logger.error("webhook_counter_desync: result write failed", err, {
           destinationId: d.id,
           eventType: event.eventType,
+          deliveryOk: result.ok,
+          deliveryError: result.error,
         });
       }
       if (!result.ok) {
