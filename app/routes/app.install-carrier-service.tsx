@@ -89,27 +89,34 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
     // Nothing to adopt — create from scratch.
     const result = await registerCarrierService(admin.graphql, callbackUrl);
-    if (!result) {
+    if (!result.ok) {
+      // Surface Shopify's actual error verbatim. The most common one in
+      // practice ("Carrier Calculated Shipping must be enabled for your
+      // store before enabling: Ordak Go") tells the merchant exactly
+      // which Partners-Dashboard feature flag to flip — without that
+      // hint they'd have no way to act.
+      const ccsHint = /Carrier Calculated Shipping must be enabled/i.test(result.error)
+        ? " — In the Shopify Partners Dashboard, open this store, find the 'Carrier-calculated shipping' feature, and enable it. Then retry this page."
+        : "";
       return json<Status>({
         ok: false,
-        message:
-          "Registration failed (check dev logs for the GraphQL error).",
+        message: `Registration failed: ${result.error}.${ccsHint}`,
       });
     }
 
     await prisma.shop.update({
       where: { id: shop.id },
-      data: { carrierServiceId: result.id },
+      data: { carrierServiceId: result.record.id },
     });
 
     return json<Status>({
-      ok: result.active,
-      message: result.active
+      ok: result.record.active,
+      message: result.record.active
         ? `Registered "${CARRIER_SERVICE_NAME}" successfully.`
         : `Registered "${CARRIER_SERVICE_NAME}" but Shopify returned active=false. Custom rates will not appear at checkout until activated.`,
-      carrierServiceId: result.id,
-      callbackUrl: result.callbackUrl,
-      active: result.active,
+      carrierServiceId: result.record.id,
+      callbackUrl: result.record.callbackUrl,
+      active: result.record.active,
     });
   } catch (err) {
     let message = "unknown";

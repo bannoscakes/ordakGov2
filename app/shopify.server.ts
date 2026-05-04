@@ -118,15 +118,15 @@ const shopify = shopifyApp({
           adminGraphqlFn(session.shop, session.accessToken),
           buildCallbackUrl(env.SHOPIFY_APP_URL),
         );
-        if (cs) {
+        if (cs.ok) {
           await prisma.shop.update({
             where: { shopifyDomain: session.shop },
-            data: { carrierServiceId: cs.id },
+            data: { carrierServiceId: cs.record.id },
           });
           logger.info("Carrier service registered", {
             shop: session.shop,
-            id: cs.id,
-            callback: cs.callbackUrl,
+            id: cs.record.id,
+            callback: cs.record.callbackUrl,
           });
         } else {
           // Loud — install completed but checkout will return zero rates
@@ -137,7 +137,7 @@ const shopify = shopifyApp({
           logger.error(
             "Carrier service registration failed; install completed but checkout will return zero rates until retry",
             undefined,
-            { shop: session.shop },
+            { shop: session.shop, error: cs.error },
           );
         }
       }
