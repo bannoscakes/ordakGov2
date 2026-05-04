@@ -87,6 +87,7 @@ model Location {
 
   zones             Zone[]
   slots             Slot[]
+  slotTemplates     SlotTemplate[]
 
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
@@ -128,6 +129,10 @@ model Zone {
   // Slots scoped to this zone (delivery slots only — pickup slots leave
   // zoneId null and use locationId).
   slots             Slot[]
+
+  // Per-day-of-week slot config. Materialized into concrete Slot rows for
+  // the next N days by the slot-materializer service.
+  slotTemplates     SlotTemplate[]
 
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
@@ -207,6 +212,47 @@ model Slot {
   @@index([zoneId])
   @@index([date])
   @@index([recommendationScore])
+}
+
+// Per-day-of-week slot configuration. The merchant edits these in the admin
+// (per-zone for delivery, per-location for pickup), and the slot-materializer
+// service generates concrete Slot rows from them for the next N days.
+//
+// Example: a row {dayOfWeek: 1, timeStart: "09:00", timeEnd: "11:00",
+// capacity: 5, fulfillmentType: "delivery"} means "every Monday, accept up
+// to 5 delivery orders for the 9am-11am window".
+//
+// Editing a template re-materializes future Slot rows matching its
+// (zoneId/locationId, fulfillmentType, dayOfWeek) tuple. Bookings are
+// preserved by leaving slots with `booked > 0` untouched.
+model SlotTemplate {
+  id              String   @id @default(cuid())
+
+  // Delivery templates carry zoneId; pickup templates leave it null and
+  // use locationId only (mirrors the Slot model's zone/location split).
+  zoneId          String?
+  zone            Zone?    @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+
+  locationId      String
+  location        Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  fulfillmentType String   // 'delivery' or 'pickup'
+  dayOfWeek       Int      // 0=Sunday, 1=Monday, ..., 6=Saturday (matches JS Date.getDay())
+
+  timeStart       String   // "09:00"
+  timeEnd         String   // "11:00"
+
+  capacity        Int      @default(10)
+  priceAdjustment Decimal  @default(0) @db.Decimal(10, 2)
+
+  isActive        Boolean  @default(true)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([zoneId])
+  @@index([locationId])
+  @@index([dayOfWeek])
 }
 
 model OrderLink {
