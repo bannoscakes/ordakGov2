@@ -15,6 +15,7 @@ import {
   Select,
   Tabs,
   Modal,
+  ButtonGroup,
 } from "@shopify/polaris";
 import { ChevronLeftIcon, ChevronRightIcon } from "@shopify/polaris-icons";
 import { useState } from "react";
@@ -23,19 +24,43 @@ import prisma from "../db.server";
 import { logger } from "../utils/logger.server";
 
 const PAGE_SIZE = 20;
+const MAX_DAY_TILES_VISIBLE = { month: 4, week: 12 } as const;
+const MODAL_DAY_LIST_CAP = 50;
+
 type ViewMode = "calendar" | "list";
+type CalendarRange = "month" | "week";
 
 function isViewMode(v: string | null): v is ViewMode {
   return v === "calendar" || v === "list";
 }
 
+function isCalendarRange(v: string | null): v is CalendarRange {
+  return v === "month" || v === "week";
+}
+
 function parseMonth(raw: string | null): { year: number; month: number } {
   if (raw && /^\d{4}-\d{2}$/.test(raw)) {
     const [y, m] = raw.split("-").map((s) => parseInt(s, 10));
-    if (m >= 1 && m <= 12) return { year: y, month: m - 1 };
+    // Bound year to a sane range so a stale link with year=0 doesn't quietly
+    // render an empty Dec 1900 calendar (JS Date remaps years 0-99 to 1900s).
+    if (m >= 1 && m <= 12 && y >= 2000 && y <= 2100) return { year: y, month: m - 1 };
+    logger.warn("Orders calendar: invalid ?month, falling back to current", { raw });
   }
   const now = new Date();
   return { year: now.getFullYear(), month: now.getMonth() };
+}
+
+function parseWeekAnchor(raw: string | null): Date {
+  // ?week=YYYY-MM-DD pins the week containing that date. Fallback to today.
+  if (raw && /^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const [y, m, d] = raw.split("-").map((s) => parseInt(s, 10));
+    const dt = new Date(y, m - 1, d);
+    if (!isNaN(dt.getTime())) return dt;
+    logger.warn("Orders calendar: invalid ?week, falling back to today", { raw });
+  }
+  const t = new Date();
+  t.setHours(0, 0, 0, 0);
+  return t;
 }
 
 function formatLocalDate(d: Date): string {
@@ -63,20 +88,51 @@ export async function loader({ request }: LoaderFunctionArgs) {
     const { year, month } = parseMonth(url.searchParams.get("month"));
 
     if (view === "calendar") {
-      // Range covering the visible month grid (first Monday on/before the
-      // 1st through the last Saturday/Sunday after the month's last day).
-      const monthStart = new Date(year, month, 1);
-      const monthEnd = new Date(year, month + 1, 0);
-      const gridStart = new Date(monthStart);
-      const dow = gridStart.getDay(); // 0=Sun..6=Sat
-      // Anchor to Monday: shift back so Sunday=6 days back, Monday=0.
-      const back = (dow + 6) % 7;
-      gridStart.setDate(gridStart.getDate() - back);
-      const gridEnd = new Date(monthEnd);
-      const endDow = gridEnd.getDay();
-      const forward = (7 - ((endDow + 6) % 7) - 1) % 7;
-      gridEnd.setDate(gridEnd.getDate() + forward);
-      gridEnd.setHours(23, 59, 59, 999);
+      const range: CalendarRange = isCalendarRange(url.searchParams.get("range"))
+        ? (url.searchParams.get("range") as CalendarRange)
+        : "month";
+
+      // TZ note: dates use the SERVER's local timezone throughout (loader,
+      // materializer, cart-block all do the same). Production migration to
+      // a UTC-only server (Phase E) needs a Shop-tz-aware rewrite of this +
+      // the materializer; flagged separately, not this PR's scope.
+      let gridStart: Date;
+      let gridEnd: Date;
+      let monthStart: Date;
+      let monthEnd: Date;
+      let monthLabel: string;
+      let weekAnchor: Date | null = null;
+
+      if (range === "week") {
+        weekAnchor = parseWeekAnchor(url.searchParams.get("week"));
+        // Anchor to Monday of the week containing weekAnchor.
+        gridStart = new Date(weekAnchor);
+        const dow = gridStart.getDay();
+        const back = (dow + 6) % 7;
+        gridStart.setDate(gridStart.getDate() - back);
+        gridStart.setHours(0, 0, 0, 0);
+        gridEnd = new Date(gridStart);
+        gridEnd.setDate(gridEnd.getDate() + 6);
+        gridEnd.setHours(23, 59, 59, 999);
+        monthStart = gridStart;
+        monthEnd = gridEnd;
+        monthLabel = `${gridStart.toLocaleDateString("en-AU", { month: "short", day: "numeric" })} – ${gridEnd.toLocaleDateString("en-AU", { month: "short", day: "numeric", year: "numeric" })}`;
+      } else {
+        // Render a fixed 6-week (42-cell) grid — Monday-anchored — so the
+        // grid size doesn't fluctuate. Earlier "shrink to needed weeks" math
+        // had a case where months ending on a Monday (Aug 2026) lost their
+        // last day. Six weeks always covers any month.
+        monthStart = new Date(year, month, 1);
+        monthEnd = new Date(year, month + 1, 0);
+        gridStart = new Date(monthStart);
+        const dow = gridStart.getDay();
+        const back = (dow + 6) % 7;
+        gridStart.setDate(gridStart.getDate() - back);
+        gridEnd = new Date(gridStart);
+        gridEnd.setDate(gridEnd.getDate() + 41);
+        gridEnd.setHours(23, 59, 59, 999);
+        monthLabel = monthStart.toLocaleDateString("en-AU", { month: "long", year: "numeric" });
+      }
 
       const [orders, slotsForRange] = await Promise.all([
         prisma.orderLink.findMany({
@@ -97,8 +153,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
           where: {
             location: { shopId: shop.id },
             date: { gte: gridStart, lte: gridEnd },
+            isActive: true,
           },
-          select: { date: true, capacity: true, booked: true },
+          select: { date: true, capacity: true, booked: true, fulfillmentType: true },
         }),
       ]);
 
@@ -127,12 +184,29 @@ export async function loader({ request }: LoaderFunctionArgs) {
         });
       }
 
-      const capacityByDate: Record<string, { booked: number; capacity: number }> = {};
+      // Capacity tracked per fulfillmentType so the merchant can see two
+      // pills per day (delivery utilisation + pickup utilisation) instead of
+      // one summed-across-zones-and-types number that hid sold-out windows.
+      const capacityByDate: Record<
+        string,
+        {
+          delivery: { booked: number; capacity: number };
+          pickup: { booked: number; capacity: number };
+        }
+      > = {};
       for (const s of slotsForRange) {
         const key = formatLocalDate(new Date(s.date));
-        if (!capacityByDate[key]) capacityByDate[key] = { booked: 0, capacity: 0 };
-        capacityByDate[key].booked += s.booked;
-        capacityByDate[key].capacity += s.capacity;
+        if (!capacityByDate[key]) {
+          capacityByDate[key] = {
+            delivery: { booked: 0, capacity: 0 },
+            pickup: { booked: 0, capacity: 0 },
+          };
+        }
+        const bucket = s.fulfillmentType === "pickup"
+          ? capacityByDate[key].pickup
+          : capacityByDate[key].delivery;
+        bucket.booked += s.booked;
+        bucket.capacity += s.capacity;
       }
 
       const days: string[] = [];
@@ -142,12 +216,33 @@ export async function loader({ request }: LoaderFunctionArgs) {
         cursor.setDate(cursor.getDate() + 1);
       }
 
+      // Range navigation params. Month mode walks by calendar month;
+      // week mode walks by 7-day blocks anchored on the current week's
+      // Monday.
+      let prevParam: string;
+      let nextParam: string;
+      let thisParam: string;
+      if (range === "week" && weekAnchor) {
+        const prev = new Date(weekAnchor);
+        prev.setDate(prev.getDate() - 7);
+        const next = new Date(weekAnchor);
+        next.setDate(next.getDate() + 7);
+        prevParam = formatLocalDate(prev);
+        nextParam = formatLocalDate(next);
+        thisParam = formatLocalDate(new Date());
+      } else {
+        prevParam = formatMonthParam(year, month - 1);
+        nextParam = formatMonthParam(year, month + 1);
+        thisParam = formatMonthParam(new Date().getFullYear(), new Date().getMonth());
+      }
+
       return json({
         view: "calendar" as const,
-        month: { year, monthIndex: month, label: monthStart.toLocaleDateString("en-AU", { month: "long", year: "numeric" }) },
-        prevMonthParam: formatMonthParam(year, month - 1),
-        nextMonthParam: formatMonthParam(year, month + 1),
-        thisMonthParam: formatMonthParam(new Date().getFullYear(), new Date().getMonth()),
+        range,
+        rangeLabel: monthLabel,
+        prevParam,
+        nextParam,
+        thisParam,
         days,
         ordersByDate,
         capacityByDate,
@@ -278,25 +373,53 @@ function CalendarView({
 }) {
   const [openDate, setOpenDate] = useState<string | null>(null);
 
-  function gotoMonth(monthParam: string) {
+  function gotoRange(param: string) {
     const next = new URLSearchParams(searchParams);
     next.set("view", "calendar");
-    next.set("month", monthParam);
+    if (data.range === "week") {
+      next.set("range", "week");
+      next.set("week", param);
+      next.delete("month");
+    } else {
+      next.set("range", "month");
+      next.set("month", param);
+      next.delete("week");
+    }
+    setSearchParams(next);
+  }
+
+  function setRange(r: "month" | "week") {
+    const next = new URLSearchParams(searchParams);
+    next.set("view", "calendar");
+    next.set("range", r);
+    if (r === "week") {
+      next.set("week", data.today);
+      next.delete("month");
+    } else {
+      next.delete("week");
+    }
     setSearchParams(next);
   }
 
   const ordersInOpenDate = openDate ? data.ordersByDate[openDate] ?? [] : [];
+  const isWeek = data.range === "week";
+  const cellMinHeight = isWeek ? 240 : 100;
+  const tileLimit = isWeek ? MAX_DAY_TILES_VISIBLE.week : MAX_DAY_TILES_VISIBLE.month;
 
   return (
     <BlockStack gap="400">
-      <InlineStack align="space-between" blockAlign="center">
+      <InlineStack align="space-between" blockAlign="center" wrap>
         <InlineStack gap="200" blockAlign="center">
-          <Button icon={ChevronLeftIcon} onClick={() => gotoMonth(data.prevMonthParam)} accessibilityLabel="Previous month" />
-          <Text as="h2" variant="headingMd">{data.month.label}</Text>
-          <Button icon={ChevronRightIcon} onClick={() => gotoMonth(data.nextMonthParam)} accessibilityLabel="Next month" />
+          <Button icon={ChevronLeftIcon} onClick={() => gotoRange(data.prevParam)} accessibilityLabel={isWeek ? "Previous week" : "Previous month"} />
+          <Text as="h2" variant="headingMd">{data.rangeLabel}</Text>
+          <Button icon={ChevronRightIcon} onClick={() => gotoRange(data.nextParam)} accessibilityLabel={isWeek ? "Next week" : "Next month"} />
         </InlineStack>
-        <InlineStack gap="200">
-          <Button onClick={() => gotoMonth(data.thisMonthParam)}>Today</Button>
+        <InlineStack gap="200" blockAlign="center" wrap>
+          <Button onClick={() => gotoRange(data.thisParam)}>Today</Button>
+          <ButtonGroup>
+            <Button pressed={!isWeek} onClick={() => setRange("month")}>Month</Button>
+            <Button pressed={isWeek} onClick={() => setRange("week")}>Week</Button>
+          </ButtonGroup>
           <InlineStack gap="200" blockAlign="center">
             <LegendDot color="#2c5ecf" /><Text as="span" variant="bodySm">Delivery</Text>
             <LegendDot color="#1a8917" /><Text as="span" variant="bodySm">Pickup</Text>
@@ -338,7 +461,7 @@ function CalendarView({
               type="button"
               onClick={() => setOpenDate(day)}
               style={{
-                minHeight: 100,
+                minHeight: cellMinHeight,
                 padding: 6,
                 background: inMonth ? "#fff" : "#f6f6f7",
                 border: isToday ? "2px solid #1a1a1a" : "1px solid #e3e3e3",
@@ -351,16 +474,29 @@ function CalendarView({
                 gap: 4,
               }}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 4 }}>
                 <span style={{ fontWeight: isToday ? 700 : 500, fontSize: 13 }}>{dayNum}</span>
-                {cap && cap.capacity > 0 ? (
-                  <span style={{ fontSize: 10, color: "var(--p-color-text-subdued, #6d7175)" }}>
-                    {cap.booked}/{cap.capacity}
-                  </span>
-                ) : null}
+                <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                  {cap && cap.delivery.capacity > 0 ? (
+                    <CapacityPill
+                      booked={cap.delivery.booked}
+                      capacity={cap.delivery.capacity}
+                      color="#2c5ecf"
+                      label="Delivery"
+                    />
+                  ) : null}
+                  {cap && cap.pickup.capacity > 0 ? (
+                    <CapacityPill
+                      booked={cap.pickup.booked}
+                      capacity={cap.pickup.capacity}
+                      color="#1a8917"
+                      label="Pickup"
+                    />
+                  ) : null}
+                </div>
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 2 }}>
-                {orders.slice(0, 4).map((o) => (
+                {orders.slice(0, tileLimit).map((o) => (
                   <span
                     key={o.id}
                     style={{
@@ -375,9 +511,9 @@ function CalendarView({
                     #{o.shopifyOrderNumber || o.shopifyOrderId.slice(-4)}
                   </span>
                 ))}
-                {orders.length > 4 ? (
+                {orders.length > tileLimit ? (
                   <span style={{ fontSize: 11, color: "var(--p-color-text-subdued, #6d7175)" }}>
-                    +{orders.length - 4} more
+                    +{orders.length - tileLimit} more
                   </span>
                 ) : null}
               </div>
@@ -397,7 +533,13 @@ function CalendarView({
             <Text as="p" tone="subdued">No orders on this date.</Text>
           ) : (
             <BlockStack gap="300">
-              {ordersInOpenDate.map((o) => (
+              {ordersInOpenDate.length > MODAL_DAY_LIST_CAP && (
+                <Text as="p" tone="subdued" variant="bodySm">
+                  Showing first {MODAL_DAY_LIST_CAP} of {ordersInOpenDate.length}. Switch to List
+                  view for filtering and pagination.
+                </Text>
+              )}
+              {ordersInOpenDate.slice(0, MODAL_DAY_LIST_CAP).map((o) => (
                 <InlineStack key={o.id} align="space-between" blockAlign="center" gap="300" wrap={false}>
                   <BlockStack gap="100">
                     <InlineStack gap="200" blockAlign="center" wrap>
@@ -441,6 +583,36 @@ function LegendDot({ color }: { color: string }) {
   );
 }
 
+function CapacityPill({
+  booked,
+  capacity,
+  color,
+  label,
+}: {
+  booked: number;
+  capacity: number;
+  color: string;
+  label: string;
+}) {
+  const ratio = capacity > 0 ? booked / capacity : 0;
+  const tone = ratio >= 1 ? "#dc2626" : ratio >= 0.8 ? "#b45309" : "var(--p-color-text-subdued, #6d7175)";
+  return (
+    <span
+      title={`${label}: ${booked} of ${capacity} booked`}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 3,
+        fontSize: 10,
+        color: tone,
+      }}
+    >
+      <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: 3, background: color }} />
+      {booked}/{capacity}
+    </span>
+  );
+}
+
 // ---------- List view ----------
 
 type ListData = Extract<ReturnType<typeof useLoaderData<typeof loader>>, { view: "list" }>;
@@ -472,7 +644,8 @@ function ListView({
     setSearchParams(next);
   }
 
-  if (data.orders.length === 0 && data.filters.status === "all" && data.filters.type === "all") {
+  const filtersActive = data.filters.status !== "all" || data.filters.type !== "all";
+  if (data.orders.length === 0 && !filtersActive) {
     return (
       <EmptyState
         heading="No scheduled orders yet"
@@ -480,6 +653,53 @@ function ListView({
       >
         <p>Orders with delivery/pickup scheduling will appear here once customers start booking.</p>
       </EmptyState>
+    );
+  }
+  if (data.orders.length === 0 && filtersActive) {
+    return (
+      <BlockStack gap="400">
+        <InlineStack gap="400" wrap>
+          <Select
+            label="Status"
+            options={[
+              { label: "All", value: "all" },
+              { label: "Scheduled", value: "scheduled" },
+              { label: "Updated", value: "updated" },
+              { label: "Completed", value: "completed" },
+              { label: "Canceled", value: "canceled" },
+            ]}
+            value={data.filters.status}
+            onChange={(v) => updateFilter("status", v)}
+          />
+          <Select
+            label="Type"
+            options={[
+              { label: "All", value: "all" },
+              { label: "Delivery", value: "delivery" },
+              { label: "Pickup", value: "pickup" },
+            ]}
+            value={data.filters.type}
+            onChange={(v) => updateFilter("type", v)}
+          />
+        </InlineStack>
+        <EmptyState
+          heading="No orders match these filters"
+          action={{
+            content: "Clear filters",
+            onAction: () => {
+              const next = new URLSearchParams(searchParams);
+              next.set("view", "list");
+              next.delete("status");
+              next.delete("type");
+              next.delete("page");
+              setSearchParams(next);
+            },
+          }}
+          image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
+        >
+          <p>Adjust the status or type filter, or clear them to see everything.</p>
+        </EmptyState>
+      </BlockStack>
     );
   }
 
