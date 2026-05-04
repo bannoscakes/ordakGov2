@@ -13,14 +13,21 @@
  * lookups. For production-grade defense-in-depth, add a per-shop token in
  * the URL path and validate.
  *
- * How we know which fulfillment the customer picked: cart attributes are
- * NOT included in the carrier service rate request. The cart-block mirrors
+ * Pricing (D4): rate is computed from our DB, not from Shopify's flat-rate
+ * config. Total = `zone.basePrice + slot.priceAdjustment` (delivery) or
+ * `slot.priceAdjustment` (pickup, typically 0). Both values are configured
+ * by the merchant in the per-zone admin (D3).
+ *
+ * How we know which selections the customer made: cart attributes are NOT
+ * included in the carrier service rate request body. The cart-block mirrors
  * its selections onto every line item as `_`-prefixed properties (e.g.
- * `_delivery_method`, `_slot_id`, `_location_id`). Those DO appear at
- * `rate.items[*].properties` and are the contract this callback reads.
+ * `_delivery_method`, `_slot_id`, `_location_id`, optional `_zone_id`).
+ * Those DO appear at `rate.items[*].properties` and are the contract this
+ * callback reads.
  */
 
 import { json, type ActionFunctionArgs } from "@remix-run/node";
+import type { Slot, Zone } from "@prisma/client";
 import prisma from "../db.server";
 import { logger } from "../utils/logger.server";
 
@@ -57,31 +64,47 @@ interface RateRequest {
 interface RateResponse {
   service_name: string;
   service_code: string;
-  total_price: string; // cents as string, e.g. "1000"
+  total_price: string; // cents as string, e.g. "1500" = $15.00
   description: string;
   currency: string;
   min_delivery_date?: string;
   max_delivery_date?: string;
 }
 
-const DEFAULT_DELIVERY_PRICE_CENTS = 1000; // AUD 10.00 placeholder until per-zone pricing lands
-
-function normalizePostcode(postcode: string | undefined): string {
+function normalizePostcode(postcode: string | undefined | null): string {
   return (postcode ?? "").trim().toUpperCase().replace(/\s+/g, "");
 }
 
+/**
+ * Decide whether a destination postcode falls inside a zone.
+ * - postcode_list: exact match against zone.postcodes, MINUS excludePostcodes
+ * - postcode_range: lexicographic compare against range[0]..range[1] (works
+ *   for AU/NZ/UK/most numeric postcodes), MINUS excludePostcodes
+ * - radius: not handled here (would need destination geocoding); returns false
+ */
 function postcodeMatchesZone(
   postcode: string,
-  zone: { type: string; postcodes: string[] },
+  zone: Pick<Zone, "type" | "postcodes" | "excludePostcodes">,
 ): boolean {
   const target = normalizePostcode(postcode);
   if (!target) return false;
 
+  // Always honor exclusion list first, regardless of zone type.
+  if (zone.excludePostcodes?.some((p) => normalizePostcode(p) === target)) {
+    return false;
+  }
+
   if (zone.type === "postcode_list") {
     return zone.postcodes.some((p) => normalizePostcode(p) === target);
   }
-  // postcode_range / radius are not implemented at this layer yet — return
-  // false so callers fall through to "no rates" rather than spuriously match.
+  if (zone.type === "postcode_range") {
+    if (zone.postcodes.length < 2) return false;
+    const start = normalizePostcode(zone.postcodes[0]);
+    const end = normalizePostcode(zone.postcodes[1]);
+    return target >= start && target <= end;
+  }
+  // radius: needs lat/lng for the destination, which Shopify doesn't supply
+  // in the rate request. Future work — geocode the postal_code to coords.
   return false;
 }
 
@@ -101,16 +124,23 @@ function readLineItemProperty(
   return undefined;
 }
 
+/**
+ * Convert a Decimal-from-Prisma (string) or number into integer cents.
+ * Uses banker's rounding for half-cent edge cases.
+ */
+function toCents(amount: { toString(): string } | number | null | undefined): number {
+  if (amount == null) return 0;
+  const n = typeof amount === "number" ? amount : Number(amount.toString());
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.round(n * 100);
+}
+
 export async function action({ request }: ActionFunctionArgs) {
-  // Wrap the entire callback in try/catch returning `{ rates: [] }` on
-  // any uncaught throw. The deliberate failure mode for THIS endpoint is
-  // "no rates" (which gates checkout intentionally) — NOT a 500. Shopify
-  // treats repeated 5xx responses as a carrier-service health failure
-  // and can suppress the carrier service entirely, breaking checkout
-  // for every customer until the merchant manually re-enables it. A
-  // null-traversal in the locations.find chain or a transient Prisma
-  // timeout shouldn't have that blast radius. See
-  // app/services/carrier-service.server.ts for the registration side.
+  // Wrap the entire callback in try/catch returning `{ rates: [] }` on any
+  // uncaught throw. The deliberate failure mode for THIS endpoint is "no
+  // rates" (which gates checkout intentionally) — NOT a 500. Shopify treats
+  // repeated 5xx responses as a carrier-service health failure and can
+  // suppress the carrier service entirely.
   let shopifyDomain = request.headers.get("x-shopify-shop-domain") ?? undefined;
   try {
     if (request.method !== "POST") {
@@ -138,7 +168,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
     const shop = await prisma.shop.findUnique({
       where: { shopifyDomain },
-      include: { locations: true, zones: true },
+      select: { id: true },
     });
     if (!shop) {
       logger.warn("Carrier service: unknown shop", { shopifyDomain });
@@ -147,17 +177,26 @@ export async function action({ request }: ActionFunctionArgs) {
 
     const deliveryMethod = readLineItemProperty(rate.items, "_delivery_method");
     const requestedLocationId = readLineItemProperty(rate.items, "_location_id");
+    const requestedZoneId = readLineItemProperty(rate.items, "_zone_id");
     const requestedSlotId = readLineItemProperty(rate.items, "_slot_id");
 
-    // Pickup branch: customer picked pickup at a specific location in the cart.
-    // Return a single $0 rate for that location only — no delivery options.
+    // Look up the cart-selected slot for its priceAdjustment. Used by both
+    // delivery and pickup branches.
+    let selectedSlot: Slot | null = null;
+    if (requestedSlotId) {
+      selectedSlot = await prisma.slot.findUnique({ where: { id: requestedSlotId } });
+    }
+
+    // ---------- Pickup branch ----------
     if (deliveryMethod === "pickup") {
-      const pickupLocation = shop.locations.find(
-        (l) =>
-          (requestedLocationId ? l.id === requestedLocationId : l.supportsPickup) &&
-          l.isActive &&
-          l.supportsPickup,
-      );
+      const pickupLocation = await prisma.location.findFirst({
+        where: {
+          shopId: shop.id,
+          isActive: true,
+          supportsPickup: true,
+          ...(requestedLocationId ? { id: requestedLocationId } : {}),
+        },
+      });
 
       if (!pickupLocation) {
         logger.info("Carrier service: pickup requested but no eligible location", {
@@ -167,50 +206,94 @@ export async function action({ request }: ActionFunctionArgs) {
         return json({ rates: [] });
       }
 
+      const pickupCents = toCents(selectedSlot?.priceAdjustment);
       const rates: RateResponse[] = [
         {
           service_name: `Pickup at ${pickupLocation.name}`,
           service_code: `ORDAK_PICKUP_${pickupLocation.id}`,
-          total_price: "0",
-          description: `Pick up your order from ${pickupLocation.name}`,
+          total_price: String(pickupCents),
+          description:
+            pickupCents > 0
+              ? `Pick up your order from ${pickupLocation.name}`
+              : `Pick up your order from ${pickupLocation.name} (free)`,
           currency: rate.currency,
         },
       ];
       return json({ rates });
     }
 
-    // Delivery branch (default when delivery_method is "delivery" or absent):
-    // match the destination postcode against active zones and return a rate
-    // per matching zone's location.
-    const destinationPostcode = rate.destination.postal_code;
-    const matchingZones = shop.zones.filter(
-      (z) => z.isActive && postcodeMatchesZone(destinationPostcode ?? "", z),
-    );
+    // ---------- Delivery branch ----------
+    // Prefer the cart-selected zone if cart-block stamped _zone_id (future);
+    // otherwise re-match the destination postcode server-side.
+    let matchedZone: Zone | null = null;
 
-    if (matchingZones.length === 0) {
+    if (requestedZoneId) {
+      const candidate = await prisma.zone.findFirst({
+        where: {
+          id: requestedZoneId,
+          shopId: shop.id,
+          isActive: true,
+          location: { isActive: true, supportsDelivery: true },
+        },
+        include: { location: true },
+      });
+      if (candidate) matchedZone = candidate;
+    }
+
+    if (!matchedZone) {
+      const destinationPostcode = rate.destination.postal_code;
+      const candidates = await prisma.zone.findMany({
+        where: {
+          shopId: shop.id,
+          isActive: true,
+          location: { isActive: true, supportsDelivery: true },
+        },
+        orderBy: { priority: "desc" },
+        include: { location: true },
+      });
+      matchedZone =
+        candidates.find((z) => postcodeMatchesZone(destinationPostcode ?? "", z)) ?? null;
+    }
+
+    if (!matchedZone) {
+      // No matching zone for the destination — gate checkout (empty rates).
       return json({ rates: [] });
     }
 
-    const ratesByLocation = new Map<string, RateResponse>();
-    for (const zone of matchingZones) {
-      const location = shop.locations.find(
-        (l) => l.id === zone.locationId && l.isActive && l.supportsDelivery,
-      );
-      if (!location) continue;
-      if (ratesByLocation.has(location.id)) continue;
-
-      ratesByLocation.set(location.id, {
-        service_name: `Delivery from ${location.name}`,
-        service_code: `ORDAK_DELIVERY_${location.id}`,
-        total_price: String(DEFAULT_DELIVERY_PRICE_CENTS),
-        description: requestedSlotId
-          ? `Scheduled delivery (slot ${requestedSlotId})`
-          : "Scheduled delivery",
-        currency: rate.currency,
+    // Sanity check: if cart-block told us a slot, make sure it's actually for
+    // this zone. If a customer somehow has a stale slot from a different zone
+    // in their cart attrs, refuse the rate so they re-pick. Prevents
+    // mis-billing if the slot's priceAdjustment was meant for a different zone.
+    if (selectedSlot && selectedSlot.zoneId && selectedSlot.zoneId !== matchedZone.id) {
+      logger.warn("Carrier service: slot/zone mismatch", {
+        shopifyDomain,
+        selectedSlotId: selectedSlot.id,
+        selectedSlotZoneId: selectedSlot.zoneId,
+        matchedZoneId: matchedZone.id,
       });
+      return json({ rates: [] });
     }
 
-    return json({ rates: Array.from(ratesByLocation.values()) });
+    const baseCents = toCents(matchedZone.basePrice);
+    const adjustmentCents = toCents(selectedSlot?.priceAdjustment);
+    const totalCents = baseCents + adjustmentCents;
+
+    // Only mention the adjustment in the description if it's actually
+    // non-zero — keeps the checkout label clean for the common $0 case.
+    const description =
+      adjustmentCents > 0
+        ? `Scheduled delivery (zone ${matchedZone.name}, +$${(adjustmentCents / 100).toFixed(2)} slot premium)`
+        : `Scheduled delivery (zone ${matchedZone.name})`;
+
+    const rateResponse: RateResponse = {
+      service_name: "Standard delivery",
+      service_code: `ORDAK_DELIVERY_${matchedZone.id}`,
+      total_price: String(totalCents),
+      description,
+      currency: rate.currency,
+    };
+
+    return json({ rates: [rateResponse] });
   } catch (err) {
     logger.error("Carrier service: uncaught throw — returning empty rates", err, {
       shopifyDomain,
