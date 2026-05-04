@@ -228,7 +228,7 @@ export default function EditWebhookDestination() {
               </Text>
               <Text as="p" tone="subdued" variant="bodySm">
                 Last failure {dest.lastFailureAt ? new Date(dest.lastFailureAt).toLocaleString("en-AU") : "—"}.
-                Saving this destination resets the counter.
+                Fix the receiver — the counter resets on the next successful delivery.
               </Text>
             </Banner>
           </Layout.Section>
