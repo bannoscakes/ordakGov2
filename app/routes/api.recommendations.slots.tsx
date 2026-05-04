@@ -76,6 +76,47 @@ export async function action({ request }: ActionFunctionArgs) {
       ? new Date(body.dateRange.endDate)
       : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
+    // For delivery: resolve the customer's postcode to a single Zone (highest
+    // priority match that respects excludePostcodes) and filter slots to that
+    // zone only. Without this, a customer in zone A would see slots from
+    // every other zone at the same location too.
+    //
+    // For pickup: zone is irrelevant (no postcode-bound area). Filter by
+    // location only — pickup slots intentionally have zoneId=null in the schema.
+    let zoneIdFilter: string | null = null;
+    if (body.fulfillmentType === "delivery" && body.postcode) {
+      const candidates = await prisma.zone.findMany({
+        where: {
+          shopId: shop.id,
+          isActive: true,
+          location: { isActive: true, supportsDelivery: true },
+        },
+        orderBy: { priority: "desc" },
+        select: { id: true, type: true, postcodes: true, excludePostcodes: true },
+      });
+      const target = body.postcode.trim().toUpperCase().replace(/\s+/g, "");
+      const matched = candidates.find((z) => {
+        if (z.excludePostcodes?.some((p) => p.trim().toUpperCase().replace(/\s+/g, "") === target)) {
+          return false;
+        }
+        if (z.type === "postcode_list") {
+          return z.postcodes.some((p) => p.trim().toUpperCase().replace(/\s+/g, "") === target);
+        }
+        if (z.type === "postcode_range" && z.postcodes.length >= 2) {
+          const start = z.postcodes[0].trim().toUpperCase().replace(/\s+/g, "");
+          const end = z.postcodes[1].trim().toUpperCase().replace(/\s+/g, "");
+          return target >= start && target <= end;
+        }
+        return false;
+      });
+      if (matched) {
+        zoneIdFilter = matched.id;
+      } else {
+        // Postcode doesn't match any active delivery zone — return no slots.
+        return json({ slots: [], message: "No service available for this postcode" });
+      }
+    }
+
     // Fetch available slots from database
     const slots = await prisma.slot.findMany({
       where: {
@@ -88,6 +129,11 @@ export async function action({ request }: ActionFunctionArgs) {
         booked: {
           lt: prisma.slot.fields.capacity, // Available capacity
         },
+        // Delivery: scope to the matched zone (set above). Pickup: zoneId is
+        // null on every slot, but we filter only when locationId is supplied.
+        ...(body.fulfillmentType === "delivery"
+          ? { zoneId: zoneIdFilter }
+          : {}),
         ...(body.locationId ? { locationId: body.locationId } : {}),
       },
       include: {
