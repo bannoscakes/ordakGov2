@@ -99,11 +99,21 @@ export function describeDate(iso: string): string {
   });
 }
 
+// Format a Date as YYYY-MM-DD in the LOCAL timezone. Don't use
+// `toISOString().slice(0, 10)` — that converts to UTC first, so in any
+// positive UTC offset (e.g. Sydney UTC+10) local midnight renders as the
+// previous day. Bug surfaced as the cart defaulting to yesterday's date.
+function formatLocalDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 export const dateRangeFromToday = computed(() => {
   const start = new Date();
   start.setHours(0, 0, 0, 0);
   const end = new Date(start);
   end.setDate(end.getDate() + 13);
-  const fmt = (d: Date) => d.toISOString().slice(0, 10);
-  return { start: fmt(start), end: fmt(end) };
+  return { start: formatLocalDate(start), end: formatLocalDate(end) };
 });
