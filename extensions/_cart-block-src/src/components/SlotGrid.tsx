@@ -36,9 +36,11 @@ export function SlotGrid({ slots, selectedId, onSelect }: Props) {
       {slots.map((slot) => {
         const full = slot.capacityRemaining <= 0;
         const isSelected = slot.slotId === selectedId;
+        // Badge intentionally hidden — the reason text below conveys
+        // ranking instead. The merchant can re-enable via widget appearance
+        // settings once those exist.
         const cls = [
           "ordak-slot",
-          slot.recommended ? "ordak-slot--recommended" : "",
           isSelected ? "ordak-slot--active" : "",
           full ? "ordak-slot--full" : "",
         ]
@@ -56,17 +58,12 @@ export function SlotGrid({ slots, selectedId, onSelect }: Props) {
               class={cls}
               onClick={() => !full && onSelect(slot)}
             >
-              {slot.recommended ? (
-                <span class="ordak-badge" aria-label="Recommended slot">
-                  ★ Recommended
-                </span>
-              ) : null}
               <span class="ordak-slot__time">{formatRange(slot.timeStart, slot.timeEnd)}</span>
               <span class="ordak-slot__spots">{spotsLabel(slot.capacityRemaining)}</span>
               {priceAdjustmentLabel(slot.priceAdjustment) ? (
                 <span class="ordak-slot__price">{priceAdjustmentLabel(slot.priceAdjustment)}</span>
               ) : null}
-              {slot.recommended && slot.reason ? (
+              {slot.reason ? (
                 <span class="ordak-slot__reason">{slot.reason}</span>
               ) : null}
               {full ? <span class="ordak-slot__overlay" aria-hidden="true">Fully booked</span> : null}

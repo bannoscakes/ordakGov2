@@ -1,0 +1,22 @@
+query CartValidationsGenerateRunInput {
+  cart {
+    cartDeliveryMethod: attribute(key: "delivery_method") {
+      value
+    }
+    lines {
+      id
+      lineDeliveryMethod: attribute(key: "_delivery_method") {
+        value
+      }
+      slotId: attribute(key: "_slot_id") {
+        value
+      }
+      locationId: attribute(key: "_location_id") {
+        value
+      }
+      zoneId: attribute(key: "_zone_id") {
+        value
+      }
+    }
+  }
+}
