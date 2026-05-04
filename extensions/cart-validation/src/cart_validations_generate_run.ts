@@ -53,7 +53,11 @@ export function cartValidationsGenerateRun(
   // silent gap in the gate.
   try {
     return run(input);
-  } catch {
+  } catch (err) {
+    // console.error in a Shopify Function writes to the run log accessible
+    // via Partners → App → Functions, so a future bug here leaves a trail
+    // for diagnosis instead of silently blocking checkout with no signal.
+    console.error("[ordak] cart-validation run threw:", err);
     return rejectWith(
       "Checkout temporarily unavailable. Please refresh your cart and try again.",
     );

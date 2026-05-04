@@ -88,28 +88,52 @@ export async function loader({ request }: LoaderFunctionArgs) {
             mutation OrdakGoEnableValidation($id: ID!, $validation: ValidationUpdateInput!) {
               validationUpdate(id: $id, validation: $validation) {
                 validation { id enabled }
-                userErrors { field message }
+                userErrors { field message code }
               }
             }`,
           { variables: { id: dup.id, validation: { enable: true } } },
         );
-        const updateBody = await updateRes.json();
+        const updateBody = (await updateRes.json()) as GqlBody<{
+          validationUpdate?: {
+            validation?: { id: string; enabled: boolean };
+            userErrors?: Array<{ field?: string[]; message: string; code?: string | null }>;
+          };
+        }>;
+        if (Array.isArray(updateBody.errors) && updateBody.errors.length > 0) {
+          return json<Status>({
+            ok: false,
+            message: `GraphQL error enabling validation: ${updateBody.errors.map((e) => e.message).join(", ")}`,
+            validationId: dup.id,
+            enabled: false,
+            functionId: ours.id,
+          });
+        }
         const updateErrs = updateBody.data?.validationUpdate?.userErrors ?? [];
         if (updateErrs.length) {
           return json<Status>({
             ok: false,
-            message: `Enable failed: ${updateErrs.map((e: { message: string }) => e.message).join(", ")}`,
+            message: `Enable failed: ${updateErrs.map((e) => e.message).join(", ")}`,
             validationId: dup.id,
             enabled: false,
             functionId: ours.id,
           });
         }
         const updated = updateBody.data?.validationUpdate?.validation;
+        if (!updated) {
+          return json<Status>({
+            ok: false,
+            message:
+              "Enable returned no validation. The mutation succeeded with no payload — check Shopify status and retry.",
+            validationId: dup.id,
+            enabled: false,
+            functionId: ours.id,
+          });
+        }
         return json<Status>({
           ok: true,
           message: "Re-enabled existing installation.",
           validationId: dup.id,
-          enabled: updated?.enabled ?? true,
+          enabled: updated.enabled,
           functionId: ours.id,
         });
       }
