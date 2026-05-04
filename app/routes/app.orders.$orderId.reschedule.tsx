@@ -186,16 +186,27 @@ export async function action({ request, params }: ActionFunctionArgs) {
     };
 
     let pendingEvent: DispatchableEventLog | null = null;
+    let capacityRace = false;
 
-    await prisma.$transaction(async (tx) => {
+    try {
+      await prisma.$transaction(async (tx) => {
       await tx.slot.update({
         where: { id: orderLink.slotId },
         data: { booked: { decrement: 1 } },
       });
-      await tx.slot.update({
-        where: { id: newSlot.id },
-        data: { booked: { increment: 1 } },
-      });
+      // Atomic capacity-check + increment. The pre-tx read of booked/capacity
+      // can race against another booking commit; do the comparison in SQL so
+      // the increment only lands if there's still room. Throw to roll back
+      // the decrement above.
+      const incrementResult = await tx.$executeRaw`
+        UPDATE "Slot"
+        SET booked = booked + 1
+        WHERE id = ${newSlot.id} AND booked < capacity
+      `;
+      if (incrementResult === 0) {
+        capacityRace = true;
+        throw new Error("CAPACITY_RACE");
+      }
       await tx.orderLink.update({
         where: { id: orderLink.id },
         data: {
@@ -228,7 +239,16 @@ export async function action({ request, params }: ActionFunctionArgs) {
           }),
         },
       });
-    });
+      });
+    } catch (txErr) {
+      if (capacityRace) {
+        return json<ActionResult>(
+          { ok: false, error: "Slot filled while you were on this page — pick another." },
+          { status: 409 },
+        );
+      }
+      throw txErr;
+    }
 
     if (pendingEvent) {
       await dispatchEventLog(shop.id, pendingEvent);
@@ -280,7 +300,21 @@ Time: ${oldSlotSnapshot.timeStart} - ${oldSlotSnapshot.timeEnd}${reason ? `\nRea
   }
 }
 
-type LoaderSlot = ReturnType<typeof useLoaderData<typeof loader>>["slots"][number];
+// Mirrors the loader's slots .map(...) projection. Defined explicitly
+// (instead of via `ReturnType<typeof useLoaderData<typeof loader>>["slots"][number]`)
+// so adding a non-JSON-serializable field to the loader doesn't silently
+// widen this to the SerializeFrom shape and skip type errors at call sites.
+interface LoaderSlot {
+  id: string;
+  date: string;
+  timeStart: string;
+  timeEnd: string;
+  capacity: number;
+  booked: number;
+  isCurrent: boolean;
+  locationName: string;
+  zoneName: string | null;
+}
 
 export default function Reschedule() {
   const { orderId, orderLink, slots } = useLoaderData<typeof loader>();

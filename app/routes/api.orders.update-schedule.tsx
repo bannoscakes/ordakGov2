@@ -14,7 +14,11 @@ import { json } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { logger } from "../utils/logger.server";
-import { recordEvent } from "../services/event-log.server";
+import {
+  writeEventLogTx,
+  dispatchEventLog,
+  type DispatchableEventLog,
+} from "../services/event-log.server";
 import {
   addOrderMetafields,
   addOrderTags,
@@ -88,52 +92,72 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
 
-    // Update order link
-    const updatedLink = await prisma.orderLink.update({
-      where: { id: existingLink.id },
-      data: {
-        slotId: newSlot.id,
-        fulfillmentType: newSlot.fulfillmentType,
-        status: "updated",
-      },
-    });
+    // Wrap link update + slot dec/inc + event log in one transaction so a
+    // partial failure can't leave the row pointing at the new slot while
+    // booked counts still reflect the old. The atomic capacity check inside
+    // the tx (using $executeRaw) prevents double-booking under concurrent
+    // commits — the pre-tx booked >= capacity check above is a fast-path
+    // UX hint, not the authority.
+    let pendingEvent: DispatchableEventLog | null = null;
+    let capacityRace = false;
 
-    // Decrement old slot, increment new slot
-    await prisma.slot.update({
-      where: { id: existingLink.slotId },
-      data: {
-        booked: {
-          decrement: 1,
-        },
-      },
-    });
+    try {
+      await prisma.$transaction(async (tx) => {
+        await tx.orderLink.update({
+          where: { id: existingLink.id },
+          data: {
+            slotId: newSlot.id,
+            fulfillmentType: newSlot.fulfillmentType,
+            status: "updated",
+          },
+        });
 
-    await prisma.slot.update({
-      where: { id: newSlot.id },
-      data: {
-        booked: {
-          increment: 1,
-        },
-      },
-    });
+        await tx.slot.update({
+          where: { id: existingLink.slotId },
+          data: { booked: { decrement: 1 } },
+        });
 
-    // Log + dispatch to webhook destinations.
-    await recordEvent({
-      shopId: newSlot.location.shopId,
-      data: {
-        orderLinkId: updatedLink.id,
-        eventType: "order.schedule_updated",
-        payload: JSON.stringify({
-          orderId,
-          oldSlotId: existingLink.slotId,
-          newSlotId: newSlot.id,
-          oldSlotDate: existingLink.slot.date.toISOString(),
-          oldSlotTime: `${existingLink.slot.timeStart} - ${existingLink.slot.timeEnd}`,
-          newSlotDate: newSlot.date.toISOString(),
-          newSlotTime: `${newSlot.timeStart} - ${newSlot.timeEnd}`,
-        }),
-      },
-    });
+        const incrementResult = await tx.$executeRaw`
+          UPDATE "Slot"
+          SET booked = booked + 1
+          WHERE id = ${newSlot.id} AND booked < capacity
+        `;
+        if (incrementResult === 0) {
+          capacityRace = true;
+          throw new Error("CAPACITY_RACE");
+        }
+
+        pendingEvent = await writeEventLogTx({
+          tx,
+          data: {
+            orderLinkId: existingLink.id,
+            eventType: "order.schedule_updated",
+            timestamp: new Date(),
+            payload: JSON.stringify({
+              orderId,
+              oldSlotId: existingLink.slotId,
+              newSlotId: newSlot.id,
+              oldSlotDate: existingLink.slot.date.toISOString(),
+              oldSlotTime: `${existingLink.slot.timeStart} - ${existingLink.slot.timeEnd}`,
+              newSlotDate: newSlot.date.toISOString(),
+              newSlotTime: `${newSlot.timeStart} - ${newSlot.timeEnd}`,
+            }),
+          },
+        });
+      });
+    } catch (txErr) {
+      if (capacityRace) {
+        return json<UpdateScheduleResponse>(
+          { success: false, error: "Slot just filled — pick another" },
+          { status: 409 }
+        );
+      }
+      throw txErr;
+    }
+
+    if (pendingEvent) {
+      await dispatchEventLog(newSlot.location.shopId, pendingEvent);
+    }
 
     // Update Shopify order metafields and tags
     const gid = `gid://shopify/Order/${orderId}`;
@@ -146,7 +170,7 @@ export async function action({ request }: ActionFunctionArgs) {
       fulfillmentType: newSlot.fulfillmentType as 'delivery' | 'pickup',
       locationId: newSlot.location.id,
       locationName: newSlot.location.name,
-      wasRecommended: updatedLink.wasRecommended,
+      wasRecommended: existingLink.wasRecommended,
     };
 
     // Update metafields
