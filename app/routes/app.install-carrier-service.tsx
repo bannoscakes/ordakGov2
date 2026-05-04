@@ -15,7 +15,9 @@ import prisma from "../db.server";
 import {
   CARRIER_SERVICE_NAME,
   buildCallbackUrl,
+  listCarrierServices,
   registerCarrierService,
+  updateCarrierService,
 } from "../services/carrier-service.server";
 import { getEnv } from "../utils/env.server";
 
@@ -38,42 +40,60 @@ export async function loader({ request }: LoaderFunctionArgs) {
       return json<Status>({ ok: false, message: `No Shop row for ${session.shop}` });
     }
 
-    if (shop.carrierServiceId) {
-      // Verify it's actually still active in Shopify (a merchant could have
-      // deleted it via admin without our knowing).
-      const checkRes = await admin.graphql(
-        `#graphql
-          query OrdakGoCarrierServices {
-            carrierServices(first: 25) {
-              nodes { id name active }
-            }
-          }`,
-      );
-      const checkBody = await checkRes.json();
-      const ours = checkBody.data?.carrierServices?.nodes?.find(
-        (c: { id: string }) => c.id === shop.carrierServiceId,
-      ) as { id: string; active?: boolean } | undefined;
-      if (ours) {
-        return json<Status>({
-          ok: ours.active !== false,
-          message:
-            ours.active === false
-              ? "Registered, but Shopify reports this carrier service as INACTIVE. Customers won't see custom rates until it's activated. Check the Shopify admin → Settings → Shipping & delivery → Carrier accounts."
-              : "Already registered and active.",
-          carrierServiceId: ours.id,
-          active: ours.active !== false,
+    const callbackUrl = buildCallbackUrl(getEnv().SHOPIFY_APP_URL);
+
+    // Always list first. Three reasons:
+    // 1. Stored carrierServiceId might be stale (merchant deleted it).
+    // 2. A previous install (different tunnel URL, different env) may
+    //    have left a same-name registration we'd otherwise fail to
+    //    create over — adopt it instead of asking the merchant to
+    //    delete-and-retry.
+    // 3. Lets us refresh the callbackUrl when adopting (common case:
+    //    dev tunnel URL changed between sessions).
+    const existing = await listCarrierServices(admin.graphql);
+    const byStoredId = shop.carrierServiceId
+      ? existing.find((c) => c.id === shop.carrierServiceId)
+      : undefined;
+    const byName = existing.find((c) => c.name === CARRIER_SERVICE_NAME);
+    const adoptable = byStoredId ?? byName;
+
+    if (adoptable) {
+      // Refresh callbackUrl + active flag so the existing registration
+      // points at this app's current tunnel and is on. No-op if Shopify
+      // already has the same values.
+      const refreshed =
+        adoptable.callbackUrl === callbackUrl && adoptable.active
+          ? adoptable
+          : (await updateCarrierService(admin.graphql, adoptable.id, callbackUrl)) ?? adoptable;
+
+      if (shop.carrierServiceId !== refreshed.id) {
+        await prisma.shop.update({
+          where: { id: shop.id },
+          data: { carrierServiceId: refreshed.id },
         });
       }
-      // Stored id is stale — fall through to re-register.
+
+      return json<Status>({
+        ok: refreshed.active !== false,
+        message:
+          refreshed.active === false
+            ? `Adopted existing "${CARRIER_SERVICE_NAME}" registration but Shopify reports it as INACTIVE. Activate via Admin → Settings → Shipping & delivery → Carrier accounts.`
+            : adoptable.callbackUrl !== callbackUrl
+              ? `Adopted existing "${CARRIER_SERVICE_NAME}" registration and refreshed its callback URL.`
+              : `Already registered and active.`,
+        carrierServiceId: refreshed.id,
+        callbackUrl: refreshed.callbackUrl,
+        active: refreshed.active !== false,
+      });
     }
 
-    const callbackUrl = buildCallbackUrl(getEnv().SHOPIFY_APP_URL);
+    // Nothing to adopt — create from scratch.
     const result = await registerCarrierService(admin.graphql, callbackUrl);
     if (!result) {
       return json<Status>({
         ok: false,
         message:
-          "Registration failed (check dev logs for the GraphQL error). Most common cause: a carrier service with the same name already exists — delete it via Admin → Settings → Shipping & delivery → Carrier accounts, then retry.",
+          "Registration failed (check dev logs for the GraphQL error).",
       });
     }
 

@@ -113,6 +113,98 @@ export async function registerCarrierService(
 }
 
 /**
+ * List existing carrier services on the shop. Used by the install route
+ * to detect a same-name registration left over from a previous install
+ * (or a previous tunnel URL) and adopt its ID instead of failing on
+ * "name already taken."
+ */
+export async function listCarrierServices(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  graphql: any,
+): Promise<CarrierServiceRecord[]> {
+  try {
+    const response = await graphql(
+      `#graphql
+      query OrdakGoListCarrierServices {
+        carrierServices(first: 50) {
+          nodes { id name callbackUrl active }
+        }
+      }`,
+    );
+    const json = await response.json();
+    if (Array.isArray(json.errors) && json.errors.length > 0) {
+      logger.error("listCarrierServices top-level GraphQL errors", undefined, {
+        errors: json.errors,
+      });
+      return [];
+    }
+    const nodes = (json.data?.carrierServices?.nodes ?? []) as CarrierServiceRecord[];
+    return nodes;
+  } catch (err) {
+    logger.error("listCarrierServices threw", err);
+    return [];
+  }
+}
+
+/**
+ * Update an existing carrier service's callbackUrl / active flag. Used
+ * when the install route adopts a same-name registration whose callback
+ * still points at a stale tunnel URL.
+ */
+export async function updateCarrierService(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  graphql: any,
+  carrierServiceId: string,
+  callbackUrl: string,
+): Promise<CarrierServiceRecord | null> {
+  try {
+    const response = await graphql(
+      `#graphql
+      mutation CarrierServiceUpdate($input: DeliveryCarrierServiceUpdateInput!) {
+        carrierServiceUpdate(input: $input) {
+          carrierService {
+            id
+            name
+            callbackUrl
+            active
+          }
+          userErrors { field message }
+        }
+      }`,
+      {
+        variables: {
+          input: {
+            id: carrierServiceId,
+            callbackUrl,
+            supportsServiceDiscovery: true,
+            active: true,
+          },
+        },
+      },
+    );
+    const json = await response.json();
+    if (Array.isArray(json.errors) && json.errors.length > 0) {
+      logger.error("carrierServiceUpdate top-level GraphQL errors", undefined, {
+        errors: json.errors,
+      });
+      return null;
+    }
+    const result = json.data?.carrierServiceUpdate;
+    if (result?.userErrors?.length) {
+      logger.error("carrierServiceUpdate userErrors", undefined, {
+        errors: result.userErrors,
+      });
+      return null;
+    }
+    if (!result?.carrierService) return null;
+    return result.carrierService as CarrierServiceRecord;
+  } catch (err) {
+    logger.error("carrierServiceUpdate threw", err);
+    return null;
+  }
+}
+
+/**
  * Delete the carrier service. Called on APP_UNINSTALLED so the dev-store
  * isn't left with an orphan registration pointing at a dead callback.
  * Returns true on success, false on Shopify-reported error.
