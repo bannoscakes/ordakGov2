@@ -67,19 +67,19 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const stepParam = url.searchParams.get("step");
 
-  // Once the merchant has at least one location AND one zone, the wizard's
-  // job is done — the Setup Guide on /app picks up slot configuration,
-  // Function installs, and theme verification. Bypass the wizard unless
-  // the merchant explicitly asked for a step (e.g. ?step=1 to add another).
-  if (!stepParam && shop.locations.length > 0 && shop.zones.length > 0) {
+  const hasActiveLocation = shop.locations.some((l) => l.isActive);
+  const hasActiveZone = shop.zones.some((z) => z.isActive);
+
+  // Once the merchant has at least one ACTIVE location AND one ACTIVE zone,
+  // the wizard's job is done — the Setup Guide on /app takes over. Inactive
+  // entries don't count: a merchant who deactivated everything came here
+  // because they need to fix it. Bypass the wizard only when the merchant
+  // didn't explicitly request a step (e.g. ?step=1 to add another).
+  if (!stepParam && hasActiveLocation && hasActiveZone) {
     return redirect("/app");
   }
 
-  const step = pickStep(
-    stepParam,
-    shop.locations.length > 0,
-    shop.zones.length > 0,
-  );
+  const step = pickStep(stepParam, hasActiveLocation, hasActiveZone);
 
   return json({
     shop: { domain: session.shop },

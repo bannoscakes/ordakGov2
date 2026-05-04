@@ -14,75 +14,100 @@ import {
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { logger } from "../utils/logger.server";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const { session } = await authenticate.admin(request);
 
-  const shop = await prisma.shop.findUnique({
-    where: { shopifyDomain: session.shop },
-    select: {
-      id: true,
-      locations: { select: { id: true, name: true } },
-      zones: { select: { id: true, basePrice: true } },
-    },
-  });
+  try {
+    const shop = await prisma.shop.findUnique({
+      where: { shopifyDomain: session.shop },
+      select: {
+        id: true,
+        locations: {
+          select: { id: true, name: true, isActive: true },
+        },
+        zones: {
+          select: { id: true, basePrice: true, isActive: true, locationId: true },
+        },
+      },
+    });
 
-  if (!shop) {
+    if (!shop) {
+      // afterAuth bootstraps the Shop row on install. If we land here
+      // without one, something cleared it (manual DB action, partial
+      // uninstall) — tell the merchant to reinstall instead of rendering
+      // a fake "0/4 complete" checklist that hides the broken state.
+      throw new Response("Shop not found — reinstall the app", { status: 404 });
+    }
+
+    const [orderCount, slotCount, templateCount] = await Promise.all([
+      prisma.orderLink.count({
+        where: { slot: { location: { shopId: shop.id } } },
+      }),
+      prisma.slot.count({
+        where: { location: { shopId: shop.id }, isActive: true },
+      }),
+      prisma.slotTemplate.count({
+        where: { location: { shopId: shop.id }, isActive: true },
+      }),
+    ]);
+
+    const activeLocations = shop.locations.filter((l) => l.isActive);
+    const activeZones = shop.zones.filter((z) => z.isActive);
+
+    let zoneWithPriceCount = 0;
+    for (const z of activeZones) {
+      if (z.basePrice == null) {
+        logger.warn("Dashboard: zone with null basePrice", { zoneId: z.id });
+        continue;
+      }
+      const price = Number(z.basePrice.toString());
+      if (!Number.isFinite(price)) {
+        logger.warn("Dashboard: zone with non-finite basePrice", {
+          zoneId: z.id,
+          raw: z.basePrice.toString(),
+        });
+        continue;
+      }
+      if (price < 0) {
+        logger.warn("Dashboard: zone with negative basePrice", {
+          zoneId: z.id,
+          price,
+        });
+        continue;
+      }
+      if (price > 0) zoneWithPriceCount++;
+    }
+
+    const firstZoneId = activeZones[0]?.id ?? null;
+    const themeEditorUrl = `https://admin.shopify.com/store/${session.shop.replace(
+      ".myshopify.com",
+      "",
+    )}/themes/current/editor`;
+
     return json({
       shop: session.shop,
-      stats: { locations: 0, zones: 0, orders: 0, slots: 0 },
-      checklist: emptyChecklist(),
+      themeEditorUrl,
+      stats: {
+        locations: activeLocations.length,
+        zones: activeZones.length,
+        slots: slotCount,
+        orders: orderCount,
+      },
+      checklist: {
+        locationCreated: activeLocations.length > 0,
+        zoneCreated: activeZones.length > 0,
+        zonePriceSet: zoneWithPriceCount > 0,
+        timeSlotsConfigured: templateCount > 0,
+        firstZoneId,
+      },
     });
+  } catch (error) {
+    if (error instanceof Response) throw error;
+    logger.error("Dashboard loader failed", error, { shop: session.shop });
+    throw error;
   }
-
-  const [orderCount, slotCount, templateCount] = await Promise.all([
-    prisma.orderLink.count({
-      where: { slot: { location: { shopId: shop.id } } },
-    }),
-    prisma.slot.count({
-      where: { location: { shopId: shop.id }, isActive: true },
-    }),
-    prisma.slotTemplate.count({
-      where: { location: { shopId: shop.id }, isActive: true },
-    }),
-  ]);
-
-  const locationCount = shop.locations.length;
-  const zoneCount = shop.zones.length;
-  const zoneWithPriceCount = shop.zones.filter(
-    (z) => Number(z.basePrice.toString()) > 0,
-  ).length;
-  const firstZoneId = shop.zones[0]?.id ?? null;
-  const firstLocationId = shop.locations[0]?.id ?? null;
-
-  return json({
-    shop: session.shop,
-    stats: {
-      locations: locationCount,
-      zones: zoneCount,
-      slots: slotCount,
-      orders: orderCount,
-    },
-    checklist: {
-      locationCreated: locationCount > 0,
-      zoneCreated: zoneCount > 0,
-      zonePriceSet: zoneWithPriceCount > 0,
-      timeSlotsConfigured: templateCount > 0,
-      firstZoneId,
-      firstLocationId,
-    },
-  });
-}
-
-function emptyChecklist() {
-  return {
-    locationCreated: false,
-    zoneCreated: false,
-    zonePriceSet: false,
-    timeSlotsConfigured: false,
-    firstZoneId: null,
-    firstLocationId: null,
-  };
 }
 
 type ChecklistItem = {
@@ -90,15 +115,12 @@ type ChecklistItem = {
   label: string;
   description: string;
   done: boolean;
-  // Items that we can't auto-track (theme embed, function installs).
-  // Surfaced as informational steps the merchant ticks off via CTA but the
-  // dashboard doesn't try to verify state on every load.
   manual?: boolean;
-  cta: { label: string; to: string };
+  cta: { label: string; to: string; external?: boolean };
 };
 
 export default function Index() {
-  const { shop, stats, checklist } = useLoaderData<typeof loader>();
+  const { shop, themeEditorUrl, stats, checklist } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
 
   const items: ChecklistItem[] = [
@@ -168,18 +190,26 @@ export default function Index() {
       description: "Add the Ordak Go block to your cart template via the theme editor.",
       done: false,
       manual: true,
-      cta: { label: "Open theme editor", to: "/admin/themes/current/editor" },
+      // External link: the theme editor lives at admin.shopify.com, not
+      // inside the embedded Remix iframe. Routing via Remix navigate would
+      // 404 inside the iframe.
+      cta: { label: "Open theme editor", to: themeEditorUrl, external: true },
     },
   ];
 
-  // Auto-tracked progress only counts the four items the dashboard can
-  // verify from the DB. Manual items (validation, delivery customization,
-  // theme embed) sit alongside but don't move the bar.
   const autoTracked = items.filter((i) => !i.manual);
   const completedCount = autoTracked.filter((i) => i.done).length;
   const totalCount = autoTracked.length;
-  const progressPct = (completedCount / totalCount) * 100;
-  const setupComplete = completedCount === totalCount;
+  const progressPct = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
+  const setupComplete = totalCount > 0 && completedCount === totalCount;
+
+  function onCta(item: ChecklistItem) {
+    if (item.cta.external) {
+      window.open(item.cta.to, "_top");
+      return;
+    }
+    navigate(item.cta.to);
+  }
 
   return (
     <Page title="Dashboard">
@@ -212,7 +242,7 @@ export default function Index() {
               <ProgressBar progress={progressPct} size="small" />
               <BlockStack gap="200">
                 {items.map((item) => (
-                  <ChecklistRow key={item.id} item={item} onCta={() => navigate(item.cta.to)} />
+                  <ChecklistRow key={item.id} item={item} onCta={() => onCta(item)} />
                 ))}
               </BlockStack>
             </BlockStack>
@@ -233,7 +263,7 @@ export default function Index() {
             <BlockStack gap="300">
               <Text as="h2" variant="headingMd">Tools</Text>
               <InlineStack gap="200" wrap>
-                <Button onClick={() => navigate("/app/setup")}>Setup wizard</Button>
+                <Button onClick={() => navigate("/app/setup?step=1")}>Setup wizard</Button>
                 <Button onClick={() => navigate("/app/diagnostics")}>Diagnostics</Button>
               </InlineStack>
             </BlockStack>
