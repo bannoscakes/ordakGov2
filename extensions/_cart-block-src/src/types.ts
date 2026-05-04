@@ -34,6 +34,10 @@ export interface EligibilityResponse {
   eligible: boolean;
   locations: EligibilityLocation[];
   services: { delivery: boolean; pickup: boolean };
+  // Set for delivery requests when a zone matches — the matched zone's
+  // basePrice is already baked into `message`, but surfacing the fields
+  // separately lets the UI display the fee elsewhere if we want to later.
+  matchedZone?: { id: string; name: string; basePrice: string } | null;
   message?: string;
 }
 

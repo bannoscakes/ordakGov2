@@ -39,6 +39,16 @@ interface EligibilityResponse {
     delivery: boolean;
     pickup: boolean;
   };
+  // Matched zone for delivery requests (the highest-priority zone whose
+  // postcode list/range covers the supplied postcode and isn't excluded).
+  // Lets the cart-block render "Delivery fee: $X" before the customer picks
+  // a slot, since basePrice is per-zone. Null for pickup requests or when
+  // no zone matches.
+  matchedZone?: {
+    id: string;
+    name: string;
+    basePrice: string; // Decimal serialized as string (e.g. "30.00")
+  } | null;
   message?: string;
 }
 
@@ -107,12 +117,14 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
 
-    // Find all active zones with their locations
+    // Find all active zones with their locations, ordered by priority desc so
+    // the highest-priority match wins (matters when zones overlap).
     const zones = await prisma.zone.findMany({
       where: {
         shopId: shop.id,
         isActive: true,
       },
+      orderBy: { priority: "desc" },
       include: {
         location: {
           select: {
@@ -130,12 +142,20 @@ export async function action({ request }: ActionFunctionArgs) {
       },
     });
 
-    // Find matching zones
+    // Find matching zones (respecting excludePostcodes via isPostcodeInZone
+    // updated below). For the matched-zone disclosure, take the first match
+    // (highest priority) — that's the same zone the Carrier Service callback
+    // will pick at checkout.
+    const normalizedTarget = postcode.trim().toUpperCase().replace(/\s+/g, "");
     const matchingZones = zones.filter((zone) => {
-      // Only consider zones with active locations
       if (!zone.location.isActive) return false;
-
-      // Check if postcode matches the zone
+      if (
+        zone.excludePostcodes?.some(
+          (p) => p.trim().toUpperCase().replace(/\s+/g, "") === normalizedTarget,
+        )
+      ) {
+        return false;
+      }
       return isPostcodeInZone(postcode, zone);
     });
 
@@ -183,17 +203,41 @@ export async function action({ request }: ActionFunctionArgs) {
       pickup: eligibleLocations.some((loc) => loc.supportsPickup),
     };
 
+    // For delivery requests, surface the matched zone's basePrice so the
+    // cart-block can display "Delivery fee: $X" before the customer picks
+    // a slot. Pickup requests don't get a matched zone (no postcode-bound
+    // pricing) — leave matchedZone null.
+    let matchedZone: EligibilityResponse["matchedZone"] = null;
+    if (fulfillmentType === "delivery" && matchingZones.length > 0) {
+      const top = matchingZones[0]; // already ordered by priority desc
+      matchedZone = {
+        id: top.id,
+        name: top.name,
+        basePrice: top.basePrice.toString(),
+      };
+    }
+
+    const baseMessage =
+      filteredLocations.length > 0
+        ? `Service available from ${filteredLocations.length} location${filteredLocations.length !== 1 ? "s" : ""}`
+        : fulfillmentType
+          ? `No ${fulfillmentType} service available in your area`
+          : "Service available, but not for the selected fulfillment type";
+
+    // Compose the friendlier delivery message that matches the merchant's
+    // expectation: "Great — we deliver to <postcode>! Delivery fee: $X".
+    const deliveryFeeMessage =
+      matchedZone && filteredLocations.length > 0
+        ? `Great — we deliver to ${postcode}! Delivery fee: $${Number(matchedZone.basePrice).toFixed(2)}`
+        : null;
+
     return json<EligibilityResponse>(
       {
         eligible: filteredLocations.length > 0,
         locations: filteredLocations,
         services,
-        message:
-          filteredLocations.length > 0
-            ? `Service available from ${filteredLocations.length} location${filteredLocations.length !== 1 ? "s" : ""}`
-            : fulfillmentType
-            ? `No ${fulfillmentType} service available in your area`
-            : "Service available, but not for the selected fulfillment type",
+        matchedZone,
+        message: deliveryFeeMessage ?? baseMessage,
       },
       { headers: getCorsHeaders(request) }
     );
