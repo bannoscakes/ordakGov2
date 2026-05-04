@@ -36,11 +36,9 @@ export function SlotGrid({ slots, selectedId, onSelect }: Props) {
       {slots.map((slot) => {
         const full = slot.capacityRemaining <= 0;
         const isSelected = slot.slotId === selectedId;
-        // The "RECOMMENDED" badge + orange border is intentionally not
-        // rendered. The recommendation engine still scores slots server-side,
-        // but exposing it to the customer was confusing — they had no way to
-        // tell where the ranking came from. Settings → Widget appearance
-        // (D7) will introduce a merchant toggle for re-enabling it.
+        // Badge intentionally hidden — the reason text below conveys
+        // ranking instead. The merchant can re-enable via widget appearance
+        // settings once those exist.
         const cls = [
           "ordak-slot",
           isSelected ? "ordak-slot--active" : "",
@@ -65,10 +63,6 @@ export function SlotGrid({ slots, selectedId, onSelect }: Props) {
               {priceAdjustmentLabel(slot.priceAdjustment) ? (
                 <span class="ordak-slot__price">{priceAdjustmentLabel(slot.priceAdjustment)}</span>
               ) : null}
-              {/* "Most available capacity" / similar reason kept visible for
-                  every slot that has one — decoupled from the recommended
-                  flag so removing the badge doesn't drop the reason too.
-                  Will be toggleable in Settings → Widget appearance (D7). */}
               {slot.reason ? (
                 <span class="ordak-slot__reason">{slot.reason}</span>
               ) : null}

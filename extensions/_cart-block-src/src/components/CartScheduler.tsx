@@ -25,18 +25,20 @@ interface Props {
   rootEl: Element;
 }
 
-// CSS selector union for theme checkout buttons. Covers the common shapes
-// (Dawn `[name="checkout"]`, button-link `a[href="/checkout"]`, drawer
-// `.cart__checkout-button`, common `[data-checkout]` data-attribute). Some
-// themes wrap the button in a form that submits to `/checkout`, in which
-// case clicks on the inner button still bubble up to a matching ancestor.
+// Wide selector union — clicks on inner buttons bubble to a matching
+// ancestor, so we attach in capture phase. Express checkout buttons (Shop
+// Pay / Apple Pay / Google Pay) are iframed and not catchable here — the
+// Cart Validation Function is the only gate for those.
 const CHECKOUT_BUTTON_SELECTOR =
-  '[name="checkout"], button[name="checkout"], a[href="/checkout"], a[href*="/checkout?"], [data-checkout], .cart__checkout, .cart__checkout-button, .cart-checkout-button, .shopify-payment-button__button, button[type="submit"][form="cart"]';
+  '[name="checkout"], button[name="checkout"], a[href="/checkout"], a[href*="/checkout?"], [data-checkout], .cart__checkout, .cart__checkout-button, .cart-checkout-button';
 
 // Returns null when the cart has all required scheduling selections, or a
-// human-readable reason when something is missing. Mirrors the rules in the
-// Cart Validation Function so the customer sees the same message in either
-// layer.
+// human-readable reason when something is missing.
+//
+// Mirrors extensions/cart-validation/src/cart_validations_generate_run.ts —
+// keep the two in sync. This helper is the single source of truth for
+// client-side checkout gating; future changes to the rule set must update
+// it together with the Function.
 function describeMissingSelections(state: import("../state").AppState): string | null {
   const fulfillment = state.fulfillment.value;
   if (!fulfillment) return "Please choose Delivery or Pickup before checkout.";
@@ -48,6 +50,15 @@ function describeMissingSelections(state: import("../state").AppState): string |
       return "Delivery isn't available for the entered postcode.";
     }
   } else {
+    // Pickup flow: eligibility API isn't called (no postcode), so
+    // servicesAvailable.pickup stays at its initial false. The real signal
+    // is whether pickup locations loaded — empty + not loading means the
+    // shop has no active pickup locations and the merchant needs to add one.
+    const noLocationsLoaded =
+      state.pickupLocations.value.length === 0 && !state.loading.value.locations;
+    if (noLocationsLoaded) {
+      return "Pickup isn't available right now.";
+    }
     if (!state.selectedLocation.value) {
       return "Please choose a pickup location before checkout.";
     }
@@ -147,21 +158,31 @@ export function CartScheduler({ config, rootEl }: Props) {
 
   // Intercept clicks on theme checkout buttons. The Cart Validation Function
   // is the authoritative backstop (it blocks express buttons too) but
-  // intercepting in the cart gives the customer immediate inline feedback
-  // and avoids the "click checkout, get redirected, see error" round-trip
-  // for the regular cart → checkout path.
+  // intercepting here gives the customer immediate inline feedback and
+  // avoids the "click checkout, get redirected, see error" round-trip for
+  // the regular cart → checkout path. Fails closed: if the handler itself
+  // throws, the click is still blocked and a generic error surfaces, so
+  // a future bug here doesn't accidentally let a misconfigured cart slip
+  // past both layers.
   useEffect(() => {
     function handler(event: Event) {
-      const target = event.target;
-      if (!(target instanceof Element)) return;
-      const checkoutEl = target.closest(CHECKOUT_BUTTON_SELECTOR);
-      if (!checkoutEl) return;
-      const missing = describeMissingSelections(state);
-      if (!missing) return;
-      event.preventDefault();
-      event.stopPropagation();
-      state.error.value = missing;
-      rootEl.scrollIntoView({ behavior: "smooth", block: "start" });
+      try {
+        const target = event.target;
+        if (!(target instanceof Element)) return;
+        const checkoutEl = target.closest(CHECKOUT_BUTTON_SELECTOR);
+        if (!checkoutEl) return;
+        const missing = describeMissingSelections(state);
+        if (!missing) return;
+        event.preventDefault();
+        event.stopPropagation();
+        state.error.value = missing;
+        rootEl.scrollIntoView({ behavior: "smooth", block: "start" });
+      } catch (err) {
+        console.error("[ordak] checkout interceptor failed", err);
+        event.preventDefault();
+        event.stopPropagation();
+        state.error.value = "Couldn't verify your cart. Please refresh the page.";
+      }
     }
     document.addEventListener("click", handler, true);
     return () => document.removeEventListener("click", handler, true);

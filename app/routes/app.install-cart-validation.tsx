@@ -1,7 +1,5 @@
-// One-shot install page for the cart-validation Function. Same shape as
-// app.install-delivery-customization.tsx — finds the deployed function in
-// the shop, creates a validation if none exists, or re-enables an existing
-// disabled one. Idempotent.
+// One-shot, idempotent install page for the cart-validation Function.
+// Phase D will replace with a proper admin UI surface.
 
 import { json, type LoaderFunctionArgs } from "@remix-run/node";
 import { useLoaderData } from "@remix-run/react";
@@ -129,7 +127,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
         mutation OrdakGoCreateValidation($validation: ValidationCreateInput!) {
           validationCreate(validation: $validation) {
             validation { id title enabled functionId }
-            userErrors { field message }
+            userErrors { field message code }
           }
         }`,
       {
@@ -142,15 +140,49 @@ export async function loader({ request }: LoaderFunctionArgs) {
         },
       },
     );
-    const createBody = await createRes.json();
-    const errs = createBody.data?.validationCreate?.userErrors ?? [];
-    if (errs.length) {
+    const createBody = (await createRes.json()) as GqlBody<{
+      validationCreate?: {
+        validation?: { id: string; enabled: boolean; functionId: string };
+        userErrors?: Array<{ field?: string[]; message: string; code?: string | null }>;
+      };
+    }>;
+    if (Array.isArray(createBody.errors) && createBody.errors.length > 0) {
       return json<Status>({
         ok: false,
-        message: `Create failed: ${errs.map((e: { message: string }) => e.message).join(", ")}`,
+        message: `GraphQL error creating validation: ${createBody.errors.map((e) => e.message).join(", ")}`,
       });
     }
-    const created = createBody.data.validationCreate.validation;
+    const errs = createBody.data?.validationCreate?.userErrors ?? [];
+    if (errs.length) {
+      // Shopify caps active checkout validations per shop. The user-facing
+      // message it returns is generic — translate to a directed action so
+      // the merchant doesn't have to guess.
+      const limitErr = errs.find(
+        (e) =>
+          e.code === "MAX_VALIDATIONS" ||
+          /maximum/i.test(e.message) ||
+          /limit/i.test(e.message),
+      );
+      if (limitErr) {
+        return json<Status>({
+          ok: false,
+          message:
+            "This shop has reached its checkout-validations limit. Disable an unused validation in Settings → Checkout, then refresh this page.",
+        });
+      }
+      return json<Status>({
+        ok: false,
+        message: `Create failed: ${errs.map((e) => e.message).join(", ")}`,
+      });
+    }
+    const created = createBody.data?.validationCreate?.validation;
+    if (!created) {
+      return json<Status>({
+        ok: false,
+        message:
+          "Create returned no validation. The mutation succeeded with no payload — check Shopify status and retry.",
+      });
+    }
     return json<Status>({
       ok: true,
       message: "Installed.",

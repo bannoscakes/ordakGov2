@@ -12,9 +12,8 @@ function nonEmpty(v: string | null | undefined): boolean {
   return typeof v === "string" && v.trim().length > 0;
 }
 
-// Resolve the customer's delivery_method choice: prefer line-level (the seam
-// the Carrier Service and Delivery Customization function both read), fall
-// back to cart-level which the cart-block writes first.
+// Prefer line-level _delivery_method (matches Carrier Service + C.5 Function
+// reads); fall back to cart-level which the cart-block writes first.
 function readChoice(input: CartValidationsGenerateRunInput): "delivery" | "pickup" | null {
   for (const line of input.cart.lines) {
     const v = line.lineDeliveryMethod?.value;
@@ -47,6 +46,21 @@ function rejectWith(message: string): CartValidationsGenerateRunResult {
 export function cartValidationsGenerateRun(
   input: CartValidationsGenerateRunInput,
 ): CartValidationsGenerateRunResult {
+  // Fail closed on any uncaught throw. Shopify Functions silently treat a
+  // thrown error as "no validation operations" — i.e. checkout proceeds
+  // unguarded. That breaks the whole point of this function. Catching here
+  // ensures any future bug surfaces as a polite blocking error instead of a
+  // silent gap in the gate.
+  try {
+    return run(input);
+  } catch {
+    return rejectWith(
+      "Checkout temporarily unavailable. Please refresh your cart and try again.",
+    );
+  }
+}
+
+function run(input: CartValidationsGenerateRunInput): CartValidationsGenerateRunResult {
   const choice = readChoice(input);
 
   if (!choice) {
@@ -61,8 +75,7 @@ export function cartValidationsGenerateRun(
   }
 
   if (choice === "delivery") {
-    // Delivery requires either a resolved zone (cart-block writes once
-    // postcode matches) or at minimum a location id (loose fallback).
+    // Loose fallback: zone is the strict signal, location alone is acceptable.
     const zoneId = firstLineProperty(input, "zoneId");
     const locationId = firstLineProperty(input, "locationId");
     if (!zoneId && !locationId) {
@@ -71,7 +84,6 @@ export function cartValidationsGenerateRun(
       );
     }
   } else {
-    // Pickup needs an explicit pickup location.
     const locationId = firstLineProperty(input, "locationId");
     if (!locationId) {
       return rejectWith(
