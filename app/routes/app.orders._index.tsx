@@ -327,6 +327,19 @@ function formatMonthParam(year: number, monthIndex: number): string {
 }
 
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const DELIVERY_COLOR = "#3b82f6";
+const PICKUP_COLOR = "#1a8917";
+
+type DayOrder = {
+  id: string;
+  shopifyOrderId: string;
+  shopifyOrderNumber: string | null;
+  status: string;
+  fulfillmentType: string;
+  timeStart: string;
+  timeEnd: string;
+  locationName: string;
+};
 
 export default function OrdersIndex() {
   const data = useLoaderData<typeof loader>();
@@ -416,8 +429,6 @@ function CalendarView({
 
   const ordersInOpenDate = openDate ? data.ordersByDate[openDate] ?? [] : [];
   const isWeek = data.range === "week";
-  const cellMinHeight = isWeek ? 240 : 100;
-  const tileLimit = isWeek ? MAX_DAY_TILES_VISIBLE.week : MAX_DAY_TILES_VISIBLE.month;
 
   return (
     <BlockStack gap="400">
@@ -434,106 +445,30 @@ function CalendarView({
             <Button pressed={isWeek} onClick={() => setRange("week")}>Week</Button>
           </ButtonGroup>
           <InlineStack gap="200" blockAlign="center">
-            <LegendDot color="#2c5ecf" /><Text as="span" variant="bodySm">Delivery</Text>
-            <LegendDot color="#1a8917" /><Text as="span" variant="bodySm">Pickup</Text>
+            <LegendDot color={DELIVERY_COLOR} /><Text as="span" variant="bodySm">Delivery</Text>
+            <LegendDot color={PICKUP_COLOR} /><Text as="span" variant="bodySm">Pickup</Text>
           </InlineStack>
         </InlineStack>
       </InlineStack>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(7, 1fr)",
-          gap: 4,
-        }}
-      >
-        {WEEKDAY_LABELS.map((label) => (
-          <div
-            key={label}
-            style={{
-              padding: "8px 6px",
-              fontSize: 12,
-              fontWeight: 600,
-              textTransform: "uppercase",
-              color: "var(--p-color-text-subdued, #6d7175)",
-              textAlign: "center",
-            }}
-          >
-            {label}
-          </div>
-        ))}
-        {data.days.map((day) => {
-          const inMonth = day >= data.monthStart && day <= data.monthEnd;
-          const isToday = day === data.today;
-          const orders = data.ordersByDate[day] ?? [];
-          const cap = data.capacityByDate[day];
-          const dayNum = parseInt(day.slice(8, 10), 10);
-          return (
-            <button
-              key={day}
-              type="button"
-              onClick={() => setOpenDate(day)}
-              style={{
-                minHeight: cellMinHeight,
-                padding: 6,
-                background: inMonth ? "#fff" : "#f6f6f7",
-                border: isToday ? "2px solid #1a1a1a" : "1px solid #e3e3e3",
-                borderRadius: 6,
-                textAlign: "left",
-                cursor: "pointer",
-                opacity: inMonth ? 1 : 0.55,
-                display: "flex",
-                flexDirection: "column",
-                gap: 4,
-              }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 4 }}>
-                <span style={{ fontWeight: isToday ? 700 : 500, fontSize: 13 }}>{dayNum}</span>
-                <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                  {cap && cap.delivery.capacity > 0 ? (
-                    <CapacityPill
-                      booked={cap.delivery.booked}
-                      capacity={cap.delivery.capacity}
-                      color="#2c5ecf"
-                      label="Delivery"
-                    />
-                  ) : null}
-                  {cap && cap.pickup.capacity > 0 ? (
-                    <CapacityPill
-                      booked={cap.pickup.booked}
-                      capacity={cap.pickup.capacity}
-                      color="#1a8917"
-                      label="Pickup"
-                    />
-                  ) : null}
-                </div>
-              </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 2 }}>
-                {orders.slice(0, tileLimit).map((o) => (
-                  <span
-                    key={o.id}
-                    style={{
-                      fontSize: 11,
-                      padding: "2px 6px",
-                      borderRadius: 10,
-                      color: "#fff",
-                      background: o.fulfillmentType === "pickup" ? "#1a8917" : "#2c5ecf",
-                    }}
-                    title={`${o.timeStart}–${o.timeEnd} · ${o.locationName}`}
-                  >
-                    #{o.shopifyOrderNumber || o.shopifyOrderId.slice(-4)}
-                  </span>
-                ))}
-                {orders.length > tileLimit ? (
-                  <span style={{ fontSize: 11, color: "var(--p-color-text-subdued, #6d7175)" }}>
-                    +{orders.length - tileLimit} more
-                  </span>
-                ) : null}
-              </div>
-            </button>
-          );
-        })}
-      </div>
+      {isWeek ? (
+        <WeekColumns
+          days={data.days}
+          ordersByDate={data.ordersByDate}
+          today={data.today}
+          onOrderClick={(o) => navigate(`/app/orders/${o.shopifyOrderId}/reschedule`)}
+        />
+      ) : (
+        <MonthGrid
+          days={data.days}
+          ordersByDate={data.ordersByDate}
+          capacityByDate={data.capacityByDate}
+          monthStart={data.monthStart}
+          monthEnd={data.monthEnd}
+          today={data.today}
+          onDayClick={(day) => setOpenDate(day)}
+        />
+      )}
 
       <Modal
         open={openDate !== null}
@@ -584,6 +519,235 @@ function CalendarView({
         </Modal.Section>
       </Modal>
     </BlockStack>
+  );
+}
+
+function WeekColumns({
+  days,
+  ordersByDate,
+  today,
+  onOrderClick,
+}: {
+  days: string[];
+  ordersByDate: Record<string, DayOrder[]>;
+  today: string;
+  onOrderClick: (o: DayOrder) => void;
+}) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(7, 1fr)",
+        gap: 0,
+      }}
+    >
+      {days.map((day, idx) => {
+        const orders = ordersByDate[day] ?? [];
+        const dayNum = parseInt(day.slice(8, 10), 10);
+        const isToday = day === today;
+        return (
+          <div
+            key={day}
+            style={{
+              borderRight: idx < days.length - 1 ? "1px solid #e3e3e3" : "none",
+              padding: "12px 12px 24px",
+              minWidth: 0,
+            }}
+          >
+            <div style={{ textAlign: "center", marginBottom: 16 }}>
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: "0.08em",
+                  color: DELIVERY_COLOR,
+                  textTransform: "uppercase",
+                }}
+              >
+                {WEEKDAY_LABELS[idx]}
+              </div>
+              <div
+                style={{
+                  fontSize: 32,
+                  fontWeight: 600,
+                  color: DELIVERY_COLOR,
+                  margin: "4px 0",
+                  fontVariantNumeric: "tabular-nums",
+                  textDecoration: isToday ? "underline" : "none",
+                  textUnderlineOffset: 4,
+                }}
+              >
+                {dayNum}
+              </div>
+              <span
+                style={{
+                  display: "inline-block",
+                  padding: "2px 12px",
+                  background: isToday ? "#dbeafe" : "#f1f5f9",
+                  color: isToday ? DELIVERY_COLOR : "#475569",
+                  borderRadius: 12,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                {orders.length}
+              </span>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {orders.map((o) => (
+                <OrderPill key={o.id} order={o} onClick={() => onOrderClick(o)} />
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function OrderPill({ order, onClick }: { order: DayOrder; onClick: () => void }) {
+  const dotColor = order.fulfillmentType === "pickup" ? PICKUP_COLOR : DELIVERY_COLOR;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={`${order.timeStart}–${order.timeEnd} · ${order.locationName} · ${order.status}`}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "5px 12px",
+        border: "1px solid #d4d4d8",
+        borderRadius: 16,
+        background: "#fff",
+        fontSize: 13,
+        color: DELIVERY_COLOR,
+        cursor: "pointer",
+        width: "100%",
+        textAlign: "left",
+        fontVariantNumeric: "tabular-nums",
+      }}
+    >
+      <span
+        aria-hidden="true"
+        style={{
+          width: 8,
+          height: 8,
+          borderRadius: 4,
+          flexShrink: 0,
+          background: dotColor,
+        }}
+      />
+      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        #{order.shopifyOrderNumber || order.shopifyOrderId.slice(-6)}
+      </span>
+    </button>
+  );
+}
+
+function MonthGrid({
+  days,
+  ordersByDate,
+  capacityByDate,
+  monthStart,
+  monthEnd,
+  today,
+  onDayClick,
+}: {
+  days: string[];
+  ordersByDate: Record<string, DayOrder[]>;
+  capacityByDate: Record<
+    string,
+    {
+      delivery: { booked: number; capacity: number };
+      pickup: { booked: number; capacity: number };
+    }
+  >;
+  monthStart: string;
+  monthEnd: string;
+  today: string;
+  onDayClick: (day: string) => void;
+}) {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+      {WEEKDAY_LABELS.map((label) => (
+        <div
+          key={label}
+          style={{
+            padding: "8px 6px",
+            fontSize: 12,
+            fontWeight: 600,
+            textTransform: "uppercase",
+            color: "var(--p-color-text-subdued, #6d7175)",
+            textAlign: "center",
+          }}
+        >
+          {label}
+        </div>
+      ))}
+      {days.map((day) => {
+        const inMonth = day >= monthStart && day <= monthEnd;
+        const isToday = day === today;
+        const orders = ordersByDate[day] ?? [];
+        const cap = capacityByDate[day];
+        const dayNum = parseInt(day.slice(8, 10), 10);
+        return (
+          <button
+            key={day}
+            type="button"
+            onClick={() => onDayClick(day)}
+            style={{
+              minHeight: 100,
+              padding: 6,
+              background: inMonth ? "#fff" : "#f6f6f7",
+              border: isToday ? "2px solid #1a1a1a" : "1px solid #e3e3e3",
+              borderRadius: 6,
+              textAlign: "left",
+              cursor: "pointer",
+              opacity: inMonth ? 1 : 0.55,
+              display: "flex",
+              flexDirection: "column",
+              gap: 4,
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 4 }}>
+              <span style={{ fontWeight: isToday ? 700 : 500, fontSize: 13 }}>{dayNum}</span>
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                {cap && cap.delivery.capacity > 0 ? (
+                  <CapacityPill booked={cap.delivery.booked} capacity={cap.delivery.capacity} color={DELIVERY_COLOR} label="Delivery" />
+                ) : null}
+                {cap && cap.pickup.capacity > 0 ? (
+                  <CapacityPill booked={cap.pickup.booked} capacity={cap.pickup.capacity} color={PICKUP_COLOR} label="Pickup" />
+                ) : null}
+              </div>
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 2 }}>
+              {orders.slice(0, MAX_DAY_TILES_VISIBLE.month).map((o) => (
+                <span
+                  key={o.id}
+                  style={{
+                    fontSize: 11,
+                    padding: "2px 6px",
+                    borderRadius: 10,
+                    color: "#fff",
+                    background: o.fulfillmentType === "pickup" ? PICKUP_COLOR : DELIVERY_COLOR,
+                  }}
+                  title={`${o.timeStart}–${o.timeEnd} · ${o.locationName}`}
+                >
+                  #{o.shopifyOrderNumber || o.shopifyOrderId.slice(-4)}
+                </span>
+              ))}
+              {orders.length > MAX_DAY_TILES_VISIBLE.month ? (
+                <span style={{ fontSize: 11, color: "var(--p-color-text-subdued, #6d7175)" }}>
+                  +{orders.length - MAX_DAY_TILES_VISIBLE.month} more
+                </span>
+              ) : null}
+            </div>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
