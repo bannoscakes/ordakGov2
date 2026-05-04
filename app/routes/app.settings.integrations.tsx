@@ -89,9 +89,15 @@ export default function SettingsIntegrations() {
               </InlineStack>
               <Text as="p" tone="subdued" variant="bodySm">
                 Push order/scheduling events to external systems (your delivery routing platform,
-                ERP, etc.). Coming in a follow-up — schema reservation is in place; the admin UI
-                and dispatcher runtime ship in D9.
+                ERP, manufacturing pipeline). Each destination receives signed POST requests for
+                matching events; failures are tracked per destination so a broken receiver
+                surfaces here, not in the merchant's downstream pipeline.
               </Text>
+              <InlineStack gap="200">
+                <Button onClick={() => navigate("/app/settings/webhook-destinations")}>
+                  {webhookDestinationCount > 0 ? "Manage destinations" : "Add a destination"}
+                </Button>
+              </InlineStack>
             </BlockStack>
           </Card>
         </Layout.Section>

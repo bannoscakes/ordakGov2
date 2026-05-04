@@ -2,6 +2,7 @@ import { json, type ActionFunctionArgs } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { logger } from "../utils/logger.server";
+import { writeEventLogTx, dispatchEventLog, type DispatchableEventLog } from "../services/event-log.server";
 
 /**
  * API endpoint for customers to reschedule their orders
@@ -78,6 +79,7 @@ export async function action({ request }: ActionFunctionArgs) {
     }
 
     const oldSlotId = orderLink.slotId;
+    let pendingEvent: DispatchableEventLog | null = null;
 
     // Perform the reschedule in a transaction
     await prisma.$transaction(async (tx) => {
@@ -110,8 +112,11 @@ export async function action({ request }: ActionFunctionArgs) {
         },
       });
 
-      // Create event log entry
-      await tx.eventLog.create({
+      // Write the event row inside the transaction so a rolled-back
+      // reschedule never logs a phantom event. Dispatch happens after the
+      // transaction commits — webhook receivers shouldn't hold DB locks.
+      pendingEvent = await writeEventLogTx({
+        tx,
         data: {
           orderLinkId: orderLink.id,
           eventType: "order.schedule_updated",
@@ -139,6 +144,10 @@ export async function action({ request }: ActionFunctionArgs) {
         },
       });
     });
+
+    if (pendingEvent) {
+      await dispatchEventLog(shop.id, pendingEvent);
+    }
 
     return json({
       success: true,

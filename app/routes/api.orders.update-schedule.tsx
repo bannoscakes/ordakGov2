@@ -14,6 +14,7 @@ import { json } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { logger } from "../utils/logger.server";
+import { recordEvent } from "../services/event-log.server";
 import {
   addOrderMetafields,
   addOrderTags,
@@ -116,8 +117,9 @@ export async function action({ request }: ActionFunctionArgs) {
       },
     });
 
-    // Log the event
-    await prisma.eventLog.create({
+    // Log + dispatch to webhook destinations.
+    await recordEvent({
+      shopId: newSlot.location.shopId,
       data: {
         orderLinkId: updatedLink.id,
         eventType: "order.schedule_updated",

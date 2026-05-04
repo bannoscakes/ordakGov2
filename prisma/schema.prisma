@@ -337,22 +337,35 @@ model CustomerPreferences {
 }
 
 // Schema reservation only — no UI, no runtime path yet.
-// Per the "design pluggable now, build later" business rule, this lets
-// merchants register external webhook receivers (e.g. their own ordak
-// dispatch endpoint) for order/scheduling events without a future
-// migration churn. Build the dispatcher in a later phase.
+// Outbound webhook receivers configured by the merchant (e.g. their own
+// ordak dispatch endpoint, ERP, delivery routing system) for
+// order/scheduling events. The dispatcher fires on EventLog writes and
+// signs each request with the destination's HMAC secret.
 model WebhookDestination {
   id          String   @id @default(cuid())
   shopId      String
   shop        Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   url         String
-  secret      String   // HMAC signing secret
-  enabled     Boolean  @default(true)
+  secret      String   // HMAC signing secret (X-Ordak-Signature: sha256=...)
+
+  // Default false: the merchant configures the receiver on their side
+  // first, then flips this on. Auto-enabling on create would let a
+  // half-configured receiver miss its first batch of events.
+  enabled     Boolean  @default(false)
 
   // Subset of EventLog.eventType values this destination subscribes to.
   // Empty array means "all events".
   eventTypes  String[]
+
+  // Health tracking. Bumped by the dispatcher on each delivery attempt.
+  // The admin surfaces lastError + consecutiveFailures so the merchant
+  // can see "this receiver has been failing for 3 days" instead of
+  // discovering it only when their downstream pipeline is empty.
+  lastSuccessAt        DateTime?
+  lastFailureAt        DateTime?
+  lastError            String?
+  consecutiveFailures  Int      @default(0)
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
