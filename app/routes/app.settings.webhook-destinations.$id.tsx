@@ -1,0 +1,351 @@
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
+import { json, redirect } from "@remix-run/node";
+import {
+  Form,
+  useActionData,
+  useLoaderData,
+  useNavigation,
+  useSearchParams,
+  useSubmit,
+} from "@remix-run/react";
+import {
+  Page,
+  Layout,
+  Card,
+  Text,
+  BlockStack,
+  Banner,
+  Button,
+  Checkbox,
+  TextField,
+  FormLayout,
+  InlineStack,
+  Modal,
+  Badge,
+} from "@shopify/polaris";
+import { useState } from "react";
+import { Prisma } from "@prisma/client";
+import { authenticate } from "../shopify.server";
+import prisma from "../db.server";
+import { logger } from "../utils/logger.server";
+
+const KNOWN_EVENT_TYPES = [
+  { value: "order.scheduled", label: "Order scheduled" },
+  { value: "order.schedule_updated", label: "Order schedule updated" },
+  { value: "order.schedule_canceled", label: "Order schedule canceled" },
+  { value: "order.shopify_writes_attempted", label: "Order webhook write attempted" },
+];
+
+export async function loader({ request, params }: LoaderFunctionArgs) {
+  const { session } = await authenticate.admin(request);
+  const { id } = params;
+  if (!id) throw new Response("Destination id required", { status: 400 });
+
+  const shop = await prisma.shop.findUnique({
+    where: { shopifyDomain: session.shop },
+    select: { id: true },
+  });
+  if (!shop) {
+    throw new Response("Shop not found — reinstall the app", { status: 404 });
+  }
+  const dest = await prisma.webhookDestination.findFirst({
+    where: { id, shopId: shop.id },
+  });
+  if (!dest) {
+    throw new Response("Webhook destination not found", { status: 404 });
+  }
+  return json({
+    dest: {
+      id: dest.id,
+      url: dest.url,
+      // Secret is sensitive — only the masked tail is sent to the client.
+      // The merchant can rotate by entering a new value (or blank → keep).
+      secretMasked: dest.secret.length > 8
+        ? `…${dest.secret.slice(-8)}`
+        : "(short secret)",
+      enabled: dest.enabled,
+      eventTypes: dest.eventTypes,
+      consecutiveFailures: dest.consecutiveFailures,
+      lastSuccessAt: dest.lastSuccessAt?.toISOString() ?? null,
+      lastFailureAt: dest.lastFailureAt?.toISOString() ?? null,
+      lastError: dest.lastError,
+      createdAt: dest.createdAt.toISOString(),
+    },
+  });
+}
+
+type ActionResult = { ok: true } | { ok: false; error: string };
+
+export async function action({ request, params }: ActionFunctionArgs) {
+  const { session } = await authenticate.admin(request);
+  const { id } = params;
+  if (!id) {
+    return json<ActionResult>({ ok: false, error: "Destination id required" }, { status: 400 });
+  }
+  const shop = await prisma.shop.findUnique({
+    where: { shopifyDomain: session.shop },
+    select: { id: true },
+  });
+  if (!shop) {
+    return json<ActionResult>({ ok: false, error: "Shop not found" }, { status: 404 });
+  }
+
+  try {
+    const formData = await request.formData();
+    const intent = formData.get("intent");
+
+    if (intent === "delete") {
+      await prisma.webhookDestination.deleteMany({
+        where: { id, shopId: shop.id },
+      });
+      return redirect("/app/settings/webhook-destinations");
+    }
+
+    if (intent === "save") {
+      const url = ((formData.get("url") as string | null) || "").trim();
+      const newSecret = ((formData.get("secret") as string | null) || "").trim();
+      const enabled = formData.get("enabled") === "true";
+      const eventTypes = ((formData.get("eventTypes") as string | null) || "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+
+      if (!url) {
+        return json<ActionResult>({ ok: false, error: "URL is required" }, { status: 400 });
+      }
+      try {
+        new URL(url);
+      } catch {
+        return json<ActionResult>({ ok: false, error: "URL is not a valid URL" }, { status: 400 });
+      }
+      if (newSecret && newSecret.length < 16) {
+        return json<ActionResult>(
+          { ok: false, error: "New secret must be at least 16 characters (or leave blank to keep the existing one)" },
+          { status: 400 },
+        );
+      }
+
+      const updateData: { url: string; enabled: boolean; eventTypes: string[]; secret?: string } = {
+        url,
+        enabled,
+        eventTypes,
+      };
+      if (newSecret) updateData.secret = newSecret;
+
+      // Reset failure counters on save so the merchant can confirm a fix
+      // by saving (e.g. correcting a URL) without manually clearing
+      // counters elsewhere.
+      try {
+        await prisma.webhookDestination.update({
+          where: { id, shopId: shop.id } as unknown as Prisma.WebhookDestinationWhereUniqueInput,
+          data: { ...updateData, consecutiveFailures: 0, lastError: null },
+        });
+      } catch {
+        // findFirst→update is the typical "scope by shop" pattern for
+        // multi-tenant updates. If the destination was deleted between
+        // load and save, fail loudly.
+        const exists = await prisma.webhookDestination.findFirst({ where: { id, shopId: shop.id } });
+        if (!exists) {
+          return json<ActionResult>({ ok: false, error: "Destination no longer exists" }, { status: 404 });
+        }
+        throw new Error("Update failed");
+      }
+      return redirect(`/app/settings/webhook-destinations/${id}?saved=1`);
+    }
+
+    return json<ActionResult>({ ok: false, error: "Unknown intent" }, { status: 400 });
+  } catch (error) {
+    logger.error("Webhook destination update failed", error, { shop: session.shop, id });
+    return json<ActionResult>({ ok: false, error: "Save failed. Please try again." }, { status: 500 });
+  }
+}
+
+export default function EditWebhookDestination() {
+  const { dest } = useLoaderData<typeof loader>();
+  const actionData = useActionData<typeof action>();
+  const navigation = useNavigation();
+  const submit = useSubmit();
+  const [searchParams] = useSearchParams();
+  const isLoading = navigation.state === "submitting";
+
+  const [url, setUrl] = useState(dest.url);
+  const [secret, setSecret] = useState("");
+  const [enabled, setEnabled] = useState(dest.enabled);
+  const [selectedTypes, setSelectedTypes] = useState<string[]>(dest.eventTypes);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+
+  const errorMessage = actionData && actionData.ok === false ? actionData.error : null;
+  const justSaved = searchParams.get("saved") === "1";
+  const justCreated = searchParams.get("created") === "1";
+
+  const toggleType = (value: string) => {
+    setSelectedTypes((prev) =>
+      prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value],
+    );
+  };
+
+  const onDelete = () => {
+    const fd = new FormData();
+    fd.append("intent", "delete");
+    submit(fd, { method: "post" });
+    setDeleteOpen(false);
+  };
+
+  return (
+    <Page
+      title="Edit webhook destination"
+      backAction={{ content: "Webhook destinations", url: "/app/settings/webhook-destinations" }}
+      secondaryActions={[
+        {
+          content: "Delete",
+          destructive: true,
+          onAction: () => setDeleteOpen(true),
+        },
+      ]}
+    >
+      <Layout>
+        {justCreated && (
+          <Layout.Section>
+            <Banner tone="success" title="Destination created">
+              <p>
+                Make sure your receiver is configured with the secret before flipping the
+                enable toggle. The secret is shown masked once saved — keep a copy of it
+                if you need it on the receiver side.
+              </p>
+            </Banner>
+          </Layout.Section>
+        )}
+        {justSaved && !errorMessage && (
+          <Layout.Section>
+            <Banner tone="success">Saved.</Banner>
+          </Layout.Section>
+        )}
+        {errorMessage && (
+          <Layout.Section>
+            <Banner tone="critical">{errorMessage}</Banner>
+          </Layout.Section>
+        )}
+
+        {dest.consecutiveFailures > 0 && dest.lastError && (
+          <Layout.Section>
+            <Banner tone="warning" title={`${dest.consecutiveFailures} consecutive delivery failure${dest.consecutiveFailures === 1 ? "" : "s"}`}>
+              <Text as="p" variant="bodySm">
+                Last error: <code>{dest.lastError}</code>
+              </Text>
+              <Text as="p" tone="subdued" variant="bodySm">
+                Last failure {dest.lastFailureAt ? new Date(dest.lastFailureAt).toLocaleString("en-AU") : "—"}.
+                Saving this destination resets the counter.
+              </Text>
+            </Banner>
+          </Layout.Section>
+        )}
+
+        <Layout.Section>
+          <Form method="post">
+            <input type="hidden" name="intent" value="save" />
+            <input type="hidden" name="enabled" value={enabled.toString()} />
+            <input type="hidden" name="eventTypes" value={selectedTypes.join(",")} />
+            <FormLayout>
+              <Card>
+                <BlockStack gap="400">
+                  <Text as="h2" variant="headingMd">Receiver</Text>
+                  <TextField
+                    label="URL"
+                    name="url"
+                    value={url}
+                    onChange={setUrl}
+                    autoComplete="off"
+                    requiredIndicator
+                  />
+                  <TextField
+                    label="Rotate HMAC secret"
+                    name="secret"
+                    value={secret}
+                    onChange={setSecret}
+                    placeholder="Leave blank to keep existing secret"
+                    helpText={`Existing secret ends in ${dest.secretMasked}. Enter at least 16 characters to rotate.`}
+                    autoComplete="off"
+                    type="password"
+                  />
+                </BlockStack>
+              </Card>
+
+              <Card>
+                <BlockStack gap="300">
+                  <Text as="h2" variant="headingMd">Subscribed events</Text>
+                  <Text as="p" tone="subdued" variant="bodySm">
+                    Empty = subscribe to all events.
+                  </Text>
+                  <BlockStack gap="200">
+                    {KNOWN_EVENT_TYPES.map((t) => (
+                      <Checkbox
+                        key={t.value}
+                        label={t.label}
+                        helpText={t.value}
+                        checked={selectedTypes.includes(t.value)}
+                        onChange={() => toggleType(t.value)}
+                      />
+                    ))}
+                  </BlockStack>
+                </BlockStack>
+              </Card>
+
+              <Card>
+                <BlockStack gap="300">
+                  <Checkbox
+                    label="Enabled"
+                    helpText="Disabled destinations skip dispatch but stay in the list."
+                    checked={enabled}
+                    onChange={setEnabled}
+                  />
+                </BlockStack>
+              </Card>
+
+              <Card>
+                <BlockStack gap="200">
+                  <Text as="h3" variant="headingMd">Health</Text>
+                  <InlineStack gap="200" wrap>
+                    <Badge tone={dest.consecutiveFailures === 0 ? "success" : dest.consecutiveFailures >= 3 ? "critical" : "warning"}>
+                      {`${dest.consecutiveFailures} consecutive failure${dest.consecutiveFailures === 1 ? "" : "s"}`}
+                    </Badge>
+                  </InlineStack>
+                  <Text as="p" tone="subdued" variant="bodySm">
+                    Last success: {dest.lastSuccessAt ? new Date(dest.lastSuccessAt).toLocaleString("en-AU") : "never"}
+                  </Text>
+                  <Text as="p" tone="subdued" variant="bodySm">
+                    Last failure: {dest.lastFailureAt ? new Date(dest.lastFailureAt).toLocaleString("en-AU") : "never"}
+                  </Text>
+                  <Text as="p" tone="subdued" variant="bodySm">
+                    Created: {new Date(dest.createdAt).toLocaleString("en-AU")}
+                  </Text>
+                </BlockStack>
+              </Card>
+
+              <InlineStack align="end">
+                <Button variant="primary" submit loading={isLoading}>Save</Button>
+              </InlineStack>
+            </FormLayout>
+          </Form>
+        </Layout.Section>
+      </Layout>
+
+      <Modal
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        title="Delete webhook destination"
+        primaryAction={{ content: "Delete", destructive: true, onAction: onDelete }}
+        secondaryActions={[{ content: "Cancel", onAction: () => setDeleteOpen(false) }]}
+      >
+        <Modal.Section>
+          <BlockStack gap="300">
+            <Text as="p">Delete the webhook destination at <code>{dest.url}</code>?</Text>
+            <Text as="p" tone="critical">
+              This cannot be undone. Future events won't be dispatched here. Your downstream
+              system stops receiving notifications.
+            </Text>
+          </BlockStack>
+        </Modal.Section>
+      </Modal>
+    </Page>
+  );
+}

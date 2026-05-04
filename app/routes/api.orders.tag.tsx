@@ -17,6 +17,7 @@ import { json } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { logger } from "../utils/logger.server";
+import { recordEvent } from "../services/event-log.server";
 
 interface OrderTagRequest {
   orderId: string;
@@ -81,6 +82,7 @@ export async function action({ request }: ActionFunctionArgs) {
             province: true,
             country: true,
             postalCode: true,
+            shopId: true,
           },
         },
       },
@@ -135,8 +137,9 @@ export async function action({ request }: ActionFunctionArgs) {
       },
     });
 
-    // Log the event
-    await prisma.eventLog.create({
+    // Log + dispatch to webhook destinations.
+    await recordEvent({
+      shopId: slot.location.shopId,
       data: {
         orderLinkId: orderLink.id,
         eventType: "order.scheduled",
