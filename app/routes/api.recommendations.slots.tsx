@@ -258,6 +258,14 @@ export async function action({ request }: ActionFunctionArgs) {
       otherDeliveries
     );
 
+    // Slot.priceAdjustment isn't part of the recommendation engine's input
+    // type — look it up from the original DB rows by id so the cart-block can
+    // render "+$X" on tiles with a non-zero adjustment.
+    const priceAdjustmentById = new Map<string, string>();
+    for (const s of slots) {
+      priceAdjustmentById.set(s.id, s.priceAdjustment.toString());
+    }
+
     // Format response
     const response = {
       slots: recommendations.map((rec) => ({
@@ -270,6 +278,7 @@ export async function action({ request }: ActionFunctionArgs) {
         reason: rec.reason,
         capacityRemaining: rec.slot.capacity - rec.slot.booked,
         capacity: rec.slot.capacity,
+        priceAdjustment: priceAdjustmentById.get(rec.id) ?? "0",
         locationId: rec.slot.locationId,
         fulfillmentType: rec.slot.fulfillmentType,
         factors: {

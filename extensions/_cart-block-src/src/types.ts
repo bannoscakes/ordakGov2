@@ -47,6 +47,9 @@ export interface Slot {
   reason: string;
   capacityRemaining: number;
   capacity: number;
+  // Per-slot price premium added to the zone base price (e.g. "10.00" = +$10).
+  // Decimal serialized as a string by Prisma — render as a number when displaying.
+  priceAdjustment: string;
   locationId: string;
   fulfillmentType: Fulfillment;
 }
