@@ -276,6 +276,9 @@ export function CartScheduler({ config, rootEl }: Props) {
       });
       const slots = res.slots.slice().sort((a, b) => b.recommendationScore - a.recommendationScore);
       state.slots.value = slots;
+      if (res.meta?.widgetAppearance) {
+        state.widgetAppearance.value = res.meta.widgetAppearance;
+      }
       // Only override the date if the user / handleCheckPostcode hasn't set
       // one yet. The native date input owns the chosen date — we shouldn't
       // yank it back to whatever the first slot happens to fall on.
@@ -436,6 +439,8 @@ export function CartScheduler({ config, rootEl }: Props) {
               slots={slotsForDate}
               selectedId={selectedSlot?.slotId ?? null}
               onSelect={handleSelectSlot}
+              showRecommendedBadge={state.widgetAppearance.value.showRecommendedBadge}
+              showMostAvailableBadge={state.widgetAppearance.value.showMostAvailableBadge}
             />
           )}
           {!isPickup ? (

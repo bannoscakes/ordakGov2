@@ -278,6 +278,13 @@ export async function action({ request }: ActionFunctionArgs) {
           start: startDate.toISOString().split("T")[0],
           end: endDate.toISOString().split("T")[0],
         },
+        // Widget appearance flags from Shop settings (D7). Cart-block uses
+        // these to toggle the RECOMMENDED badge and the
+        // "Most available capacity" reason text on slot tiles.
+        widgetAppearance: {
+          showRecommendedBadge: shop.showRecommendedBadge,
+          showMostAvailableBadge: shop.showMostAvailableBadge,
+        },
       },
     };
 

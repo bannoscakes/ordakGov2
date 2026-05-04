@@ -263,6 +263,7 @@ export default function Index() {
             <BlockStack gap="300">
               <Text as="h2" variant="headingMd">Tools</Text>
               <InlineStack gap="200" wrap>
+                <Button onClick={() => navigate("/app/settings")}>Settings</Button>
                 <Button onClick={() => navigate("/app/setup?step=1")}>Setup wizard</Button>
                 <Button onClick={() => navigate("/app/diagnostics")}>Diagnostics</Button>
               </InlineStack>

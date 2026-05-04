@@ -4,6 +4,8 @@ interface Props {
   slots: Slot[];
   selectedId: string | null;
   onSelect: (slot: Slot) => void;
+  showRecommendedBadge?: boolean;
+  showMostAvailableBadge?: boolean;
 }
 
 function formatRange(start: string, end: string): string {
@@ -22,7 +24,13 @@ function priceAdjustmentLabel(raw: string): string | null {
   return `+$${n.toFixed(2)}`;
 }
 
-export function SlotGrid({ slots, selectedId, onSelect }: Props) {
+export function SlotGrid({
+  slots,
+  selectedId,
+  onSelect,
+  showRecommendedBadge = false,
+  showMostAvailableBadge = true,
+}: Props) {
   if (!slots.length) {
     return (
       <p class="ordak-empty" role="status">
@@ -36,11 +44,10 @@ export function SlotGrid({ slots, selectedId, onSelect }: Props) {
       {slots.map((slot) => {
         const full = slot.capacityRemaining <= 0;
         const isSelected = slot.slotId === selectedId;
-        // Badge intentionally hidden — the reason text below conveys
-        // ranking instead. The merchant can re-enable via widget appearance
-        // settings once those exist.
+        const showRec = showRecommendedBadge && slot.recommended;
         const cls = [
           "ordak-slot",
+          showRec ? "ordak-slot--recommended" : "",
           isSelected ? "ordak-slot--active" : "",
           full ? "ordak-slot--full" : "",
         ]
@@ -58,12 +65,17 @@ export function SlotGrid({ slots, selectedId, onSelect }: Props) {
               class={cls}
               onClick={() => !full && onSelect(slot)}
             >
+              {showRec ? (
+                <span class="ordak-badge" aria-label="Recommended slot">
+                  ★ Recommended
+                </span>
+              ) : null}
               <span class="ordak-slot__time">{formatRange(slot.timeStart, slot.timeEnd)}</span>
               <span class="ordak-slot__spots">{spotsLabel(slot.capacityRemaining)}</span>
               {priceAdjustmentLabel(slot.priceAdjustment) ? (
                 <span class="ordak-slot__price">{priceAdjustmentLabel(slot.priceAdjustment)}</span>
               ) : null}
-              {slot.reason ? (
+              {showMostAvailableBadge && slot.reason ? (
                 <span class="ordak-slot__reason">{slot.reason}</span>
               ) : null}
               {full ? <span class="ordak-slot__overlay" aria-hidden="true">Fully booked</span> : null}

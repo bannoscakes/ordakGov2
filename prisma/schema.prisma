@@ -52,6 +52,12 @@ model Shop {
   personalizationWeight Float     @default(0.1)
   numAlternatives       Int       @default(3)
 
+  // Widget appearance toggles. Both default to the post-D5 cart-block
+  // behavior so existing installs see no UX change until the merchant
+  // opts in.
+  showRecommendedBadge   Boolean   @default(false)
+  showMostAvailableBadge Boolean   @default(true)
+
   locations             Location[]
   zones                 Zone[]
   rules                 Rule[]

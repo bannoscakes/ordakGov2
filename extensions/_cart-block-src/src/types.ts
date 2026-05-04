@@ -62,6 +62,12 @@ export interface SlotResponse {
     totalSlots: number;
     recommendedCount: number;
     dateRange: { start: string; end: string };
+    // Optional — older API builds don't include it. Cart-block falls back to
+    // post-D5 defaults (no RECOMMENDED badge, show capacity reason).
+    widgetAppearance?: {
+      showRecommendedBadge: boolean;
+      showMostAvailableBadge: boolean;
+    };
   };
 }
 
