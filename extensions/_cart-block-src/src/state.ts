@@ -26,6 +26,16 @@ function writeStoredFulfillment(value: Fulfillment) {
   }
 }
 
+export interface WidgetAppearance {
+  showRecommendedBadge: boolean;
+  showMostAvailableBadge: boolean;
+}
+
+const DEFAULT_WIDGET_APPEARANCE: WidgetAppearance = {
+  showRecommendedBadge: false,
+  showMostAvailableBadge: true,
+};
+
 export interface AppState {
   fulfillment: Signal<Fulfillment>;
   postcode: Signal<string>;
@@ -40,6 +50,8 @@ export interface AppState {
 
   pickupLocations: Signal<RecommendedLocation[]>;
   selectedLocation: Signal<RecommendedLocation | null>;
+
+  widgetAppearance: Signal<WidgetAppearance>;
 
   loading: Signal<{ slots: boolean; locations: boolean; eligibility: boolean }>;
   error: Signal<string | null>;
@@ -60,6 +72,7 @@ export function createState(defaultFulfillment: Fulfillment): AppState {
     selectedSlot: signal(null as Slot | null),
     pickupLocations: signal([] as RecommendedLocation[]),
     selectedLocation: signal(null as RecommendedLocation | null),
+    widgetAppearance: signal({ ...DEFAULT_WIDGET_APPEARANCE }),
     loading: signal({ slots: false, locations: false, eligibility: false }),
     error: signal(null as string | null),
   };
