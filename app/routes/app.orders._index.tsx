@@ -52,10 +52,23 @@ function parseMonth(raw: string | null): { year: number; month: number } {
 
 function parseWeekAnchor(raw: string | null): Date {
   // ?week=YYYY-MM-DD pins the week containing that date. Fallback to today.
+  // Range-validate every component AND verify the constructed Date didn't
+  // get normalized by JS — `new Date(2026, 1, 30)` silently rolls to Mar 2,
+  // so `isNaN` alone never trips. Without the round-trip check the fallback
+  // is dead code and a malformed link silently lands on a wrong week.
   if (raw && /^\d{4}-\d{2}-\d{2}$/.test(raw)) {
     const [y, m, d] = raw.split("-").map((s) => parseInt(s, 10));
-    const dt = new Date(y, m - 1, d);
-    if (!isNaN(dt.getTime())) return dt;
+    if (y >= 2000 && y <= 2100 && m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+      const dt = new Date(y, m - 1, d);
+      if (
+        !isNaN(dt.getTime()) &&
+        dt.getFullYear() === y &&
+        dt.getMonth() === m - 1 &&
+        dt.getDate() === d
+      ) {
+        return dt;
+      }
+    }
     logger.warn("Orders calendar: invalid ?week, falling back to today", { raw });
   }
   const t = new Date();
