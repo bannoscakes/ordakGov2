@@ -8,6 +8,7 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { logger } from "../utils/logger.server";
 import { scoreSlots } from "../services";
+import { postcodeMatchesZone } from "../utils/postcode-match.server";
 import type {
   SlotRecommendationInput,
   CustomerContext,
@@ -76,36 +77,65 @@ export async function action({ request }: ActionFunctionArgs) {
       ? new Date(body.dateRange.endDate)
       : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-    // Fetch available slots from database
+    // For delivery, narrow slot results to the single zone matching the
+    // customer's postcode (highest priority, ties broken by id ascending so
+    // the result agrees with eligibility check and carrier service).
+    // Pickup ignores zoneId — pickup slots aren't postcode-bound.
+    let zoneIdFilter: string | null = null;
+    if (body.fulfillmentType === "delivery" && body.postcode) {
+      const candidates = await prisma.zone.findMany({
+        where: {
+          shopId: shop.id,
+          isActive: true,
+          location: { isActive: true, supportsDelivery: true },
+        },
+        orderBy: [{ priority: "desc" }, { id: "asc" }],
+        select: { id: true, type: true, postcodes: true, excludePostcodes: true },
+      });
+      const matched = candidates.find((z) => postcodeMatchesZone(body.postcode!, z));
+      if (matched) {
+        zoneIdFilter = matched.id;
+      } else {
+        logger.info("Slots API: no matching delivery zone", {
+          shopDomain: session?.shop,
+          postcode: body.postcode,
+          candidateCount: candidates.length,
+        });
+        return json({ slots: [], message: "No service available for this postcode" });
+      }
+    }
+
     const slots = await prisma.slot.findMany({
       where: {
-        date: {
-          gte: startDate,
-          lte: endDate,
-        },
+        date: { gte: startDate, lte: endDate },
         fulfillmentType: body.fulfillmentType,
         isActive: true,
-        booked: {
-          lt: prisma.slot.fields.capacity, // Available capacity
-        },
+        booked: { lt: prisma.slot.fields.capacity },
+        ...(body.fulfillmentType === "delivery" ? { zoneId: zoneIdFilter } : {}),
         ...(body.locationId ? { locationId: body.locationId } : {}),
       },
       include: {
         location: {
-          select: {
-            id: true,
-            name: true,
-            latitude: true,
-            longitude: true,
-          },
+          select: { id: true, name: true, latitude: true, longitude: true },
         },
       },
-      orderBy: {
-        date: "asc",
-      },
+      orderBy: { date: "asc" },
     });
 
     if (slots.length === 0) {
+      // Distinct from "no zone matches" — here a zone DID match but no live
+      // Slot rows exist in the requested date range. Most likely cause:
+      // merchant configured the zone but hasn't run the slot generator
+      // (D3 Time slots & limits) for any day yet. Logging at info so the
+      // merchant can audit "service available but nothing bookable" cases.
+      logger.info("Slots API: zone matched but no available slots", {
+        shopDomain: session?.shop,
+        postcode: body.postcode,
+        zoneIdFilter,
+        fulfillmentType: body.fulfillmentType,
+        startDate: startDate.toISOString().slice(0, 10),
+        endDate: endDate.toISOString().slice(0, 10),
+      });
       return json({
         slots: [],
         message: "No available slots found in the specified date range",
@@ -212,6 +242,13 @@ export async function action({ request }: ActionFunctionArgs) {
       otherDeliveries
     );
 
+    // priceAdjustment isn't on SlotRecommendationInput — re-attach from the
+    // source rows so consumers can format it on the tile.
+    const priceAdjustmentById = new Map<string, string>();
+    for (const s of slots) {
+      priceAdjustmentById.set(s.id, s.priceAdjustment.toString());
+    }
+
     // Format response
     const response = {
       slots: recommendations.map((rec) => ({
@@ -224,6 +261,7 @@ export async function action({ request }: ActionFunctionArgs) {
         reason: rec.reason,
         capacityRemaining: rec.slot.capacity - rec.slot.booked,
         capacity: rec.slot.capacity,
+        priceAdjustment: priceAdjustmentById.get(rec.id) ?? "0",
         locationId: rec.slot.locationId,
         fulfillmentType: rec.slot.fulfillmentType,
         factors: {

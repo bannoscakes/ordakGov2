@@ -34,6 +34,8 @@ export interface EligibilityResponse {
   eligible: boolean;
   locations: EligibilityLocation[];
   services: { delivery: boolean; pickup: boolean };
+  // Matched delivery zone with its basePrice. Null for pickup or no match.
+  matchedZone?: { id: string; name: string; basePrice: string } | null;
   message?: string;
 }
 
@@ -47,6 +49,9 @@ export interface Slot {
   reason: string;
   capacityRemaining: number;
   capacity: number;
+  // Per-slot premium added to the zone base price. Prisma serializes
+  // Decimal as a string (e.g. "10.00").
+  priceAdjustment: string;
   locationId: string;
   fulfillmentType: Fulfillment;
 }

@@ -1,28 +1,21 @@
 /**
- * Carrier Service rate callback
+ * Carrier Service rate callback. Shopify POSTs here during checkout.
  *
- * Shopify POSTs to this URL during checkout to fetch shipping options. The
- * URL is registered via `carrierServiceCreate` (see app/services/
- * carrier-service.server.ts). We respond with `{ rates: [...] }` — an empty
- * rates array means "no shipping options available," which Shopify surfaces
- * to the customer as a checkout error (intentional: gates checkout when the
- * destination isn't in a delivery zone we serve).
+ * Failure mode is "no rates" (empty array), NOT a 500. Repeated 5xx makes
+ * Shopify mark the carrier service unhealthy and disable it, breaking
+ * checkout for every customer until manual re-enable. So uncaught throws
+ * collapse to `{ rates: [] }` with a logger.error trail.
  *
- * Auth model: the URL itself is the secret (only Shopify knows it after
- * registration). We additionally trust `X-Shopify-Shop-Domain` to scope
- * lookups. For production-grade defense-in-depth, add a per-shop token in
- * the URL path and validate.
- *
- * How we know which fulfillment the customer picked: cart attributes are
- * NOT included in the carrier service rate request. The cart-block mirrors
- * its selections onto every line item as `_`-prefixed properties (e.g.
- * `_delivery_method`, `_slot_id`, `_location_id`). Those DO appear at
- * `rate.items[*].properties` and are the contract this callback reads.
+ * Total = `zone.basePrice + slot.priceAdjustment` for delivery, or
+ * `slot.priceAdjustment` for pickup. Both come from our DB (per-zone admin),
+ * NOT from Shopify's flat-rate config.
  */
 
 import { json, type ActionFunctionArgs } from "@remix-run/node";
+import type { Slot, Zone } from "@prisma/client";
 import prisma from "../db.server";
 import { logger } from "../utils/logger.server";
+import { postcodeMatchesZone } from "../utils/postcode-match.server";
 
 interface RateRequestItem {
   name?: string;
@@ -57,38 +50,18 @@ interface RateRequest {
 interface RateResponse {
   service_name: string;
   service_code: string;
-  total_price: string; // cents as string, e.g. "1000"
+  total_price: string; // cents as string, e.g. "1500" = $15.00
   description: string;
   currency: string;
   min_delivery_date?: string;
   max_delivery_date?: string;
 }
 
-const DEFAULT_DELIVERY_PRICE_CENTS = 1000; // AUD 10.00 placeholder until per-zone pricing lands
-
-function normalizePostcode(postcode: string | undefined): string {
-  return (postcode ?? "").trim().toUpperCase().replace(/\s+/g, "");
-}
-
-function postcodeMatchesZone(
-  postcode: string,
-  zone: { type: string; postcodes: string[] },
-): boolean {
-  const target = normalizePostcode(postcode);
-  if (!target) return false;
-
-  if (zone.type === "postcode_list") {
-    return zone.postcodes.some((p) => normalizePostcode(p) === target);
-  }
-  // postcode_range / radius are not implemented at this layer yet — return
-  // false so callers fall through to "no rates" rather than spuriously match.
-  return false;
-}
+class InvalidPriceError extends Error {}
 
 /**
- * Pull a shared property value from line items. Carts can have multiple
- * lines, but the cart-block writes the SAME selection across all lines, so
- * we read the first non-empty value.
+ * Pull a shared property value from line items. The cart-block writes the
+ * SAME selection across all lines, so the first non-empty value wins.
  */
 function readLineItemProperty(
   items: RateRequestItem[],
@@ -101,17 +74,30 @@ function readLineItemProperty(
   return undefined;
 }
 
+/**
+ * Convert a Decimal-from-Prisma (string) or number into integer cents.
+ * `null` / `undefined` → 0 (legitimate: no slot premium configured).
+ * NaN, non-finite, or negative → throw — these indicate data corruption
+ * and the outer catch will collapse to empty rates so the customer can't
+ * silently be billed $0 for a corrupt zone.basePrice.
+ */
+function toCents(amount: { toString(): string } | number | null | undefined): number {
+  if (amount == null) return 0;
+  const n = typeof amount === "number" ? amount : Number(amount.toString());
+  if (!Number.isFinite(n) || n < 0) {
+    throw new InvalidPriceError(`toCents received invalid value: ${String(amount)}`);
+  }
+  return Math.round(n * 100);
+}
+
 export async function action({ request }: ActionFunctionArgs) {
-  // Wrap the entire callback in try/catch returning `{ rates: [] }` on
-  // any uncaught throw. The deliberate failure mode for THIS endpoint is
-  // "no rates" (which gates checkout intentionally) — NOT a 500. Shopify
-  // treats repeated 5xx responses as a carrier-service health failure
-  // and can suppress the carrier service entirely, breaking checkout
-  // for every customer until the merchant manually re-enables it. A
-  // null-traversal in the locations.find chain or a transient Prisma
-  // timeout shouldn't have that blast radius. See
-  // app/services/carrier-service.server.ts for the registration side.
   let shopifyDomain = request.headers.get("x-shopify-shop-domain") ?? undefined;
+  // Captured outside the try so the catch can pin a thrown
+  // InvalidPriceError to the specific entity that contained the bad value
+  // (instead of just "something in this request had a corrupt decimal").
+  let matchedZoneForLog: Pick<Zone, "id"> | null = null;
+  let selectedSlotForLog: Pick<Slot, "id"> | null = null;
+  let destinationPostcodeForLog: string | undefined;
   try {
     if (request.method !== "POST") {
       return json({ error: "Method not allowed" }, { status: 405 });
@@ -138,7 +124,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
     const shop = await prisma.shop.findUnique({
       where: { shopifyDomain },
-      include: { locations: true, zones: true },
+      select: { id: true },
     });
     if (!shop) {
       logger.warn("Carrier service: unknown shop", { shopifyDomain });
@@ -147,17 +133,37 @@ export async function action({ request }: ActionFunctionArgs) {
 
     const deliveryMethod = readLineItemProperty(rate.items, "_delivery_method");
     const requestedLocationId = readLineItemProperty(rate.items, "_location_id");
+    const requestedZoneId = readLineItemProperty(rate.items, "_zone_id");
     const requestedSlotId = readLineItemProperty(rate.items, "_slot_id");
 
-    // Pickup branch: customer picked pickup at a specific location in the cart.
-    // Return a single $0 rate for that location only — no delivery options.
+    // Slot lookup is shop-scoped via location.shopId so a customer cannot
+    // reference a slot from a different shop by stamping its id into
+    // _slot_id. Per-branch fulfillmentType + zone/location guards apply
+    // below.
+    let selectedSlot: Slot | null = null;
+    if (requestedSlotId) {
+      selectedSlot = await prisma.slot.findFirst({
+        where: { id: requestedSlotId, location: { shopId: shop.id } },
+      });
+      if (!selectedSlot) {
+        logger.warn("Carrier service: requested slot not found in shop", {
+          shopifyDomain,
+          requestedSlotId,
+        });
+      } else {
+        selectedSlotForLog = selectedSlot;
+      }
+    }
+
     if (deliveryMethod === "pickup") {
-      const pickupLocation = shop.locations.find(
-        (l) =>
-          (requestedLocationId ? l.id === requestedLocationId : l.supportsPickup) &&
-          l.isActive &&
-          l.supportsPickup,
-      );
+      const pickupLocation = await prisma.location.findFirst({
+        where: {
+          shopId: shop.id,
+          isActive: true,
+          supportsPickup: true,
+          ...(requestedLocationId ? { id: requestedLocationId } : {}),
+        },
+      });
 
       if (!pickupLocation) {
         logger.info("Carrier service: pickup requested but no eligible location", {
@@ -167,54 +173,141 @@ export async function action({ request }: ActionFunctionArgs) {
         return json({ rates: [] });
       }
 
+      // Reject a slot that doesn't belong to this pickup branch — wrong
+      // fulfillment type, or different location. Avoids cross-contaminating
+      // the pickup rate with a delivery slot's priceAdjustment.
+      if (selectedSlot) {
+        if (
+          selectedSlot.fulfillmentType !== "pickup" ||
+          selectedSlot.locationId !== pickupLocation.id
+        ) {
+          logger.warn("Carrier service: pickup slot mismatch", {
+            shopifyDomain,
+            selectedSlotId: selectedSlot.id,
+            selectedSlotFulfillmentType: selectedSlot.fulfillmentType,
+            selectedSlotLocationId: selectedSlot.locationId,
+            pickupLocationId: pickupLocation.id,
+          });
+          return json({ rates: [] });
+        }
+      }
+
+      const pickupCents = toCents(selectedSlot?.priceAdjustment);
       const rates: RateResponse[] = [
         {
           service_name: `Pickup at ${pickupLocation.name}`,
           service_code: `ORDAK_PICKUP_${pickupLocation.id}`,
-          total_price: "0",
-          description: `Pick up your order from ${pickupLocation.name}`,
+          total_price: String(pickupCents),
+          description:
+            pickupCents > 0
+              ? `Pick up your order from ${pickupLocation.name}`
+              : `Pick up your order from ${pickupLocation.name} (free)`,
           currency: rate.currency,
         },
       ];
       return json({ rates });
     }
 
-    // Delivery branch (default when delivery_method is "delivery" or absent):
-    // match the destination postcode against active zones and return a rate
-    // per matching zone's location.
-    const destinationPostcode = rate.destination.postal_code;
-    const matchingZones = shop.zones.filter(
-      (z) => z.isActive && postcodeMatchesZone(destinationPostcode ?? "", z),
-    );
+    // Delivery: when the cart-block stamps _zone_id we still verify the
+    // destination postcode actually falls in that zone — line item
+    // properties are customer-writable, so trusting the id alone would let
+    // a customer in zone B point at zone A and pay zone A's basePrice.
+    let matchedZone: Zone | null = null;
+    const destinationPostcode = rate.destination.postal_code ?? "";
+    destinationPostcodeForLog = destinationPostcode;
 
-    if (matchingZones.length === 0) {
-      return json({ rates: [] });
+    if (requestedZoneId) {
+      const candidate = await prisma.zone.findFirst({
+        where: {
+          id: requestedZoneId,
+          shopId: shop.id,
+          isActive: true,
+          location: { isActive: true, supportsDelivery: true },
+        },
+      });
+      if (candidate && postcodeMatchesZone(destinationPostcode, candidate)) {
+        matchedZone = candidate;
+      }
     }
 
-    const ratesByLocation = new Map<string, RateResponse>();
-    for (const zone of matchingZones) {
-      const location = shop.locations.find(
-        (l) => l.id === zone.locationId && l.isActive && l.supportsDelivery,
-      );
-      if (!location) continue;
-      if (ratesByLocation.has(location.id)) continue;
+    if (!matchedZone) {
+      const candidates = await prisma.zone.findMany({
+        where: {
+          shopId: shop.id,
+          isActive: true,
+          location: { isActive: true, supportsDelivery: true },
+        },
+        // Secondary sort by id keeps the match deterministic when zones
+        // share a priority — eligibility, slot recommendations, and
+        // carrier service all use the same ordering so the customer sees
+        // the same zone everywhere.
+        orderBy: [{ priority: "desc" }, { id: "asc" }],
+      });
+      matchedZone =
+        candidates.find((z) => postcodeMatchesZone(destinationPostcode, z)) ?? null;
 
-      ratesByLocation.set(location.id, {
-        service_name: `Delivery from ${location.name}`,
-        service_code: `ORDAK_DELIVERY_${location.id}`,
-        total_price: String(DEFAULT_DELIVERY_PRICE_CENTS),
-        description: requestedSlotId
-          ? `Scheduled delivery (slot ${requestedSlotId})`
-          : "Scheduled delivery",
-        currency: rate.currency,
+      if (!matchedZone) {
+        logger.info("Carrier service: no matching delivery zone", {
+          shopifyDomain,
+          destinationPostcode,
+          candidateCount: candidates.length,
+        });
+        return json({ rates: [] });
+      }
+    }
+
+    // Delivery slot must match the resolved zone AND be a delivery slot.
+    // Prevents (a) using a slot from a different zone whose priceAdjustment
+    // was set for different conditions, and (b) cross-contaminating
+    // delivery pricing with a stale pickup slot's priceAdjustment.
+    if (selectedSlot) {
+      if (
+        selectedSlot.fulfillmentType !== "delivery" ||
+        selectedSlot.zoneId !== matchedZone.id
+      ) {
+        logger.warn("Carrier service: delivery slot mismatch", {
+          shopifyDomain,
+          selectedSlotId: selectedSlot.id,
+          selectedSlotFulfillmentType: selectedSlot.fulfillmentType,
+          selectedSlotZoneId: selectedSlot.zoneId,
+          matchedZoneId: matchedZone.id,
+        });
+        return json({ rates: [] });
+      }
+    }
+
+    matchedZoneForLog = matchedZone;
+    const baseCents = toCents(matchedZone.basePrice);
+    const adjustmentCents = toCents(selectedSlot?.priceAdjustment);
+    const totalCents = baseCents + adjustmentCents;
+
+    const description =
+      adjustmentCents > 0
+        ? `Scheduled delivery (zone ${matchedZone.name}, +$${(adjustmentCents / 100).toFixed(2)} slot premium)`
+        : `Scheduled delivery (zone ${matchedZone.name})`;
+
+    const rateResponse: RateResponse = {
+      service_name: "Standard delivery",
+      service_code: `ORDAK_DELIVERY_${matchedZone.id}`,
+      total_price: String(totalCents),
+      description,
+      currency: rate.currency,
+    };
+
+    return json({ rates: [rateResponse] });
+  } catch (err) {
+    if (err instanceof InvalidPriceError) {
+      logger.error("Carrier service: invalid price input — gating checkout", err, {
+        shopifyDomain,
+        matchedZoneId: matchedZoneForLog?.id,
+        selectedSlotId: selectedSlotForLog?.id,
+        destinationPostcode: destinationPostcodeForLog,
+      });
+    } else {
+      logger.error("Carrier service: uncaught throw — returning empty rates", err, {
+        shopifyDomain,
       });
     }
-
-    return json({ rates: Array.from(ratesByLocation.values()) });
-  } catch (err) {
-    logger.error("Carrier service: uncaught throw — returning empty rates", err, {
-      shopifyDomain,
-    });
     return json({ rates: [] });
   }
 }

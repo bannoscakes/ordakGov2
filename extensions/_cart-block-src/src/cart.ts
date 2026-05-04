@@ -352,6 +352,7 @@ export function buildCartPayload(args: {
   slotTimeStart?: string | null;
   slotTimeEnd?: string | null;
   locationId?: string | null;
+  zoneId?: string | null;
   wasRecommended?: boolean;
 }): CartPayload {
   // Cart attributes propagate to the order's note_attributes and Shopify
@@ -388,6 +389,11 @@ export function buildCartPayload(args: {
   };
   if (args.slotId) lineProps._slot_id = args.slotId;
   if (args.locationId) lineProps._location_id = args.locationId;
+  // Optional: when the cart-block has resolved a zoneId, the Carrier
+  // Service callback can skip its own postcode re-match (it still verifies
+  // the postcode falls in the supplied zone — line item properties are
+  // customer-writable).
+  if (args.zoneId) lineProps._zone_id = args.zoneId;
   if (args.wasRecommended !== undefined) {
     lineProps._was_recommended = String(args.wasRecommended);
   }

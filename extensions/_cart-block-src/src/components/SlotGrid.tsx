@@ -16,6 +16,12 @@ function spotsLabel(remaining: number): string {
   return `${remaining} spots left`;
 }
 
+function priceAdjustmentLabel(raw: string): string | null {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return `+$${n.toFixed(2)}`;
+}
+
 export function SlotGrid({ slots, selectedId, onSelect }: Props) {
   if (!slots.length) {
     return (
@@ -57,6 +63,9 @@ export function SlotGrid({ slots, selectedId, onSelect }: Props) {
               ) : null}
               <span class="ordak-slot__time">{formatRange(slot.timeStart, slot.timeEnd)}</span>
               <span class="ordak-slot__spots">{spotsLabel(slot.capacityRemaining)}</span>
+              {priceAdjustmentLabel(slot.priceAdjustment) ? (
+                <span class="ordak-slot__price">{priceAdjustmentLabel(slot.priceAdjustment)}</span>
+              ) : null}
               {slot.recommended && slot.reason ? (
                 <span class="ordak-slot__reason">{slot.reason}</span>
               ) : null}
