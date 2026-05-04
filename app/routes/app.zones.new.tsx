@@ -51,7 +51,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
     orderBy: { name: "asc" },
   });
 
-  return json({ shop, locations });
+  // Pre-select location when navigated from the per-location admin
+  // (e.g. /app/zones/new?locationId=abc123).
+  const url = new URL(request.url);
+  const prefillLocationId = url.searchParams.get("locationId") || "";
+  const validPrefill = locations.some((l) => l.id === prefillLocationId)
+    ? prefillLocationId
+    : "";
+
+  return json({ shop, locations, prefillLocationId: validPrefill });
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -197,14 +205,14 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export default function NewZone() {
-  const { locations } = useLoaderData<typeof loader>();
+  const { locations, prefillLocationId } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigate = useNavigate();
   const navigation = useNavigation();
   const isLoading = navigation.state === "submitting";
 
   const [name, setName] = useState("");
-  const [locationId, setLocationId] = useState("");
+  const [locationId, setLocationId] = useState(prefillLocationId);
   const [type, setType] = useState("postcode_list");
   const [postcodes, setPostcodes] = useState("");
   const [rangeStart, setRangeStart] = useState("");
