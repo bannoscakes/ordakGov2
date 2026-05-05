@@ -35,6 +35,19 @@
  *
  *   CARRIER_URL=http://localhost:3000/api/carrier-service/rates \
  *     node scripts/smoke-carrier-service.mjs delivery ...
+ *
+ * Stale-data caveat (read before debugging a failure):
+ *
+ * The callback returns `{ rates: [] }` (0 rates) for several
+ * NON-regression reasons — postcode doesn't match any active zone,
+ * pickup location is inactive, slot's zoneId/locationId/fulfillmentType
+ * doesn't match the resolved zone (deliberate security guard). If this
+ * smoke test fails with "Expected exactly 1 rate, got 0", FIRST verify
+ * the zone-id, slot-id, and location-id flags still exist and are
+ * mutually consistent in the target shop's DB before assuming a code
+ * regression. The full callback response is printed before the
+ * assertion fires so you can read its `rates` array (empty) plus the
+ * Vercel logs for the request to see which guard tripped.
  */
 
 import assert from "node:assert/strict";
@@ -130,7 +143,24 @@ async function main() {
   const data = await res.json();
   console.log(JSON.stringify({ url, mode: args.mode, elapsedMs, response: data }, null, 2));
 
-  assert.equal(data.rates?.length, 1, `Expected exactly 1 rate, got ${data.rates?.length}`);
+  if (data.rates?.length !== 1) {
+    // 0 rates is the callback's deliberate signal for several
+    // non-regression conditions (no zone matched, slot mismatch,
+    // pickup location inactive). Log a hint pointing at the most
+    // likely cause before failing — the full response is already
+    // printed above, so the operator has both the response body and
+    // this hint to triage with.
+    const got = data.rates?.length ?? "(undefined)";
+    console.error(
+      `\nGot ${got} rate(s) when 1 was expected. Possible causes (NOT necessarily a code regression):\n` +
+        `  - The --zone-id is no longer active or no longer covers --postcode\n` +
+        `  - The --slot-id is deleted, deactivated, or moved to a different zone\n` +
+        `  - The --location-id doesn't match the slot's location\n` +
+        `  - Slot's fulfillmentType doesn't match the requested mode (${args.mode})\n` +
+        `Verify with Prisma Studio against the target shop's DB before treating this as a code bug.\n`,
+    );
+    fail(`Expected exactly 1 rate, got ${got}`);
+  }
   const rate = data.rates[0];
 
   if (args.mode === "delivery") {
