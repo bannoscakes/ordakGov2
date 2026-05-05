@@ -242,11 +242,17 @@ export async function action({ request }: ActionFunctionArgs) {
       otherDeliveries
     );
 
-    // priceAdjustment isn't on SlotRecommendationInput — re-attach from the
-    // source rows so consumers can format it on the tile.
+    // priceAdjustment + zoneId aren't on SlotRecommendationInput — re-attach
+    // from the source rows so the cart-block can format priceAdjustment on
+    // the tile AND stamp zoneId onto cart line item properties (`_zone_id`)
+    // for the Carrier Service callback. Without _zone_id the callback falls
+    // back to a postcode scan that may match a different overlapping zone
+    // than the one the cart-block resolved.
     const priceAdjustmentById = new Map<string, string>();
+    const zoneIdById = new Map<string, string | null>();
     for (const s of slots) {
       priceAdjustmentById.set(s.id, s.priceAdjustment.toString());
+      zoneIdById.set(s.id, s.zoneId);
     }
 
     // Format response
@@ -263,6 +269,7 @@ export async function action({ request }: ActionFunctionArgs) {
         capacity: rec.slot.capacity,
         priceAdjustment: priceAdjustmentById.get(rec.id) ?? "0",
         locationId: rec.slot.locationId,
+        zoneId: zoneIdById.get(rec.id) ?? null,
         fulfillmentType: rec.slot.fulfillmentType,
         factors: {
           capacity: rec.factors.capacityScore,
