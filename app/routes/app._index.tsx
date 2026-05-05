@@ -81,20 +81,16 @@ export async function loader({ request }: LoaderFunctionArgs) {
     }
 
     const firstZoneId = activeZones[0]?.id ?? null;
-    // Deep-link the merchant into the theme editor with the cart template
-    // pre-selected AND the cart-scheduler app block pre-loaded as a candidate
-    // to add. UUID is the theme app extension's uid from
-    // extensions/cart-block/shopify.extension.toml — fixed across all shops
-    // where the Partners-published app is installed.
-    //
-    // Without this, the merchant lands on the home template and has to
-    // navigate to cart + manually find the block, which App Store reviewers
-    // (and real merchants following our setup guide) regularly stall on.
-    const CART_BLOCK_EXTENSION_UID = "c9e975ac-5a87-7a0c-c4f8-a5b69a342ca6a3e4e584";
+    // Open the theme editor pre-scoped to the cart template. We deliberately
+    // do NOT use ?addAppBlockId=<uid>/cart-scheduler — that param errors with
+    // "There is a problem with the app block" on some themes (notably
+    // Horizon's section-groups format, where app sections aren't directly
+    // resolvable by uid+handle through the deep-link). Sticking to
+    // ?template=cart works on every theme; the merchant follows the
+    // step-by-step description text to add the section once landed.
     const shopHandle = session.shop.replace(".myshopify.com", "");
     const themeEditorUrl =
-      `https://admin.shopify.com/store/${shopHandle}/themes/current/editor` +
-      `?template=cart&addAppBlockId=${CART_BLOCK_EXTENSION_UID}/cart-scheduler`;
+      `https://admin.shopify.com/store/${shopHandle}/themes/current/editor?template=cart`;
 
     return json({
       shop: session.shop,
@@ -198,10 +194,11 @@ export default function Index() {
       id: "theme",
       label: "Embed cart-block in your theme",
       description:
-        "Click \"Open theme editor\" — your cart template opens with the Ordak " +
-        "Cart Scheduler block ready to add. Click Save in the top right when " +
-        "the block appears in the cart preview. Required for the slot picker " +
-        "to render on your storefront.",
+        "Required for the slot picker to render on your storefront. " +
+        "Click \"Open theme editor\" — your cart template will open. " +
+        "Then in the left sidebar click \"Add section\", find " +
+        "\"Ordak Cart Scheduler\" under Apps, click it to add, then " +
+        "click Save in the top right.",
       done: false,
       manual: true,
       // External link: the theme editor lives at admin.shopify.com, not
