@@ -608,7 +608,7 @@ function SetupSection({ zone }: { zone: ZoneData }) {
         </Card>
 
         <InlineStack align="end">
-          <Button variant="primary" submit loading={isLoading}>Save</Button>
+          <Button variant="primary" submit loading={isLoading} disabled={isLoading}>Save</Button>
         </InlineStack>
       </FormLayout>
     </Form>
@@ -672,7 +672,7 @@ function PricingSection({ zone }: { zone: ZoneData }) {
         </Card>
 
         <InlineStack align="end">
-          <Button variant="primary" submit loading={isLoading}>Save</Button>
+          <Button variant="primary" submit loading={isLoading} disabled={isLoading}>Save</Button>
         </InlineStack>
       </FormLayout>
     </Form>
@@ -860,7 +860,7 @@ function SlotsSection({
                 onCopy={onCopyToOtherDays}
                 disabled={rows.length === 0}
               />
-              <Button variant="primary" onClick={onSave} loading={isLoading}>
+              <Button variant="primary" onClick={onSave} loading={isLoading} disabled={isLoading}>
                 Save {DAY_FULL[selectedDay]}
               </Button>
             </ButtonGroup>

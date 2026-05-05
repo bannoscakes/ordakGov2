@@ -307,7 +307,7 @@ export default function NewLocation() {
 
               <InlineStack align="end" gap="200">
                 <Button onClick={() => navigate("/app/locations")}>Cancel</Button>
-                <Button variant="primary" submit loading={isLoading}>
+                <Button variant="primary" submit loading={isLoading} disabled={isLoading}>
                   Add Location
                 </Button>
               </InlineStack>

@@ -426,7 +426,7 @@ export default function NewZone() {
                   variant="primary"
                   submit
                   loading={isLoading}
-                  disabled={locations.length === 0}
+                  disabled={isLoading || locations.length === 0}
                 >
                   Create Zone
                 </Button>
