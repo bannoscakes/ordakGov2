@@ -52,6 +52,12 @@ model Shop {
   personalizationWeight Float     @default(0.1)
   numAlternatives       Int       @default(3)
 
+  // Widget appearance toggles. Both default to the post-D5 cart-block
+  // behavior so existing installs see no UX change until the merchant
+  // opts in.
+  showRecommendedBadge   Boolean   @default(false)
+  showMostAvailableBadge Boolean   @default(true)
+
   locations             Location[]
   zones                 Zone[]
   rules                 Rule[]
@@ -87,6 +93,7 @@ model Location {
 
   zones             Zone[]
   slots             Slot[]
+  slotTemplates     SlotTemplate[]
 
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
@@ -95,27 +102,46 @@ model Location {
 }
 
 model Zone {
-  id            String   @id @default(cuid())
-  shopId        String
-  shop          Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  id                String   @id @default(cuid())
+  shopId            String
+  shop              Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
-  locationId    String
-  location      Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  locationId        String
+  location          Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
 
-  name          String
-  type          String   // 'postcode_range', 'postcode_list', 'radius'
+  name              String
+  type              String   // 'postcode_range', 'postcode_list', 'radius'
 
   // For postcode ranges/lists
-  postcodes     String[] // Array of postcodes or ranges
+  postcodes         String[] // Array of postcodes or ranges
+
+  // Postcodes within `postcodes` (or matched by radius) that are explicitly
+  // EXCLUDED from this zone. Lets the merchant cover "all of Sydney except
+  // these specific postcodes" without listing every included postcode.
+  excludePostcodes  String[] @default([])
 
   // For radius
-  radiusKm      Float?
+  radiusKm          Float?
 
-  isActive      Boolean  @default(true)
-  priority      Int      @default(0)
+  // Per-zone delivery base price in the merchant's currency.
+  // Total delivery charge at checkout = zone.basePrice + slot.priceAdjustment.
+  // Defaults to 0 so existing zones remain valid post-migration; merchant
+  // must edit in admin to set the real price.
+  basePrice         Decimal  @default(0) @db.Decimal(10, 2)
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  isActive          Boolean  @default(true)
+  priority          Int      @default(0)
+
+  // Slots scoped to this zone (delivery slots only — pickup slots leave
+  // zoneId null and use locationId).
+  slots             Slot[]
+
+  // Per-day-of-week slot config. Materialized into concrete Slot rows for
+  // the next N days by the slot-materializer service.
+  slotTemplates     SlotTemplate[]
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@index([shopId])
   @@index([locationId])
@@ -153,8 +179,16 @@ model Rule {
 
 model Slot {
   id                  String   @id @default(cuid())
+
+  // Slots are always parented to a Location. Delivery slots ALSO carry a
+  // zoneId so the merchant can configure different time windows / capacity /
+  // pricing per zone. Pickup slots leave zoneId null because pickup has no
+  // postcode-bound zone.
   locationId          String
   location            Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  zoneId              String?
+  zone                Zone?    @relation(fields: [zoneId], references: [id], onDelete: Cascade)
 
   date                DateTime
   timeStart           String   // "09:00"
@@ -162,6 +196,11 @@ model Slot {
 
   capacity            Int      @default(10)
   booked              Int      @default(0)
+
+  // Optional per-slot price premium added on top of the zone base price.
+  // Lets the merchant charge extra for priority windows (e.g. 9am-11am +$10).
+  // Defaults to 0; the cart-block only renders the badge when > 0.
+  priceAdjustment     Decimal  @default(0) @db.Decimal(10, 2)
 
   // Recommendation score (0.0 - 1.0)
   recommendationScore Float?
@@ -176,8 +215,50 @@ model Slot {
   updatedAt           DateTime @updatedAt
 
   @@index([locationId])
+  @@index([zoneId])
   @@index([date])
   @@index([recommendationScore])
+}
+
+// Per-day-of-week slot configuration. The merchant edits these in the admin
+// (per-zone for delivery, per-location for pickup), and the slot-materializer
+// service generates concrete Slot rows from them for the next N days.
+//
+// Example: a row {dayOfWeek: 1, timeStart: "09:00", timeEnd: "11:00",
+// capacity: 5, fulfillmentType: "delivery"} means "every Monday, accept up
+// to 5 delivery orders for the 9am-11am window".
+//
+// Editing a template re-materializes future Slot rows matching its
+// (zoneId/locationId, fulfillmentType, dayOfWeek) tuple. Bookings are
+// preserved by leaving slots with `booked > 0` untouched.
+model SlotTemplate {
+  id              String   @id @default(cuid())
+
+  // Delivery templates carry zoneId; pickup templates leave it null and
+  // use locationId only (mirrors the Slot model's zone/location split).
+  zoneId          String?
+  zone            Zone?    @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+
+  locationId      String
+  location        Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  fulfillmentType String   // 'delivery' or 'pickup'
+  dayOfWeek       Int      // 0=Sunday, 1=Monday, ..., 6=Saturday (matches JS Date.getDay())
+
+  timeStart       String   // "09:00"
+  timeEnd         String   // "11:00"
+
+  capacity        Int      @default(10)
+  priceAdjustment Decimal  @default(0) @db.Decimal(10, 2)
+
+  isActive        Boolean  @default(true)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([zoneId])
+  @@index([locationId])
+  @@index([dayOfWeek])
 }
 
 model OrderLink {
@@ -256,22 +337,35 @@ model CustomerPreferences {
 }
 
 // Schema reservation only — no UI, no runtime path yet.
-// Per the "design pluggable now, build later" business rule, this lets
-// merchants register external webhook receivers (e.g. their own ordak
-// dispatch endpoint) for order/scheduling events without a future
-// migration churn. Build the dispatcher in a later phase.
+// Outbound webhook receivers configured by the merchant (e.g. their own
+// ordak dispatch endpoint, ERP, delivery routing system) for
+// order/scheduling events. The dispatcher fires on EventLog writes and
+// signs each request with the destination's HMAC secret.
 model WebhookDestination {
   id          String   @id @default(cuid())
   shopId      String
   shop        Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   url         String
-  secret      String   // HMAC signing secret
-  enabled     Boolean  @default(true)
+  secret      String   // HMAC signing secret (X-Ordak-Signature: sha256=...)
+
+  // Default false: the merchant configures the receiver on their side
+  // first, then flips this on. Auto-enabling on create would let a
+  // half-configured receiver miss its first batch of events.
+  enabled     Boolean  @default(false)
 
   // Subset of EventLog.eventType values this destination subscribes to.
   // Empty array means "all events".
   eventTypes  String[]
+
+  // Health tracking. Bumped by the dispatcher on each delivery attempt.
+  // The admin surfaces lastError + consecutiveFailures so the merchant
+  // can see "this receiver has been failing for 3 days" instead of
+  // discovering it only when their downstream pipeline is empty.
+  lastSuccessAt        DateTime?
+  lastFailureAt        DateTime?
+  lastError            String?
+  consecutiveFailures  Int      @default(0)
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

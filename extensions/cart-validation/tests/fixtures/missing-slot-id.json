@@ -1,0 +1,34 @@
+{
+  "payload": {
+    "export": "cart-validations-generate-run",
+    "target": "cart.validations.generate.run",
+    "input": {
+      "cart": {
+        "cartDeliveryMethod": { "value": "delivery" },
+        "lines": [
+          {
+            "id": "gid://shopify/CartLine/1",
+            "lineDeliveryMethod": { "value": "delivery" },
+            "slotId": null,
+            "locationId": { "value": "loc_bannos" },
+            "zoneId": { "value": "zone_inner_west" }
+          }
+        ]
+      }
+    },
+    "output": {
+      "operations": [
+        {
+          "validationAdd": {
+            "errors": [
+              {
+                "message": "Please add this item to your cart and choose a delivery date and time slot before checking out.",
+                "target": "$.cart"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

@@ -26,6 +26,10 @@ export interface CarrierServiceRecord {
   active: boolean;
 }
 
+export type RegisterCarrierServiceResult =
+  | { ok: true; record: CarrierServiceRecord }
+  | { ok: false; error: string };
+
 /**
  * Build the absolute callback URL Shopify will POST to. Single source of
  * truth — keep this in sync with the Remix route at
@@ -46,7 +50,7 @@ export async function registerCarrierService(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   graphql: any,
   callbackUrl: string,
-): Promise<CarrierServiceRecord | null> {
+): Promise<RegisterCarrierServiceResult> {
   try {
     const response = await graphql(
       `#graphql
@@ -86,7 +90,8 @@ export async function registerCarrierService(
       logger.error("carrierServiceCreate top-level GraphQL errors", undefined, {
         errors: json.errors,
       });
-      return null;
+      const msg = (json.errors[0]?.message as string | undefined) ?? "GraphQL error";
+      return { ok: false, error: msg };
     }
 
     const result = json.data?.carrierServiceCreate;
@@ -95,19 +100,113 @@ export async function registerCarrierService(
       logger.error("carrierServiceCreate userErrors", undefined, {
         errors: result.userErrors,
       });
-      return null;
+      const msg =
+        (result.userErrors[0]?.message as string | undefined) ?? "Carrier service creation rejected";
+      return { ok: false, error: msg };
     }
 
     if (!result?.carrierService) {
       logger.error("carrierServiceCreate returned no carrierService", undefined, {
         response: json,
       });
-      return null;
+      return { ok: false, error: "Shopify returned no carrierService" };
     }
 
-    return result.carrierService as CarrierServiceRecord;
+    return { ok: true, record: result.carrierService as CarrierServiceRecord };
   } catch (err) {
     logger.error("carrierServiceCreate threw", err);
+    return { ok: false, error: err instanceof Error ? err.message : "carrierServiceCreate threw" };
+  }
+}
+
+/**
+ * List existing carrier services on the shop. Used by the install route
+ * to detect a same-name registration left over from a previous install
+ * (or a previous tunnel URL) and adopt its ID instead of failing on
+ * "name already taken."
+ */
+export async function listCarrierServices(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  graphql: any,
+): Promise<CarrierServiceRecord[]> {
+  try {
+    const response = await graphql(
+      `#graphql
+      query OrdakGoListCarrierServices {
+        carrierServices(first: 50) {
+          nodes { id name callbackUrl active }
+        }
+      }`,
+    );
+    const json = await response.json();
+    if (Array.isArray(json.errors) && json.errors.length > 0) {
+      logger.error("listCarrierServices top-level GraphQL errors", undefined, {
+        errors: json.errors,
+      });
+      return [];
+    }
+    const nodes = (json.data?.carrierServices?.nodes ?? []) as CarrierServiceRecord[];
+    return nodes;
+  } catch (err) {
+    logger.error("listCarrierServices threw", err);
+    return [];
+  }
+}
+
+/**
+ * Update an existing carrier service's callbackUrl / active flag. Used
+ * when the install route adopts a same-name registration whose callback
+ * still points at a stale tunnel URL.
+ */
+export async function updateCarrierService(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  graphql: any,
+  carrierServiceId: string,
+  callbackUrl: string,
+): Promise<CarrierServiceRecord | null> {
+  try {
+    const response = await graphql(
+      `#graphql
+      mutation CarrierServiceUpdate($input: DeliveryCarrierServiceUpdateInput!) {
+        carrierServiceUpdate(input: $input) {
+          carrierService {
+            id
+            name
+            callbackUrl
+            active
+          }
+          userErrors { field message }
+        }
+      }`,
+      {
+        variables: {
+          input: {
+            id: carrierServiceId,
+            callbackUrl,
+            supportsServiceDiscovery: true,
+            active: true,
+          },
+        },
+      },
+    );
+    const json = await response.json();
+    if (Array.isArray(json.errors) && json.errors.length > 0) {
+      logger.error("carrierServiceUpdate top-level GraphQL errors", undefined, {
+        errors: json.errors,
+      });
+      return null;
+    }
+    const result = json.data?.carrierServiceUpdate;
+    if (result?.userErrors?.length) {
+      logger.error("carrierServiceUpdate userErrors", undefined, {
+        errors: result.userErrors,
+      });
+      return null;
+    }
+    if (!result?.carrierService) return null;
+    return result.carrierService as CarrierServiceRecord;
+  } catch (err) {
+    logger.error("carrierServiceUpdate threw", err);
     return null;
   }
 }

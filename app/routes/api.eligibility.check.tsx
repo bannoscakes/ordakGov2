@@ -16,6 +16,7 @@ import type { ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import prisma from "../db.server";
 import { logger } from "../utils/logger.server";
+import { postcodeMatchesZone } from "../utils/postcode-match.server";
 import { validateRequest, eligibilityCheckSchema } from "../utils/validation.server";
 
 interface EligibilityRequest {
@@ -39,46 +40,22 @@ interface EligibilityResponse {
     delivery: boolean;
     pickup: boolean;
   };
+  // Matched delivery zone with its basePrice. Null for pickup or no match.
+  // basePrice is a Decimal serialized as a string (e.g. "30.00").
+  matchedZone?: {
+    id: string;
+    name: string;
+    basePrice: string;
+  } | null;
   message?: string;
 }
 
-/**
- * Check if a postcode matches a zone
- */
-function isPostcodeInZone(postcode: string, zone: any): boolean {
-  const normalizedPostcode = postcode.trim().toUpperCase().replace(/\s+/g, "");
-
-  switch (zone.type) {
-    case "postcode_list":
-      // Check if postcode is in the list
-      if (!zone.postcodes || zone.postcodes.length === 0) return false;
-      return zone.postcodes.some((zp: string) => {
-        const normalized = zp.trim().toUpperCase().replace(/\s+/g, "");
-        return normalized === normalizedPostcode;
-      });
-
-    case "postcode_range":
-      // Check if postcode is within range
-      if (!zone.postcodes || zone.postcodes.length < 2) return false;
-      const start = zone.postcodes[0].trim().toUpperCase().replace(/\s+/g, "");
-      const end = zone.postcodes[1].trim().toUpperCase().replace(/\s+/g, "");
-
-      // Simple string comparison (works for numeric postcodes)
-      // For more complex postcode systems, implement custom logic
-      return normalizedPostcode >= start && normalizedPostcode <= end;
-
-    case "radius":
-      // For radius zones, we'd need customer's coordinates
-      // Return true as a fallback (will be filtered by location coordinates later)
-      // In a real implementation, you'd geocode the postcode and calculate distance
-      return true;
-
-    default:
-      return false;
-  }
-}
-
 export async function action({ request }: ActionFunctionArgs) {
+  // Captured outside the try so the catch block can log them when an
+  // exception is thrown after they've been parsed but before the response
+  // is built.
+  let attemptedPostcode: string | undefined;
+  let attemptedShopDomain: string | undefined;
   // This is a public endpoint (app proxy), no authentication required
 
   try {
@@ -89,8 +66,9 @@ export async function action({ request }: ActionFunctionArgs) {
     }
 
     const { postcode, fulfillmentType, shopDomain } = validation.data;
+    attemptedPostcode = postcode;
+    attemptedShopDomain = shopDomain;
 
-    // Find the shop
     const shop = await prisma.shop.findUnique({
       where: { shopifyDomain: shopDomain },
     });
@@ -107,12 +85,14 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
 
-    // Find all active zones with their locations
+    // Ordered to agree with carrier-service and slot recommendations: highest
+    // priority wins, ties broken deterministically by id ascending.
     const zones = await prisma.zone.findMany({
       where: {
         shopId: shop.id,
         isActive: true,
       },
+      orderBy: [{ priority: "desc" }, { id: "asc" }],
       include: {
         location: {
           select: {
@@ -130,14 +110,9 @@ export async function action({ request }: ActionFunctionArgs) {
       },
     });
 
-    // Find matching zones
-    const matchingZones = zones.filter((zone) => {
-      // Only consider zones with active locations
-      if (!zone.location.isActive) return false;
-
-      // Check if postcode matches the zone
-      return isPostcodeInZone(postcode, zone);
-    });
+    const matchingZones = zones.filter(
+      (zone) => zone.location.isActive && postcodeMatchesZone(postcode, zone),
+    );
 
     if (matchingZones.length === 0) {
       return json<EligibilityResponse>(
@@ -183,24 +158,46 @@ export async function action({ request }: ActionFunctionArgs) {
       pickup: eligibleLocations.some((loc) => loc.supportsPickup),
     };
 
+    // Only set matchedZone for delivery requests where the location can
+    // actually fulfill a delivery — otherwise the cart-block would render
+    // "Delivery fee: $X" alongside "no service" copy, and the carrier
+    // service callback would correctly produce no rate at checkout.
+    let matchedZone: EligibilityResponse["matchedZone"] = null;
+    if (fulfillmentType === "delivery") {
+      const top = matchingZones.find((z) => z.location.supportsDelivery);
+      if (top) {
+        matchedZone = {
+          id: top.id,
+          name: top.name,
+          basePrice: top.basePrice.toString(),
+        };
+      }
+    }
+
+    // Generic message kept short. The cart-block composes the
+    // customer-facing copy from `matchedZone.basePrice` so that string lives
+    // with the rest of the storefront UI, not in this API.
+    const message =
+      filteredLocations.length > 0
+        ? `Service available from ${filteredLocations.length} location${filteredLocations.length !== 1 ? "s" : ""}`
+        : fulfillmentType
+          ? `No ${fulfillmentType} service available in your area`
+          : "Service available, but not for the selected fulfillment type";
+
     return json<EligibilityResponse>(
       {
         eligible: filteredLocations.length > 0,
         locations: filteredLocations,
         services,
-        message:
-          filteredLocations.length > 0
-            ? `Service available from ${filteredLocations.length} location${filteredLocations.length !== 1 ? "s" : ""}`
-            : fulfillmentType
-            ? `No ${fulfillmentType} service available in your area`
-            : "Service available, but not for the selected fulfillment type",
+        matchedZone,
+        message,
       },
       { headers: getCorsHeaders(request) }
     );
   } catch (error) {
     logger.error("Eligibility check error", error, {
-      postcode: (error as any)?.postcode,
-      shopDomain: (error as any)?.shopDomain
+      postcode: attemptedPostcode,
+      shopDomain: attemptedShopDomain,
     });
     return json<EligibilityResponse>(
       {

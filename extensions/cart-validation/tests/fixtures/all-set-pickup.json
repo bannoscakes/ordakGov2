@@ -1,0 +1,23 @@
+{
+  "payload": {
+    "export": "cart-validations-generate-run",
+    "target": "cart.validations.generate.run",
+    "input": {
+      "cart": {
+        "cartDeliveryMethod": { "value": "pickup" },
+        "lines": [
+          {
+            "id": "gid://shopify/CartLine/1",
+            "lineDeliveryMethod": { "value": "pickup" },
+            "slotId": { "value": "slot_xyz" },
+            "locationId": { "value": "loc_bannos" },
+            "zoneId": null
+          }
+        ]
+      }
+    },
+    "output": {
+      "operations": []
+    }
+  }
+}

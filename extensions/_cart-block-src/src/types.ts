@@ -34,6 +34,8 @@ export interface EligibilityResponse {
   eligible: boolean;
   locations: EligibilityLocation[];
   services: { delivery: boolean; pickup: boolean };
+  // Matched delivery zone with its basePrice. Null for pickup or no match.
+  matchedZone?: { id: string; name: string; basePrice: string } | null;
   message?: string;
 }
 
@@ -47,7 +49,16 @@ export interface Slot {
   reason: string;
   capacityRemaining: number;
   capacity: number;
+  // Per-slot premium added to the zone base price. Prisma serializes
+  // Decimal as a string (e.g. "10.00").
+  priceAdjustment: string;
   locationId: string;
+  // Delivery slots carry the zone id so the cart-block can pass it to the
+  // Carrier Service callback via `_zone_id` line item property — without
+  // this, the callback falls back to a postcode rescan that may pick a
+  // different (overlapping) zone, leaking the wrong basePrice and dropping
+  // the slot's priceAdjustment. Pickup slots have no zone (null).
+  zoneId: string | null;
   fulfillmentType: Fulfillment;
 }
 
@@ -57,6 +68,12 @@ export interface SlotResponse {
     totalSlots: number;
     recommendedCount: number;
     dateRange: { start: string; end: string };
+    // Optional — older API builds don't include it. Cart-block falls back to
+    // post-D5 defaults (no RECOMMENDED badge, show capacity reason).
+    widgetAppearance?: {
+      showRecommendedBadge: boolean;
+      showMostAvailableBadge: boolean;
+    };
   };
 }
 

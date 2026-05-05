@@ -2,6 +2,7 @@ import { json, type ActionFunctionArgs } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { logger } from "../utils/logger.server";
+import { writeEventLogTx, dispatchEventLog, type DispatchableEventLog } from "../services/event-log.server";
 
 /**
  * API endpoint for customers to reschedule their orders
@@ -78,9 +79,12 @@ export async function action({ request }: ActionFunctionArgs) {
     }
 
     const oldSlotId = orderLink.slotId;
+    let pendingEvent: DispatchableEventLog | null = null;
+    let capacityRace = false;
 
-    // Perform the reschedule in a transaction
-    await prisma.$transaction(async (tx) => {
+    try {
+      // Perform the reschedule in a transaction
+      await prisma.$transaction(async (tx) => {
       // Decrement old slot's booked count
       await tx.slot.update({
         where: { id: oldSlotId },
@@ -91,15 +95,19 @@ export async function action({ request }: ActionFunctionArgs) {
         },
       });
 
-      // Increment new slot's booked count
-      await tx.slot.update({
-        where: { id: newSlotId },
-        data: {
-          booked: {
-            increment: 1,
-          },
-        },
-      });
+      // Atomic capacity-check + increment. The pre-tx read at line 74 can
+      // race against another commit; do the comparison in SQL so we only
+      // land the increment if there's still room. Throwing rolls back the
+      // decrement above.
+      const incrementResult = await tx.$executeRaw`
+        UPDATE "Slot"
+        SET booked = booked + 1
+        WHERE id = ${newSlotId} AND booked < capacity
+      `;
+      if (incrementResult === 0) {
+        capacityRace = true;
+        throw new Error("CAPACITY_RACE");
+      }
 
       // Update the order link
       await tx.orderLink.update({
@@ -110,8 +118,11 @@ export async function action({ request }: ActionFunctionArgs) {
         },
       });
 
-      // Create event log entry
-      await tx.eventLog.create({
+      // Write the event row inside the transaction so a rolled-back
+      // reschedule never logs a phantom event. Dispatch happens after the
+      // transaction commits — webhook receivers shouldn't hold DB locks.
+      pendingEvent = await writeEventLogTx({
+        tx,
         data: {
           orderLinkId: orderLink.id,
           eventType: "order.schedule_updated",
@@ -138,7 +149,20 @@ export async function action({ request }: ActionFunctionArgs) {
           }),
         },
       });
-    });
+      });
+    } catch (txErr) {
+      if (capacityRace) {
+        return json(
+          { success: false, error: "Selected slot just filled — pick another" },
+          { status: 409 }
+        );
+      }
+      throw txErr;
+    }
+
+    if (pendingEvent) {
+      await dispatchEventLog(shop.id, pendingEvent);
+    }
 
     return json({
       success: true,
