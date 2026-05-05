@@ -85,11 +85,15 @@ These are the gaps that block installing on a real merchant's shop. They're sequ
 - Pickeasy's full "Rates by order value / product / time / days" rate conditions on zones — v2 enhancement.
 - Pickeasy's "Product-based overrides" admin section — v2 enhancement.
 
-## Phase D — re-cut (10 steps)
+## Phase D — re-cut (10 steps) — ✅ ALL MERGED (2026-05-04 / 2026-05-05)
+
+D1 + D4-D10 are complete. D2 + D3 (per-Location admin shell + per-Zone admin) shipped as part of D6/D7 in modified form (the merged settings restructure subsumed those scopes). The active development frontier has moved to **Phase F** below.
 
 The user's mental model and Bannos's real use case (1 location, 5 zones, per-zone pricing, per-slot price adjustments, fast-checkout protection, calendar view) drove this re-cut. See the matching memory entries: `feedback_slot_management_is_v1_blocker.md`, `feedback_zone_and_slot_pricing.md`, `feedback_cart_validation_function.md`, `feedback_orders_need_calendar_view.md`, `feedback_app_is_scheduling_not_optimization.md`, `reference_zapiet_pickeasy.md`.
 
-### D1 — Schema migration (foundation for everything below)
+### ✅ D1 — Schema migration (foundation for everything below) — MERGED
+
+**Status:** Done. Verified in `prisma/schema.prisma`: `Zone.basePrice` (line 130), `Zone.excludePostcodes` (line 121), `Slot.zoneId` nullable + FK (line 190-191), `Slot.priceAdjustment` (line 203), `SlotTemplate.zoneId` + `priceAdjustment` (lines 239, 252). `Slot.locationId` was kept (not dropped) so pickup slots reach a location without a zone.
 
 **Branch:** `feat/d1-slot-zone-pricing-schema`
 
@@ -123,7 +127,9 @@ The user's mental model and Bannos's real use case (1 location, 5 zones, per-zon
 - UX shortcuts: "Use same time slots for all days" checkbox, "Copy Monday slots to..." action, "Same as [other zone]" action.
 - Slot type radio (Pickeasy parity): Only date / Date & time / Date & time range / Hide picker.
 
-### D4 — Carrier Service callback rewrite
+### ✅ D4 — Carrier Service callback rewrite — MERGED
+
+**Status:** Done. Verified in `app/routes/api.carrier-service.rates.tsx` lines 280-282: `baseCents = toCents(matchedZone.basePrice); adjustmentCents = toCents(selectedSlot?.priceAdjustment); totalCents = baseCents + adjustmentCents`. Pickup uses single $0 rate plus optional slot premium (line 195). Postcode-match validation guards `_zone_id` against client tampering (lines 219-256). Shop-scoped slot lookup via `location.shopId` (lines 144-156).
 
 **Branch:** `feat/d4-carrier-service-rewrite`
 
@@ -135,7 +141,7 @@ The user's mental model and Bannos's real use case (1 location, 5 zones, per-zon
 - No more reliance on Shopify's flat-rate config — merchant configures all delivery pricing in our admin.
 - Update the test fixtures and any docs that reference the flat-rate behavior.
 
-### D5 — Cart-block UX cleanup + Cart Validation Function
+### ✅ D5 — Cart-block UX cleanup + Cart Validation Function — MERGED (PR #54)
 
 **Branch:** `feat/d5-cart-block-and-validation`
 
@@ -151,7 +157,7 @@ The user's mental model and Bannos's real use case (1 location, 5 zones, per-zon
 - Scope addition: `write_cart_validations` (verify exact name during build).
 - Self-install convenience route at `/app/install-cart-validation` (admin UI replaces in D6).
 
-### D6 — Wizard pipes into D2/D3 + Setup Guide checklist
+### ✅ D6 — Wizard pipes into D2/D3 + Setup Guide checklist — MERGED (PR #55)
 
 **Branch:** `feat/d6-wizard-and-setup-guide`
 
@@ -159,7 +165,7 @@ The user's mental model and Bannos's real use case (1 location, 5 zones, per-zon
 - Wizard ends with the merchant having usable slots+zones+prices on the storefront.
 - Add a Setup Guide card to the dashboard (Pickeasy parity): checklist of "Create location ✓ / Create zone ✓ / Set time slots / Verify cart-block in theme / Test checkout" with progress and next-step CTAs.
 
-### D7 — Settings page restructure
+### ✅ D7 — Settings page restructure — MERGED (PR #56)
 
 **Branch:** `feat/d7-settings-restructure`
 
@@ -171,7 +177,7 @@ The user's mental model and Bannos's real use case (1 location, 5 zones, per-zon
 - Drop the recommendation scoring sliders entirely from UI; schema columns stay dormant (may resurrect in v2).
 - Email notifications NOT included — Shopify handles order/customer emails natively (Settings → Notifications in Shopify admin). Add an info card linking to Shopify's notifications settings if useful.
 
-### D8 — Orders calendar view
+### ✅ D8 — Orders calendar view — MERGED (PR #57)
 
 **Branch:** `feat/d8-orders-calendar`
 
@@ -183,7 +189,7 @@ The user's mental model and Bannos's real use case (1 location, 5 zones, per-zon
 - Day cell capacity pill: e.g. "12/30 booked" sums all slots' capacity vs booked for that date.
 - "All orders" list view still available, also organized by due date (creation date doesn't matter to the merchant).
 
-### D9 — Webhook destinations UI + dispatcher
+### ✅ D9 — Webhook destinations UI + dispatcher — MERGED (PR #58)
 
 **Branch:** `feat/d9-webhook-destinations`
 
@@ -192,7 +198,7 @@ The user's mental model and Bannos's real use case (1 location, 5 zones, per-zon
 - Dispatcher runtime: hook into `EventLog` writes (or run a small queue worker). For each enabled destination whose `eventTypes` matches the event, POST the payload signed with the destination's HMAC secret. Retries with backoff on 5xx; mark destination as failing after N consecutive failures.
 - Default state for a new destination: `enabled: false`. Merchant turns on after configuring on receiving end.
 
-### D10 — Finalize PR #48 admin reschedule
+### ✅ D10 — Finalize PR #48 admin reschedule — MERGED (PR #59)
 
 **Branch:** continue on `feat/restore-reschedule` (PR #48)
 
@@ -200,7 +206,13 @@ The user's mental model and Bannos's real use case (1 location, 5 zones, per-zon
 - Adjust the "available slots" loader to filter by zone (slots are now per-zone, not per-location+fulfillment).
 - Re-verify on dev shop and merge.
 
-## Phase E · App Store readiness
+## Phase F — App Store submission (active)
+
+The active plan supersedes Phase E below. See **`/Users/panospanayi/.claude/plans/expressive-waddling-squirrel.md`** for the full v1+v2 sequence: foundation lockdown → cart/checkout bug fix → end-to-end verification → settings/wizard polish → cart-block polish → App Store readiness → submission as **unlisted public app** → post-approval install on Bannoscakes + Flour Lane.
+
+Locked decision: distribution mode is **public, unlisted**. Custom distribution does not span both stores on non-Plus plans. Functions activate automatically once App-Store-distributed.
+
+## Phase E · App Store readiness (legacy — superseded by Phase F)
 
 Defer until Phase D lands and dev-store testing is solid.
 
