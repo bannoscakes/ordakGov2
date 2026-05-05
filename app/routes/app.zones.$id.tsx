@@ -859,6 +859,7 @@ function SlotsSection({
                 fromDay={selectedDay}
                 onCopy={onCopyToOtherDays}
                 disabled={rows.length === 0}
+                isLoading={isLoading}
               />
               <Button variant="primary" onClick={onSave} loading={isLoading} disabled={isLoading}>
                 Save {DAY_FULL[selectedDay]}
@@ -990,10 +991,12 @@ function CopyToDaysButton({
   fromDay,
   onCopy,
   disabled,
+  isLoading,
 }: {
   fromDay: number;
   onCopy: (targets: number[]) => void;
   disabled: boolean;
+  isLoading: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [targets, setTargets] = useState<number[]>([]);
@@ -1004,7 +1007,7 @@ function CopyToDaysButton({
 
   return (
     <>
-      <Button onClick={() => setOpen(true)} disabled={disabled}>
+      <Button onClick={() => setOpen(true)} disabled={disabled || isLoading}>
         Copy {DAY_FULL[fromDay]} to…
       </Button>
       <Modal
@@ -1013,7 +1016,8 @@ function CopyToDaysButton({
         title={`Copy ${DAY_FULL[fromDay]}'s slots to other days`}
         primaryAction={{
           content: targets.length === 0 ? "Pick at least one day" : `Copy to ${targets.length} day(s)`,
-          disabled: targets.length === 0,
+          disabled: targets.length === 0 || isLoading,
+          loading: isLoading,
           onAction: () => {
             onCopy(targets);
             setTargets([]);

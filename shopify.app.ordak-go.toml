@@ -24,9 +24,9 @@ embedded = false
 # Storefront calls https://{shop}.myshopify.com/apps/ordak-go/* → forwarded to
 # <app-host>/apps/proxy/* and handled by Remix routes app/routes/apps.proxy.*.
 # Pointed at the Vercel production deploy (project: ordak-go under team
-# bannos-and-flour-lane). To swap back to the dev tunnel for local debugging,
-# either temporarily flip this to https://dev.ordak.vip/apps/proxy + push, or
-# maintain a separate dev Partners app (TODO).
+# bannos-and-flour-lane). For local debugging, set up a SEPARATE Partners app
+# pointed at the dev tunnel — URL flips on this production toml are not
+# supported (CLI dev workflow doesn't apply here; see `npm run dev:up`).
 url = "https://ordak-go.vercel.app/apps/proxy"
 subpath = "ordak-go"
 prefix = "apps"
