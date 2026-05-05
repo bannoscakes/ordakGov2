@@ -3,14 +3,14 @@
 client_id = "ab729e4046f8cdea55d24bfffd815e6a"
 name = "Ordak Go"
 handle = "ordak-go"
-application_url = "https://dev.ordak.vip/"
+application_url = "https://ordak-go.vercel.app/"
 embedded = true
 
 [access_scopes]
 scopes = "write_products,write_orders,read_locations,write_merchant_managed_fulfillment_orders,write_delivery_customizations,write_shipping,write_validations"
 
 [auth]
-redirect_urls = [ "https://dev.ordak.vip/api/auth" ]
+redirect_urls = [ "https://ordak-go.vercel.app/api/auth" ]
 
 [webhooks]
 # Pinned to the current quarter (April 2026). Bumped quarterly via the
@@ -23,10 +23,11 @@ embedded = false
 [app_proxy]
 # Storefront calls https://{shop}.myshopify.com/apps/ordak-go/* → forwarded to
 # <app-host>/apps/proxy/* and handled by Remix routes app/routes/apps.proxy.*.
-# Pinned to https://dev.ordak.vip — the named cloudflared tunnel
-# (ordak-go-dev) routed via Cloudflare DNS to localhost:5173 in dev. Production
-# deploy will repoint this to the hosted app URL.
-url = "https://dev.ordak.vip/apps/proxy"
+# Pointed at the Vercel production deploy (project: ordak-go under team
+# bannos-and-flour-lane). For local debugging, set up a SEPARATE Partners app
+# pointed at the dev tunnel — URL flips on this production toml are not
+# supported (CLI dev workflow doesn't apply here; see `npm run dev:up`).
+url = "https://ordak-go.vercel.app/apps/proxy"
 subpath = "ordak-go"
 prefix = "apps"
 

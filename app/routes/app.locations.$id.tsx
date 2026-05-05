@@ -458,7 +458,7 @@ function SetupSection({ location, hasUsage }: { location: LocationData; hasUsage
         </Card>
 
         <InlineStack align="end" gap="200">
-          <Button variant="primary" submit loading={isLoading}>Save</Button>
+          <Button variant="primary" submit loading={isLoading} disabled={isLoading}>Save</Button>
         </InlineStack>
       </FormLayout>
     </Form>
@@ -517,7 +517,7 @@ function FulfillmentSection({ location }: { location: LocationData }) {
         </Card>
 
         <InlineStack align="end" gap="200">
-          <Button variant="primary" submit loading={isLoading}>Save</Button>
+          <Button variant="primary" submit loading={isLoading} disabled={isLoading}>Save</Button>
         </InlineStack>
       </FormLayout>
     </Form>
