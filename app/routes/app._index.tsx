@@ -81,10 +81,20 @@ export async function loader({ request }: LoaderFunctionArgs) {
     }
 
     const firstZoneId = activeZones[0]?.id ?? null;
-    const themeEditorUrl = `https://admin.shopify.com/store/${session.shop.replace(
-      ".myshopify.com",
-      "",
-    )}/themes/current/editor`;
+    // Deep-link the merchant into the theme editor with the cart template
+    // pre-selected AND the cart-scheduler app block pre-loaded as a candidate
+    // to add. UUID is the theme app extension's uid from
+    // extensions/cart-block/shopify.extension.toml — fixed across all shops
+    // where the Partners-published app is installed.
+    //
+    // Without this, the merchant lands on the home template and has to
+    // navigate to cart + manually find the block, which App Store reviewers
+    // (and real merchants following our setup guide) regularly stall on.
+    const CART_BLOCK_EXTENSION_UID = "c9e975ac-5a87-7a0c-c4f8-a5b69a342ca6a3e4e584";
+    const shopHandle = session.shop.replace(".myshopify.com", "");
+    const themeEditorUrl =
+      `https://admin.shopify.com/store/${shopHandle}/themes/current/editor` +
+      `?template=cart&addAppBlockId=${CART_BLOCK_EXTENSION_UID}/cart-scheduler`;
 
     return json({
       shop: session.shop,
@@ -187,7 +197,11 @@ export default function Index() {
     {
       id: "theme",
       label: "Embed cart-block in your theme",
-      description: "Add the Ordak Go block to your cart template via the theme editor.",
+      description:
+        "Click \"Open theme editor\" — your cart template opens with the Ordak " +
+        "Cart Scheduler block ready to add. Click Save in the top right when " +
+        "the block appears in the cart preview. Required for the slot picker " +
+        "to render on your storefront.",
       done: false,
       manual: true,
       // External link: the theme editor lives at admin.shopify.com, not
