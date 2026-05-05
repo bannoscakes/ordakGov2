@@ -81,10 +81,16 @@ export async function loader({ request }: LoaderFunctionArgs) {
     }
 
     const firstZoneId = activeZones[0]?.id ?? null;
-    const themeEditorUrl = `https://admin.shopify.com/store/${session.shop.replace(
-      ".myshopify.com",
-      "",
-    )}/themes/current/editor`;
+    // Open the theme editor pre-scoped to the cart template. We deliberately
+    // do NOT use ?addAppBlockId=<uid>/cart-scheduler — that param errors with
+    // "There is a problem with the app block" on some themes (notably
+    // Horizon's section-groups format, where app sections aren't directly
+    // resolvable by uid+handle through the deep-link). Sticking to
+    // ?template=cart works on every theme; the merchant follows the
+    // step-by-step description text to add the section once landed.
+    const shopHandle = session.shop.replace(".myshopify.com", "");
+    const themeEditorUrl =
+      `https://admin.shopify.com/store/${shopHandle}/themes/current/editor?template=cart`;
 
     return json({
       shop: session.shop,
@@ -187,7 +193,12 @@ export default function Index() {
     {
       id: "theme",
       label: "Embed cart-block in your theme",
-      description: "Add the Ordak Go block to your cart template via the theme editor.",
+      description:
+        "Required for the slot picker to render on your storefront. " +
+        "Click \"Open theme editor\" — your cart template will open. " +
+        "Then in the left sidebar click \"Add section\", find " +
+        "\"Ordak Cart Scheduler\" under Apps, click it to add, then " +
+        "click Save in the top right.",
       done: false,
       manual: true,
       // External link: the theme editor lives at admin.shopify.com, not
