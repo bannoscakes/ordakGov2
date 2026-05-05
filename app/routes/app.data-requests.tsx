@@ -89,15 +89,38 @@ export async function loader({ request }: LoaderFunctionArgs) {
     // OrderLinks are scoped to slots whose location belongs to this shop.
     // We deliberately filter on shop scope here — without it, a bug
     // could leak orders from a different shop to whoever visits this
-    // route. CustomerPreferences and RecommendationLog have shop scope
-    // either via shopifyDomain (RecommendationLog) or are global by
-    // customer (CustomerPreferences) — for the latter we trust the
-    // customer email/id is stable across shops.
-    const emailOrId: { customerId?: string; customerEmail?: string }[] = [];
+    // route. RecommendationLog filters via shopifyDomain (its native
+    // shop scope).
+    //
+    // CustomerPreferences has NO shop scope in the schema — it's keyed
+    // globally by customerId/customerEmail. If the same customer ever
+    // shopped at two stores both running Ordak Go, naively returning
+    // all their preferences would leak cross-shop data — a GDPR data
+    // minimisation violation (each merchant is a separate data
+    // controller and should only disclose data they hold).
+    //
+    // Mitigation without a schema migration: only return preferences
+    // when the customer has at least one OrderLink at THIS shop. If
+    // they do, we can claim the preference rows are "data this shop
+    // contributed to" because the customer interacted with this shop.
+    // It's not perfect — a preference row aggregated from multiple
+    // shops would still leak the aggregate — but it closes the case
+    // where the customer has no relationship with this shop at all.
+    const emailOrId: Array<{ customerEmail: string } | { customerId: string }> = [];
     if (customerEmail) emailOrId.push({ customerEmail });
     if (customerId) emailOrId.push({ customerId });
 
-    const [orderLinks, preferences, recommendationLogs] = await Promise.all([
+    // Defensive: emailOrId can't be empty here because of the early-return
+    // guard above. Assert so a future refactor that relaxes the guard
+    // gets a loud failure instead of `OR: []` which has engine-dependent
+    // behavior in Prisma.
+    if (emailOrId.length === 0) {
+      throw new Error(
+        "data-requests: emailOrId must have at least one entry — check the early-return guard",
+      );
+    }
+
+    const [orderLinks, recommendationLogs] = await Promise.all([
       customerEmail
         ? prisma.orderLink.findMany({
             where: {
@@ -107,15 +130,21 @@ export async function loader({ request }: LoaderFunctionArgs) {
             include: { slot: { include: { location: true } } },
           })
         : Promise.resolve([]),
-      prisma.customerPreferences.findMany({
-        where: { OR: emailOrId },
-      }),
       prisma.recommendationLog.findMany({
         where: {
           AND: [{ shopifyDomain: session.shop }, { OR: emailOrId }],
         },
       }),
     ]);
+
+    // Only include preferences if the customer has at least one
+    // OrderLink at this shop OR at least one RecommendationLog at this
+    // shop. Otherwise the customer has no relationship with this shop
+    // and the merchant has no standing to disclose preferences.
+    const customerHasShopHistory = orderLinks.length > 0 || recommendationLogs.length > 0;
+    const preferences = customerHasShopHistory
+      ? await prisma.customerPreferences.findMany({ where: { OR: emailOrId } })
+      : [];
 
     const result: ExportPayload = {
       exportedAt: new Date().toISOString(),
@@ -199,7 +228,14 @@ export default function DataRequests() {
       type: "application/json",
     });
     const url = URL.createObjectURL(blob);
-    const filename = `gdpr-export-${shop}-${searchedEmail ?? searchedCustomerId ?? "unknown"}-${result.exportedAt.replace(/[:.]/g, "-")}.json`;
+    // Sanitize each filename segment to alphanumerics, hyphens, and
+    // underscores. Email's `@`, shop's `.`, and timestamp's `:`/`.`
+    // can otherwise confuse OS-level download handlers (the `.` in
+    // bannoscakes.myshopify.com creates a multi-extension filename
+    // some download managers misinterpret).
+    const safe = (s: string) => s.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const customerSegment = searchedEmail ?? searchedCustomerId ?? "unknown";
+    const filename = `gdpr-export-${safe(shop)}-${safe(customerSegment)}-${safe(result.exportedAt)}.json`;
     const a = document.createElement("a");
     a.href = url;
     a.download = filename;

@@ -129,38 +129,62 @@ async function handleCustomerDataRequest(shop: string, payload: any) {
 
   // Count what we hold for this customer — the audit log line is the
   // primary reviewer-visible artifact, so make it self-contained.
-  let orderLinkCount = 0;
-  let preferenceCount = 0;
-  let recommendationLogCount = 0;
+  //
+  // CRITICAL: a count-query failure must NOT propagate. The outer
+  // try/catch in `action` would return 500, Shopify treats that as
+  // delivery failure and retries with exponential backoff for up to
+  // 48 hours, spamming the audit trail and overwhelming the DB. The
+  // legally important artifact is "we received this webhook"; counts
+  // are diagnostic. Wrap separately, log on failure, fall through to
+  // the audit log with `null` counts, return 200.
+  let counts: {
+    orderLinks: number | null;
+    preferences: number | null;
+    recommendationLogs: number | null;
+  } = { orderLinks: null, preferences: null, recommendationLogs: null };
+  let countError: string | null = null;
 
   if (customerEmail || customerId) {
-    const emailOrId: any[] = [];
-    if (customerEmail) emailOrId.push({ customerEmail });
-    if (customerId) emailOrId.push({ customerId });
+    try {
+      const emailOrId: Array<{ customerEmail: string } | { customerId: string }> = [];
+      if (customerEmail) emailOrId.push({ customerEmail });
+      if (customerId) emailOrId.push({ customerId });
 
-    [orderLinkCount, preferenceCount, recommendationLogCount] = await Promise.all([
-      customerEmail
-        ? prisma.orderLink.count({ where: { customerEmail } })
-        : 0,
-      prisma.customerPreferences.count({ where: { OR: emailOrId } }),
-      prisma.recommendationLog.count({ where: { OR: emailOrId } }),
-    ]);
+      const [orderLinkCount, preferenceCount, recommendationLogCount] = await Promise.all([
+        customerEmail
+          ? prisma.orderLink.count({ where: { customerEmail } })
+          : Promise.resolve(0),
+        prisma.customerPreferences.count({ where: { OR: emailOrId } }),
+        prisma.recommendationLog.count({
+          where: { AND: [{ shopifyDomain: shop }, { OR: emailOrId }] },
+        }),
+      ]);
+      counts = {
+        orderLinks: orderLinkCount,
+        preferences: preferenceCount,
+        recommendationLogs: recommendationLogCount,
+      };
+    } catch (err) {
+      countError = err instanceof Error ? err.message : String(err);
+      logger.error("gdpr.data_request_count_failed", err, { shop, customerId, customerEmail });
+      // Continue — audit log still fires below. Receipt is the legally
+      // important artifact, not the counts.
+    }
   }
 
   // Structured audit log. Vercel runtime logs are queryable via the
   // `gdpr.data_request_received` substring. Captures shop + customer
   // identifiers + counts so the merchant can prove receipt without a
-  // separate persistence layer.
+  // separate persistence layer. `countsUnavailable` is set when the
+  // count queries failed; the merchant can still re-run the export
+  // manually via /app/data-requests.
   logger.info("gdpr.data_request_received", {
     shop,
     customerId,
     customerEmail,
     requestedAt,
-    counts: {
-      orderLinks: orderLinkCount,
-      preferences: preferenceCount,
-      recommendationLogs: recommendationLogCount,
-    },
+    counts,
+    countsUnavailable: countError,
     fulfillmentInstructions:
       `Merchant should visit /app/data-requests on the Ordak Go admin, ` +
       `enter the customer's email or Shopify customer id, download the ` +
@@ -208,13 +232,20 @@ async function handleCustomerRedact(shop: string, payload: any) {
       },
     });
 
-    // Anonymize order links (we keep the order structure but remove PII)
+    // Anonymize order links (we keep the order structure but remove PII).
+    //
+    // BUG FIX (PR #79 review): the previous version had
+    // `{ customerPhone: customerEmail || undefined }` — comparing the
+    // OrderLink.customerPhone field against the email value, which by
+    // construction can never match. That left phone numbers
+    // un-redacted, a GDPR compliance failure. Removed entirely:
+    // Shopify's customers/redact payload only provides email + id,
+    // never a phone number, so there's no phone-based join available.
+    // Phone is still anonymized via `data: { customerPhone: null }`
+    // for any row matched on customerEmail.
     const updatedOrders = await prisma.orderLink.updateMany({
       where: {
-        OR: [
-          { customerEmail: customerEmail || undefined },
-          { customerPhone: customerEmail || undefined }, // In case phone matches
-        ],
+        customerEmail: customerEmail || undefined,
       },
       data: {
         customerEmail: null,
