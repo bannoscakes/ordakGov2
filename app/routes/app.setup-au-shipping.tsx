@@ -1,8 +1,26 @@
 // One-shot shipping setup: adds the AU Shop location to the General
-// delivery profile and creates an AU zone with both flat rates
-// (Standard delivery $15, Pickup at Annandale $0). Without a shipping
-// zone matching the customer's address, Shopify never invokes our
-// carrier service or our delivery customization function.
+// delivery profile and creates an AU zone with ONLY the Pickup at
+// Annandale $0 manual flat rate. Standard delivery pricing is handled
+// entirely by our Carrier Service callback (computes
+// `zone.basePrice + slot.priceAdjustment` from the merchant-configured
+// admin), so we deliberately do NOT create a manual Standard delivery
+// rate that would compete with our dynamic rate at checkout.
+//
+// History: this route used to create a manual "Standard delivery $15"
+// rate. The C.5 Delivery Customization Function would then hide it
+// when our Carrier Service rate was present. That worked when the
+// Function was active, but on non-Plus + custom-app installs the
+// Function doesn't activate, so the $15 manual rate leaked to checkout
+// (this caused the cart-vs-checkout mismatch reported on 2026-05-05).
+// Removing the manual delivery rate entirely closes this foot-gun and
+// makes the carrier service the single source of truth for delivery
+// pricing. Use /app/cleanup-shipping-zones to remove an existing
+// manual Standard delivery rate from a previously-set-up store.
+//
+// Pickup at Annandale $0 stays — the carrier callback already returns
+// a $0 pickup rate of its own, so this manual fallback is redundant
+// (not foot-gun) and acts as belt-and-braces if the callback is
+// unhealthy.
 //
 // Phase D will replace this with a proper merchant-facing setup wizard
 // (this route is a dev-store convenience, not a production feature).
@@ -33,8 +51,11 @@ interface CurrentState {
   hasAuLocation: boolean;
   auLocationName: string | null;
   hasAuZone: boolean;
-  hasStandardRate: boolean;
   hasPickupRate: boolean;
+  // Diagnostic only — surface a manual Standard delivery rate so the
+  // merchant can see they need to remove it via /app/cleanup-shipping-zones.
+  // We never CREATE this rate here.
+  hasManualStandardDeliveryRate: boolean;
 }
 
 interface Status {
@@ -122,8 +143,14 @@ export async function loader({ request }: LoaderFunctionArgs) {
     hasAuLocation: !!auLocation,
     auLocationName: auLocation?.name ?? null,
     hasAuZone: !!auZoneEntry,
-    hasStandardRate: methodNames.some((n) => n.includes("standard")),
     hasPickupRate: methodNames.some((n) => n.includes("pickup")),
+    // Word-boundary match so we don't false-positive on
+    // "Standardized delivery", "Premium standard", etc. Mirrors the
+    // pattern in app.cleanup-shipping-zones.tsx so the diagnostic and
+    // the cleanup route agree on what counts as the stale rate.
+    hasManualStandardDeliveryRate: methodNames.some((n) =>
+      /\bstandard\s+delivery\b/.test(n),
+    ),
   });
 }
 
@@ -186,8 +213,12 @@ export async function action({ request }: ActionFunctionArgs) {
     }
     steps.push(`Found AU location: ${auLocation.name} (${auLocation.id})`);
 
-    // Need both rates so the C.5 Function can pick which to show by name.
-    // Keep "Pickup" in the rate name so the function's regex catches it.
+    // We only ever create the Pickup rate — delivery pricing is the
+    // carrier service callback's responsibility (zone.basePrice +
+    // slot.priceAdjustment). Creating a manual "Standard delivery" rate
+    // here previously caused the cart-vs-checkout mismatch on non-Plus
+    // installs where the C.5 Function (which would hide the manual
+    // rate) doesn't activate.
     const existingAuZoneEntry = profile.profileLocationGroups
       ?.flatMap((g) => g.locationGroupZones.nodes)
       ?.find((z) => /australia/i.test(z.zone.name));
@@ -200,12 +231,6 @@ export async function action({ request }: ActionFunctionArgs) {
       name: string;
       rateDefinition: { price: { amount: string; currencyCode: string } };
     }> = [];
-    if (!existingMethodNames.some((n) => n.includes("standard"))) {
-      ratesToCreate.push({
-        name: "Standard delivery",
-        rateDefinition: { price: { amount: "15.00", currencyCode: "AUD" } },
-      });
-    }
     if (!existingMethodNames.some((n) => n.includes("pickup"))) {
       ratesToCreate.push({
         name: "Pickup at Annandale",
@@ -213,8 +238,20 @@ export async function action({ request }: ActionFunctionArgs) {
       });
     }
 
+    // Diagnostic warning: if the merchant has an existing manual
+    // Standard delivery rate (from a previous run of the old version of
+    // this route, or from manual admin config), surface it in the
+    // success message so they know to clean it up.
+    // Same word-boundary match as the loader and cleanup route.
+    const hasStaleStandardRate = existingMethodNames.some((n) =>
+      /\bstandard\s+delivery\b/.test(n),
+    );
+
     if (existingAuZone && ratesToCreate.length === 0) {
-      steps.push("AU zone exists with both rates: Standard delivery + Pickup at Annandale");
+      const msg = hasStaleStandardRate
+        ? "AU zone exists with Pickup at Annandale. ⚠️ Manual 'Standard delivery' rate also detected — visit /app/cleanup-shipping-zones to remove it (carrier service handles delivery pricing now)."
+        : "AU zone exists with Pickup at Annandale rate.";
+      steps.push(msg);
       return json<Status>({ ok: true, steps });
     }
 
@@ -301,7 +338,7 @@ export async function action({ request }: ActionFunctionArgs) {
         });
       }
       steps.push(
-        "Added Australia zone with Standard delivery + Pickup at Annandale to existing location group",
+        "Added Australia zone with Pickup at Annandale to existing location group (delivery rate served by carrier service)",
       );
     } else {
       const createRes = await admin.graphql(
@@ -342,7 +379,7 @@ export async function action({ request }: ActionFunctionArgs) {
         });
       }
       steps.push(
-        "Created new location group with AU location + Australia zone + both flat rates",
+        "Created new location group with AU location + Australia zone + Pickup at Annandale (delivery rate served by carrier service)",
       );
     }
 
@@ -369,7 +406,7 @@ export default function SetupAuShipping() {
   const isSubmitting = navigation.state === "submitting";
 
   const allSet =
-    state.hasProfile && state.hasAuLocation && state.hasAuZone && state.hasStandardRate && state.hasPickupRate;
+    state.hasProfile && state.hasAuLocation && state.hasAuZone && state.hasPickupRate;
 
   return (
     <Page title="Setup AU shipping (dev convenience)">
@@ -388,8 +425,15 @@ export default function SetupAuShipping() {
                   AU location: {state.auLocationName ?? "none"} {state.hasAuLocation ? "✓" : "✗"}
                 </List.Item>
                 <List.Item>Australia zone: {state.hasAuZone ? "✓" : "✗"}</List.Item>
-                <List.Item>Standard delivery rate: {state.hasStandardRate ? "✓" : "✗"}</List.Item>
                 <List.Item>Pickup at Annandale rate: {state.hasPickupRate ? "✓" : "✗"}</List.Item>
+                {state.hasManualStandardDeliveryRate ? (
+                  <List.Item>
+                    ⚠️ Manual &quot;Standard delivery&quot; rate detected — visit{" "}
+                    <a href="/app/cleanup-shipping-zones">/app/cleanup-shipping-zones</a>{" "}
+                    to remove it. Delivery pricing is handled by the carrier service
+                    (zone.basePrice + slot.priceAdjustment).
+                  </List.Item>
+                ) : null}
               </List>
               {allSet ? (
                 <Banner tone="success">
@@ -418,10 +462,13 @@ export default function SetupAuShipping() {
                 </BlockStack>
               ) : null}
               <Text as="p" tone="subdued">
-                Adds the AU location and an Australia shipping zone with two flat
-                rates (Standard delivery $15, Pickup at Annandale $0) to the default
-                delivery profile. Idempotent — checks for existing zone/rates and
-                only creates what's missing.
+                Adds the AU location and an Australia shipping zone with the
+                Pickup at Annandale $0 manual flat rate to the default delivery
+                profile. Delivery pricing is served by the Carrier Service
+                callback (zone.basePrice + slot.priceAdjustment, both
+                merchant-configured). No manual Standard delivery rate is
+                created — that would compete with the carrier service rate at
+                checkout. Idempotent — only creates what&apos;s missing.
               </Text>
             </BlockStack>
           </Card>
