@@ -111,7 +111,7 @@ async function main() {
   console.log(
     `Measuring ${iterations} iteration(s) against ${url}\n` +
       `delay between calls: ${delayMs}ms\n` +
-      `(first iteration may be cold-start if function was idle >5min)\n`,
+      `(first iteration may be cold-start if function was idle >15min)\n`,
   );
 
   const samples = [];
