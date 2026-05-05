@@ -30,10 +30,7 @@
     "test:coverage": "vitest --coverage",
     "type-check": "tsc --noEmit",
     "smoke:carrier": "node scripts/smoke-carrier-service.mjs",
-<<<<<<< HEAD
-=======
     "latency:carrier": "node scripts/measure-carrier-latency.mjs",
->>>>>>> 4c94587 (perf: add scripts/measure-carrier-latency.mjs + thresholds)
     "shopify": "shopify",
     "prisma": "prisma",
     "graphql-codegen": "graphql-codegen",
