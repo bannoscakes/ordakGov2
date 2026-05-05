@@ -53,6 +53,12 @@ export interface Slot {
   // Decimal as a string (e.g. "10.00").
   priceAdjustment: string;
   locationId: string;
+  // Delivery slots carry the zone id so the cart-block can pass it to the
+  // Carrier Service callback via `_zone_id` line item property — without
+  // this, the callback falls back to a postcode rescan that may pick a
+  // different (overlapping) zone, leaking the wrong basePrice and dropping
+  // the slot's priceAdjustment. Pickup slots have no zone (null).
+  zoneId: string | null;
   fulfillmentType: Fulfillment;
 }
 

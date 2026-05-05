@@ -210,6 +210,12 @@ export function CartScheduler({ config, rootEl }: Props) {
             slotTimeStart: slot?.timeStart ?? null,
             slotTimeEnd: slot?.timeEnd ?? null,
             locationId: loc?.locationId ?? slot?.locationId ?? null,
+            // Critical: without _zone_id on every cart line, the Carrier
+            // Service callback's fast-path zone lookup is skipped and it
+            // falls back to a postcode scan that may match a DIFFERENT
+            // zone than the eligibility check resolved — different
+            // basePrice + slot rejected → wrong checkout total.
+            zoneId: slot?.zoneId ?? null,
             wasRecommended: slot?.recommended ?? false,
           })
         )
