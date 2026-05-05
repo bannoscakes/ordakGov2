@@ -212,6 +212,37 @@ The active plan supersedes Phase E below. See **`/Users/panospanayi/.claude/plan
 
 Locked decision: distribution mode is **public, unlisted**. Custom distribution does not span both stores on non-Plus plans. Functions activate automatically once App-Store-distributed.
 
+### Phase F status (2026-05-06)
+
+✅ **Code-side App Store gates landed and held in production:**
+- Privacy policy at `/policies/privacy` with `panos@bannos.com.au` contact (PR #80)
+- GDPR `customers/data_request` real implementation + `/app/data-requests` admin export (PR #79)
+- CUSTOMERS_REDACT phone-redaction copy-paste bug fixed (PR #79)
+- OAuth scopes reduced from 7 to 5 (PR #78)
+- REST API audit: clean (PR #77)
+- Carrier callback warm p95 = 182ms (PR #74)
+- Smoke + latency scripts (`npm run smoke:carrier`, `npm run latency:carrier`) — PRs #73, #74
+- $15 hardcode removed from `/app/setup-au-shipping` + cleanup route added (PR #72)
+- Setup Guide deep-links to cart template (PRs #68, #70)
+- Cart-block writes `_zone_id` correctly (PR #66, the original cart-vs-checkout fix)
+- Vercel production hosting on syd1 (PR #64)
+
+⚠️ **Open bug (held back from production):** cart-block embed placement on Horizon's cart drawer. Renders inside `cart-discount__form` instead of as a sibling above Check out. PRs #82 (CSS) + #83 (placement fix) were merged + deployed (`ordak-go-34`) but caused the embed to disappear from the drawer DOM entirely; reverted via PR #85 (`ordak-go-35`). Production is back to "embed renders in wrong place" baseline. Root-cause investigation captured in `memory/cart_block_drawer_placement_attempt.md`. Task #15 in the active session task list.
+
+❌ **User-action items still outstanding for App Store submission:**
+- 5.2 Final support email decision (`panos@bannos.com.au` placeholder)
+- 5.3 App icon 1200×1200 PNG
+- 5.4 Screenshots (3–6 @ 1600×900)
+- 5.4b Demo screencast (60–90s, English narration)
+- 5.5 Demo store with seed data + reviewer instructions
+- 5.6 Listing copy (intro/details/features) — Claude can draft, user approves
+- 5.6b Set listing pricing as "Free" in Partners
+- 5.8d Carrier-service re-registration test (uninstall+reinstall) — destructive
+- 5.9 Stack-rot deferred items (Renovate config, quarterly cron) — mostly post-approval
+- 5.10 Final pre-submission smoke test on demo store
+
+The cart-drawer embed bug does NOT block App Store submission — the cart-page section block works correctly and is the primary UX surface. The drawer is a nice-to-have. Submission can proceed once the user-action items above land.
+
 ## Phase E · App Store readiness (legacy — superseded by Phase F)
 
 Defer until Phase D lands and dev-store testing is solid.
