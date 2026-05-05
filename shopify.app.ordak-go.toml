@@ -7,7 +7,21 @@ application_url = "https://ordak-go.vercel.app/"
 embedded = true
 
 [access_scopes]
-scopes = "write_products,write_orders,read_locations,write_merchant_managed_fulfillment_orders,write_delivery_customizations,write_shipping,write_validations"
+# Least-privilege scopes. Each one is justified by an actual GraphQL
+# query/mutation in the codebase — verified during Plan Task 5.8b.
+#  - write_orders: webhooks/orders/create handler tags orders, writes
+#    metafields, and the admin-side reschedule UI updates orders.
+#  - read_locations: queries shop locations to pre-populate Location admin.
+#  - write_delivery_customizations: registers the C.5 delivery-rate-filter
+#    Function as an active DeliveryCustomization (admin GraphQL).
+#  - write_shipping: registers the Carrier Service via carrierServiceCreate
+#    and updates the AU shipping zone in /app/setup-au-shipping.
+#  - write_validations: registers the cart-validation Function (D5).
+#
+# Previously included write_products and write_merchant_managed_fulfillment_orders;
+# both dropped after audit found zero API usage. App Store reviewers
+# flag overly-broad scopes; dropping them signals least-privilege.
+scopes = "write_orders,read_locations,write_delivery_customizations,write_shipping,write_validations"
 
 [auth]
 redirect_urls = [ "https://ordak-go.vercel.app/api/auth" ]
