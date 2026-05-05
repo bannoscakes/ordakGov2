@@ -92,10 +92,17 @@ function pickProfile(body: { data?: { deliveryProfiles?: { nodes?: DeliveryProfi
 // not a manual rate definition, lives elsewhere, and matching by name
 // here only inspects manual rates from `methodDefinitions`. Carrier-rate
 // definitions don't appear in this list.
+//
+// Word-boundary regex so we don't false-match "Standardized delivery",
+// "Premium standard", "Standard pickup" (also excluded by the explicit
+// pickup check), etc. The merchant could create a rate called e.g.
+// "Standard express" and not want it removed — that has no
+// "delivery" word, so this regex won't match it.
+const MANUAL_STANDARD_DELIVERY_PATTERN = /\bstandard\s+delivery\b/i;
+
 function isManualStandardDelivery(name: string): boolean {
-  const n = name.toLowerCase();
-  // Match "Standard delivery" but NOT pickup-related names.
-  return n.includes("standard") && !n.includes("pickup");
+  if (/pickup/i.test(name)) return false;
+  return MANUAL_STANDARD_DELIVERY_PATTERN.test(name);
 }
 
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -167,6 +174,14 @@ export async function action({ request }: ActionFunctionArgs) {
       `Found ${standardDeliveryMethods.length} manual Standard delivery rate(s) to remove: ${standardDeliveryMethods.map((m) => `"${m.name}"`).join(", ")}`,
     );
 
+    // `methodDefinitionsToDelete` lives at the top level of
+    // DeliveryProfileInput, not nested inside zonesToUpdate. The IDs
+    // are globally unique and Shopify resolves the parent zone
+    // automatically (same pattern as zonesToDelete and conditionsToDelete).
+    // Earlier draft of this code nested it under zonesToUpdate; that
+    // was rejected by code review (PR #72) as silently-ignored or
+    // schema-validation-error. Verified against
+    // shopify.dev/docs/api/admin-graphql/latest/input-objects/DeliveryProfileInput.
     const updateRes = await admin.graphql(
       `#graphql
         mutation OrdakGoRemoveManualDelivery($id: ID!, $profile: DeliveryProfileInput!) {
@@ -179,17 +194,7 @@ export async function action({ request }: ActionFunctionArgs) {
         variables: {
           id: profile.id,
           profile: {
-            locationGroupsToUpdate: [
-              {
-                id: auGroupZone.locationGroupId,
-                zonesToUpdate: [
-                  {
-                    id: auGroupZone.zone.zone.id,
-                    methodDefinitionsToDelete: standardDeliveryMethods.map((m) => m.id),
-                  },
-                ],
-              },
-            ],
+            methodDefinitionsToDelete: standardDeliveryMethods.map((m) => m.id),
           },
         },
       },

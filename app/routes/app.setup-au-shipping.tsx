@@ -144,7 +144,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
     auLocationName: auLocation?.name ?? null,
     hasAuZone: !!auZoneEntry,
     hasPickupRate: methodNames.some((n) => n.includes("pickup")),
-    hasManualStandardDeliveryRate: methodNames.some((n) => n.includes("standard")),
+    // Word-boundary match so we don't false-positive on
+    // "Standardized delivery", "Premium standard", etc. Mirrors the
+    // pattern in app.cleanup-shipping-zones.tsx so the diagnostic and
+    // the cleanup route agree on what counts as the stale rate.
+    hasManualStandardDeliveryRate: methodNames.some((n) =>
+      /\bstandard\s+delivery\b/.test(n),
+    ),
   });
 }
 
@@ -236,7 +242,10 @@ export async function action({ request }: ActionFunctionArgs) {
     // Standard delivery rate (from a previous run of the old version of
     // this route, or from manual admin config), surface it in the
     // success message so they know to clean it up.
-    const hasStaleStandardRate = existingMethodNames.some((n) => n.includes("standard"));
+    // Same word-boundary match as the loader and cleanup route.
+    const hasStaleStandardRate = existingMethodNames.some((n) =>
+      /\bstandard\s+delivery\b/.test(n),
+    );
 
     if (existingAuZone && ratesToCreate.length === 0) {
       const msg = hasStaleStandardRate
