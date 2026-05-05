@@ -89,67 +89,107 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 /**
  * Handle CUSTOMERS_DATA_REQUEST webhook (GDPR)
- * Export all customer data we have stored
+ *
+ * Shopify forwards a customer's GDPR Subject Access Request to the app.
+ * The app's responsibility is to make the requested data available to
+ * the merchant within 30 days, who then forwards it to the customer.
+ *
+ * This handler:
+ * 1. Authenticates the HMAC (already done by authenticate.webhook upstream).
+ * 2. Logs a structured `gdpr.data_request_received` event with the
+ *    customer identifiers — this is the audit trail that proves we
+ *    received the request, queryable in Vercel runtime logs.
+ * 3. Counts the data we hold for that customer so the merchant can
+ *    see at-a-glance whether anything needs to be exported.
+ * 4. Returns 200 — Shopify retries the webhook on non-2xx, which would
+ *    spam the audit trail.
+ *
+ * The actual data delivery to the merchant happens via the admin route
+ * `/app/data-requests`: the merchant pastes the customer's email or
+ * Shopify customer ID, we re-run the same queries this handler runs,
+ * and surface the results as a JSON payload the merchant can download
+ * and forward to the customer.
+ *
+ * No DB table is required to track requests because:
+ *   (a) Vercel runtime logs already provide the audit trail (queryable
+ *       by `gdpr.data_request_received` + customer identifier).
+ *   (b) The data itself is re-derived on demand from existing tables
+ *       (OrderLink, CustomerPreferences, RecommendationLog) — adding a
+ *       snapshot table would just create a stale duplicate.
+ *
+ * If this app's storage architecture later includes append-only state
+ * that can't be reconstructed from current tables, this handler will
+ * need to persist the snapshot. For now (2026-05-05), all PII lives in
+ * tables that can be queried by customer email/id directly.
  */
 async function handleCustomerDataRequest(shop: string, payload: any) {
-  const customerId = payload.customer?.id?.toString();
-  const customerEmail = payload.customer?.email;
+  const customerId = payload.customer?.id?.toString() ?? null;
+  const customerEmail = payload.customer?.email ?? null;
+  const requestedAt = new Date().toISOString();
 
-  logger.info("Processing CUSTOMERS_DATA_REQUEST", {
-    shop,
-    customerId,
-    customerEmail
-  });
+  // Count what we hold for this customer — the audit log line is the
+  // primary reviewer-visible artifact, so make it self-contained.
+  //
+  // CRITICAL: a count-query failure must NOT propagate. The outer
+  // try/catch in `action` would return 500, Shopify treats that as
+  // delivery failure and retries with exponential backoff for up to
+  // 48 hours, spamming the audit trail and overwhelming the DB. The
+  // legally important artifact is "we received this webhook"; counts
+  // are diagnostic. Wrap separately, log on failure, fall through to
+  // the audit log with `null` counts, return 200.
+  let counts: {
+    orderLinks: number | null;
+    preferences: number | null;
+    recommendationLogs: number | null;
+  } = { orderLinks: null, preferences: null, recommendationLogs: null };
+  let countError: string | null = null;
 
-  // Collect all customer data from our database
-  const customerData: any = {
+  if (customerEmail || customerId) {
+    try {
+      const emailOrId: Array<{ customerEmail: string } | { customerId: string }> = [];
+      if (customerEmail) emailOrId.push({ customerEmail });
+      if (customerId) emailOrId.push({ customerId });
+
+      const [orderLinkCount, preferenceCount, recommendationLogCount] = await Promise.all([
+        customerEmail
+          ? prisma.orderLink.count({ where: { customerEmail } })
+          : Promise.resolve(0),
+        prisma.customerPreferences.count({ where: { OR: emailOrId } }),
+        prisma.recommendationLog.count({
+          where: { AND: [{ shopifyDomain: shop }, { OR: emailOrId }] },
+        }),
+      ]);
+      counts = {
+        orderLinks: orderLinkCount,
+        preferences: preferenceCount,
+        recommendationLogs: recommendationLogCount,
+      };
+    } catch (err) {
+      countError = err instanceof Error ? err.message : String(err);
+      logger.error("gdpr.data_request_count_failed", err, { shop, customerId, customerEmail });
+      // Continue — audit log still fires below. Receipt is the legally
+      // important artifact, not the counts.
+    }
+  }
+
+  // Structured audit log. Vercel runtime logs are queryable via the
+  // `gdpr.data_request_received` substring. Captures shop + customer
+  // identifiers + counts so the merchant can prove receipt without a
+  // separate persistence layer. `countsUnavailable` is set when the
+  // count queries failed; the merchant can still re-run the export
+  // manually via /app/data-requests.
+  logger.info("gdpr.data_request_received", {
     shop,
     customerId,
     customerEmail,
-    requestedAt: new Date().toISOString(),
-    data: {},
-  };
-
-  // Find all order links for this customer
-  if (customerEmail) {
-    const orderLinks = await prisma.orderLink.findMany({
-      where: { customerEmail },
-      include: { slot: { include: { location: true } } },
-    });
-    customerData.data.orderLinks = orderLinks;
-
-    // Find customer preferences
-    const preferences = await prisma.customerPreferences.findMany({
-      where: {
-        OR: [
-          { customerId: customerId || undefined },
-          { customerEmail },
-        ],
-      },
-    });
-    customerData.data.preferences = preferences;
-
-    // Find recommendation logs
-    const recommendationLogs = await prisma.recommendationLog.findMany({
-      where: {
-        OR: [
-          { customerId: customerId || undefined },
-          { customerEmail },
-        ],
-      },
-    });
-    customerData.data.recommendationLogs = recommendationLogs;
-  }
-
-  // Log the data export (in production, you'd send this to the merchant or store it for retrieval)
-  logger.info("Customer data exported", {
-    shop,
-    customerId,
-    dataSize: JSON.stringify(customerData).length,
+    requestedAt,
+    counts,
+    countsUnavailable: countError,
+    fulfillmentInstructions:
+      `Merchant should visit /app/data-requests on the Ordak Go admin, ` +
+      `enter the customer's email or Shopify customer id, download the ` +
+      `JSON export, and forward it to the customer.`,
   });
-
-  // TODO: In production, send this data to Shopify or store it for merchant retrieval
-  // For now, we're logging it which satisfies the basic requirement
 }
 
 /**
@@ -192,13 +232,20 @@ async function handleCustomerRedact(shop: string, payload: any) {
       },
     });
 
-    // Anonymize order links (we keep the order structure but remove PII)
+    // Anonymize order links (we keep the order structure but remove PII).
+    //
+    // BUG FIX (PR #79 review): the previous version had
+    // `{ customerPhone: customerEmail || undefined }` — comparing the
+    // OrderLink.customerPhone field against the email value, which by
+    // construction can never match. That left phone numbers
+    // un-redacted, a GDPR compliance failure. Removed entirely:
+    // Shopify's customers/redact payload only provides email + id,
+    // never a phone number, so there's no phone-based join available.
+    // Phone is still anonymized via `data: { customerPhone: null }`
+    // for any row matched on customerEmail.
     const updatedOrders = await prisma.orderLink.updateMany({
       where: {
-        OR: [
-          { customerEmail: customerEmail || undefined },
-          { customerPhone: customerEmail || undefined }, // In case phone matches
-        ],
+        customerEmail: customerEmail || undefined,
       },
       data: {
         customerEmail: null,
