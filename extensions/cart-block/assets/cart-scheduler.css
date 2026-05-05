@@ -281,3 +281,44 @@
     grid-template-columns: 1fr 1fr;
   }
 }
+
+/*
+ * Container queries for narrow surfaces (Horizon cart drawer, narrow
+ * sidebars, mobile-width sections in some themes). The drawer is
+ * roughly 320-380px wide on desktop and ~340px on mobile — at those
+ * widths the default 1fr+auto and 1fr+1fr grids overflow horizontally.
+ *
+ * Using container queries instead of media queries because the SAME
+ * cart-block lives in multiple surfaces on the same theme — the cart
+ * page (wide) and the cart drawer (narrow) — and we want the drawer
+ * version to stack regardless of viewport width.
+ */
+.ordak-cart-scheduler {
+  container-type: inline-size;
+  container-name: ordak-cs;
+}
+
+@container ordak-cs (max-width: 400px) {
+  /* Toggle: stack delivery / pickup vertically. */
+  .ordak-toggle {
+    grid-template-columns: 1fr;
+  }
+  /* Postcode: input + Check button stack vertically. Button goes
+     full-width below so it doesn't get pushed off-screen. */
+  .ordak-postcode__row {
+    grid-template-columns: 1fr;
+  }
+  .ordak-postcode__row .ordak-btn {
+    width: 100%;
+  }
+  /* Slots / locations: single column at very narrow widths. */
+  .ordak-slots,
+  .ordak-locations {
+    grid-template-columns: 1fr;
+  }
+  /* Tighter horizontal padding on the wrapper to reclaim a few pixels. */
+  .ordak-cart-scheduler {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+}
