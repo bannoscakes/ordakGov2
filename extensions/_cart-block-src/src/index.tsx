@@ -73,62 +73,25 @@ function bootstrapEmbed(host: Element) {
 // → subtotal → widget → checkout button). Falls back through several
 // progressively-broader containers so unfamiliar themes still get a
 // reasonable placement.
-//
-// IMPORTANT — bug fix history (2026-05-06): the original selector list
-// included `button[type="submit"]` as a fallback. That's too greedy on
-// modern themes that include a Discount form (Shopify Horizon does):
-// the discount-form's "Apply" button is also `type="submit"`. And once
-// our own widget has mounted, our postcode-row's "Check" button is
-// also `type="submit"`. `querySelector` with a comma-separated selector
-// list returns the FIRST element matching ANY selector in DOM order —
-// so on Horizon, the embed got placed inside the discount form (or
-// inside its own postcode row on re-render). Visible symptom: cart-block
-// "hides behind Discount" or appears nested inside its own UI.
-//
-// Fix: only ever match `name="checkout"` (Shopify's standard checkout
-// button convention) — never any `button[type="submit"]`. If a theme
-// has no `name="checkout"` button, fall through to known footer/inner
-// container classes, then to the drawer itself. We do not try to
-// "discover" the checkout button via type=submit.
 function findHostTarget(drawer: Element): { parent: Element; before: Element | null } {
-  // 1. Prefer Shopify's `name="checkout"` button — the convention used
-  //    by Dawn, Horizon, Refresh, and every Online Store 2.0 theme. We
-  //    place the widget just above its CTA container so it reads as
-  //    "items → subtotal → widget → checkout."
-  const named = drawer.querySelector(
-    'button[name="checkout"], [name="checkout"]',
+  const checkout = drawer.querySelector(
+    'button[name="checkout"], [name="checkout"], button[type="submit"]',
   );
-  if (named) {
-    const ctas = named.closest(
-      '.cart-drawer__footer, .drawer__footer, .cart__footer, .cart__ctas, .totals',
-    );
-    if (ctas?.parentElement) {
-      return { parent: ctas.parentElement, before: ctas };
-    }
-    if (named.parentElement) {
-      return { parent: named.parentElement, before: named };
-    }
-  }
-
-  // 2. No name="checkout" button — match a known footer/cta class
-  //    directly. Place above it.
-  const footer = drawer.querySelector(
+  const ctas = checkout?.closest(
     '.cart-drawer__footer, .drawer__footer, .cart__footer, .cart__ctas, .totals',
   );
-  if (footer?.parentElement) {
-    return { parent: footer.parentElement, before: footer };
+  if (ctas?.parentElement) {
+    return { parent: ctas.parentElement, before: ctas };
   }
-
-  // 3. No footer found — append inside an "inner" container (cart body)
-  //    so we land below the line items.
+  if (checkout?.parentElement) {
+    return { parent: checkout.parentElement, before: checkout };
+  }
   const inner = drawer.querySelector(
     '.drawer__inner, .cart-drawer__inner, .cart-drawer__form, .cart__contents',
   );
   if (inner) {
     return { parent: inner, before: null };
   }
-
-  // 4. Last resort: append to drawer root.
   return { parent: drawer, before: null };
 }
 
