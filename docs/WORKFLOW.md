@@ -61,20 +61,34 @@ This is the surface that bit us. Steps for any change to `extensions/_cart-block
 1. **Code change** on a feature branch off `Dev`.
 2. **Synthetic-DOM unit tests** added or extended for any logic change. Vitest + happy-dom against a synthetic Horizon-shape DOM. CI runs these.
 3. **Build the bundle:** `npm run build:extensions`. Confirm output in `extensions/cart-block/assets/cart-scheduler.js`.
-4. **Draft deploy:** `npx shopify app deploy --no-release`. Creates a new version like `ordak-go-N` registered as a draft in Partners.
-5. **Install the draft on `ordakgo-v3` only** via Partners → app version page → "Install on a development store" → pick `ordakgo-v3`. The real bundle now runs on the canonical test store; no other shop is affected.
-6. **Real verification:** open the storefront cart drawer / cart page on `ordakgo-v3`. Run a DevTools-console snippet that reads the actual DOM and asserts what we expect. Save the snippet output (paste into PR description).
+4. **Draft deploy:** `npx shopify app deploy --no-release`. Creates a new version like `ordak-go-N` registered as a draft in Partners. The draft is the rollback target — having it archived lets you re-Release the previous version with one CLI command if the new bundle misbehaves.
+5. **Release globally — DEFAULT:** `npx shopify app release --version=ordak-go-N`. Pushes the new bundle to Shopify CDN; all installed stores load it on next page render. **Do NOT default to the Partners-UI "Install on a development store" detour.** While ordakGov2 has zero production installs (Bannos and Flour Lane install `checkout-validation`, not this app), the only stores affected by Release are dev stores (`ordakgo-v3` + `ordak-go-dev`). CLI release is one command, faster than the Partners UI dance, and the rollback story is symmetric (`npx shopify app release --version=ordak-go-N-1` reverts).
+6. **Real verification:** reload the `ordakgo-v3` storefront. Run a DevTools-console snippet that reads the actual DOM and asserts what we expect. Save the snippet output (paste into PR description). CDN propagation can lag 30–180s after Release — if the page still shows the old version path, hard-refresh or wait.
 7. **Place a real test order** if the change is large enough to risk regressions in the order pipeline.
-8. **Only after step 6 (and 7 if relevant) pass:** open PR → review → merge to `Dev` → merge to `main` (Pipeline A fires harmlessly).
-9. **Release** the draft version in Partners (Pipeline B "Release" click). Bundle goes live on every installed shop.
-10. **Roll-back plan:** if anything looks wrong on the live store, the previous version is one Partners "Release" click away. Document this in the PR description in advance.
+8. **Merge PR to `Dev` → promote `Dev → main`.** Pipeline A fires Vercel prod redeploy harmlessly; the bundle is already live on Shopify CDN from step 5.
+9. **Roll-back plan:** `npx shopify app release --version=<prior>` (one CLI command) — or click Release on the prior version in Partners. Either works.
 
-Note on `shopify app dev` vs this `--no-release` ritual:
+### When the default flips back to Partners-UI staged install
 
-- **`shopify app dev` does work** for this project (verified 2026-05-06 — the long-standing CLAUDE.md "EACCES" claim was wrong inheritance from a misdiagnosed earlier failure). Form: `npx shopify app dev --store=ordakgo-v3.myshopify.com --tunnel-url=https://dev.ordak.vip:443 --no-update` run interactively (it prompts for the storefront password). See [`CLAUDE.md`](../CLAUDE.md) and [`docs/DEV_SETUP.md`](DEV_SETUP.md). It's the right path for **fast iterative work** on extensions — pushes a "Development" preview that hot-reloads on file changes.
-- **`shopify app deploy --no-release` + Partners "Install on a development store"** (the ritual above) is the right path for **one-shot production-style verification** of a finished change — creates a permanently-archived app version in Partners that's one click away from Release or rollback. Use this when a PR is ready for final pre-merge verification rather than mid-iteration.
+The CLI-Release default holds **only while ordakGov2 has zero production installs**. Once the app is App Store distributed and Bannos / Flour Lane install via the unlisted listing, **switch to the staged path:**
 
-Both paths verify on a real dev store. Pick by use case.
+- `shopify app deploy --no-release` → draft only.
+- Partners UI → "Install on a development store" → ordakgo-v3 only → verify on the dev store.
+- THEN `shopify app release` → bundle goes live to all installs (production included).
+
+The "Stop on any ambiguity that affects production" workflow rule is what triggers this flip. Until then, default = CLI Release.
+
+### `shopify app dev` for iteration loops
+
+For fast iterative work on extensions (5+ changes per hour), `shopify app dev` is even better than the deploy + release dance — pushes a "Development" preview that hot-reloads on file changes:
+
+```bash
+npx shopify app dev --store=ordakgo-v3.myshopify.com --tunnel-url=https://dev.ordak.vip:443 --no-update
+```
+
+Verified 2026-05-06 — the long-standing CLAUDE.md "EACCES" claim was wrong inheritance from a misdiagnosed earlier failure (PR #91 corrected). Run interactively (CLI prompts for the storefront password). See [`CLAUDE.md`](../CLAUDE.md) and [`DEV_SETUP.md`](DEV_SETUP.md).
+
+Use `shopify app dev` for **iterative work**. Use `shopify app deploy + release` for **finished changes ready to ship**. Both verify on a real dev store.
 
 ## The Remix-admin deploy workflow
 
