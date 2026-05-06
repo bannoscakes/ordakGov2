@@ -37,7 +37,18 @@ A **PreToolUse hook blocks Write/Edit while on `main`** (intentional safety rail
 
 The app runs on a **stable named Cloudflare tunnel** at `https://dev.ordak.vip`. The tunnel hostname is permanent — `.env`, `shopify.app.ordak-go.toml`, and the Partners App URL are all pinned to it. No per-restart Partners-version churn. See [`docs/DEV_SETUP.md`](docs/DEV_SETUP.md) for the one-time tunnel setup recipe (`cloudflared tunnel login` + `tunnel create` + `tunnel route dns`) — already done on this machine.
 
-The Shopify CLI's `app dev` auto-orchestration **does not work** for this project — its auto-tunnel never starts and `--tunnel-url <X>:443` errors with EACCES. Don't retry it.
+**Shopify CLI's `app dev` does work** with our named tunnel — the previous "EACCES on `--tunnel-url <X>:443`" claim that lived here was wrong (verified 2026-05-06 against Shopify CLI 3.94.3 + the `dev.ordak.vip` named tunnel). The canonical command is:
+
+```bash
+npx shopify app dev \
+  --store=ordakgo-v3.myshopify.com \
+  --tunnel-url=https://dev.ordak.vip:443 \
+  --no-update
+```
+
+This pushes a "Development" preview of every extension (cart-block, delivery-rate-filter, cart-validation) to `ordakgo-v3` and hot-reloads on local file changes. Run it **in a real interactive terminal** — the CLI prompts for the dev store's storefront password (`theuld` for ordakgo-v3), and that prompt can't be piped non-interactively. The named cloudflared tunnel must be running first (`cloudflared tunnel run ordak-go-dev` — `npm run dev:up` does this plus starts Vite, which `shopify app dev` doesn't need since it provides its own server).
+
+`shopify app dev` is the right path for **iterative cart-block / extension work**. For one-shot production-style verification, `shopify app deploy --no-release` + Partners "Install on a development store" is the alternative (see [`docs/WORKFLOW.md`](docs/WORKFLOW.md)).
 
 ## What's next
 

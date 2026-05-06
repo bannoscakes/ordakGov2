@@ -160,11 +160,29 @@ set -a && source .env && set +a && npx prisma db pull
 set -a && source .env && set +a && npx prisma studio
 ```
 
+## `shopify app dev` for iterative extension work
+
+The previously-documented "EACCES" claim for `--tunnel-url <X>:443` was wrong — verified 2026-05-06 against CLI 3.94.3.
+
+For iterative cart-block / Function development with hot-reload on a dev store:
+
+```bash
+# Terminal 1 — keep cloudflared tunnel running (no Vite needed; the CLI provides its own server)
+cloudflared tunnel run ordak-go-dev
+
+# Terminal 2 — interactive (CLI will prompt for storefront password "theuld")
+npx shopify app dev \
+  --store=ordakgo-v3.myshopify.com \
+  --tunnel-url=https://dev.ordak.vip:443 \
+  --no-update
+```
+
+The CLI pushes a "Development" preview of cart-block + Functions to `ordakgo-v3` that hot-reloads on local source changes. Must run interactively — the storefront-password prompt can't be piped.
+
+Use this for **iterative work**. For one-shot production-style verification with a permanent versioned artifact, use `npx shopify app deploy --no-release` + Partners "Install on a development store" instead — see [`WORKFLOW.md`](WORKFLOW.md) for the cart-block deploy ritual.
+
 ## Don't waste time on
 
-- `shopify app dev` (alone, no tunnel) — never updates Partners URL, app_home stays at example.com
-- `shopify app dev --use-localhost` — generates cert but doesn't spawn Vite, doesn't update Partners URL
-- `shopify app dev --tunnel-url <X>:443` — EACCES because flag's `:port` is a local-bind port, not the public one
-- Trying to convert a non-Partners store into a dev store — it can't be done; create a fresh dev store under Partners
-
-The 3-terminal flow above is the only thing that's been verified to work end-to-end.
+- `shopify app dev` (alone, no tunnel flag) — never updates Partners URL, app_home stays at example.com.
+- `shopify app dev --use-localhost` — generates cert but doesn't expose your app to Shopify, so OAuth and webhooks don't work; useful only for self-contained admin testing.
+- Trying to convert a non-Partners store into a dev store — it can't be done; create a fresh dev store under Partners.
