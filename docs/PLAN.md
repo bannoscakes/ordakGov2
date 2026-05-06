@@ -32,13 +32,13 @@ Last updated: 2026-05-04 (afternoon) — Phase D re-cut after Pickeasy review se
 - Native HTML date picker for the day chooser (replaced custom calendar grid).
 - `prisma/seed.mjs` — additive test-data seeder (`DAYS_AHEAD = 14`).
 - Reserves `WebhookDestination` table in schema (no UI/runtime; D9 builds the UI + dispatcher).
-- End-to-end live: orders #1007–#1013 on `ordakgo-v3` all created OrderLinks with full email + postal-label addresses.
+- End-to-end live at the time: orders #1007–#1013 on the now-retired `ordak-go-dev` all created OrderLinks with full email + postal-label addresses (rows since deleted in the 2026-05-06 Supabase cleanup). The same code runs on `ordakgo-v3`; a real customer order on that store is the open verification gate (see [`docs/WORKFLOW.md`](WORKFLOW.md)).
 
 ✅ **Phase C.5 · Delivery Customization Function — merged 2026-05-03 (PR #42):**
 
 **Tagged:** `v0.5.0-pickup-checkout-locked` (commit `ec9ed6b`, app version `ordak-go-18`). Recoverable baseline if checkout filtering ever breaks — see `memory/checkpoint_pickup_checkout_locked.md`.
 
-**Headline product goal achieved:** the cart-stage Pickup/Delivery choice locks the checkout shipping options. Customer cannot override at checkout. No native Ship/Pickup tabs. Verified live on `ordakgo-v3`.
+**Headline product goal achieved:** the cart-stage Pickup/Delivery choice locks the checkout shipping options. Customer cannot override at checkout. No native Ship/Pickup tabs. Verified live on the retired `ordak-go-dev`; the same Function bundle is loaded on `ordakgo-v3` but a real cart-stage-lock flow there is the open verification gate (see [`docs/WORKFLOW.md`](WORKFLOW.md)).
 
 What landed:
 - `extensions/delivery-rate-filter/` — TypeScript Shopify Function (target `cart.delivery-options.transform.run`) compiled to Wasm. Reads `_delivery_method` from cart line item attributes (preferred) OR cart-level `delivery_method` attribute (fallback). Hides delivery options whose `deliveryMethodType` AND handle/title/code don't match the cart-stage choice. Pickup pattern: `\b(?:pick[-_ ]?up|in[-_ ]?store|click[-_ ]?(?:and|&)[-_ ]?collect|collect)\b`.
