@@ -73,10 +73,42 @@ function bootstrapEmbed(host: Element) {
 // → subtotal → widget → checkout button). Falls back through several
 // progressively-broader containers so unfamiliar themes still get a
 // reasonable placement.
-function findHostTarget(drawer: Element): { parent: Element; before: Element | null } {
-  const checkout = drawer.querySelector(
-    'button[name="checkout"], [name="checkout"], button[type="submit"]',
+//
+// Selector priority is critical here: a previous version used
+// `querySelector('button[name="checkout"], [name="checkout"], button[type="submit"]')`
+// which returns the first match in DOM order across the WHOLE list — not
+// the first selector's match. On Horizon's drawer that picked Discount's
+// "Apply" submit button (or our own postcode "Check") instead of the real
+// checkout, nesting the embed inside the wrong form. This implementation
+// prefers the named checkout, and only falls back to a generic submit
+// button when it's scoped inside a known footer/CTA container AND not
+// inside any sibling form (Discount, our postcode row, our own embed).
+export function findHostTarget(drawer: Element): { parent: Element; before: Element | null } {
+  let checkout: Element | null = drawer.querySelector(
+    'button[name="checkout"], [name="checkout"]',
   );
+
+  if (!checkout) {
+    const candidates = drawer.querySelectorAll('button[type="submit"]');
+    for (const btn of Array.from(candidates)) {
+      if (
+        btn.closest(
+          '.cart-discount__form, .ordak-postcode__row, [data-ordak-cart-scheduler-embed], [data-ordak-cart-scheduler]',
+        )
+      ) {
+        continue;
+      }
+      if (
+        btn.closest(
+          '.cart-drawer__footer, .drawer__footer, .cart__footer, .cart__ctas, .totals',
+        )
+      ) {
+        checkout = btn;
+        break;
+      }
+    }
+  }
+
   const ctas = checkout?.closest(
     '.cart-drawer__footer, .drawer__footer, .cart__footer, .cart__ctas, .totals',
   );
