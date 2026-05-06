@@ -16,17 +16,17 @@
  *
  *   # Delivery happy path
  *   node scripts/smoke-carrier-service.mjs delivery \
- *     --shop=ordak-go-dev.myshopify.com \
- *     --zone-id=cmooyvw7z000iouvi9hfprzkf \
- *     --slot-id=cmorrcrex006rouoy3c0e2kvb \
+ *     --shop=ordakgo-v3.myshopify.com \
+ *     --zone-id=<delivery-zone-id> \
+ *     --slot-id=<delivery-slot-id> \
  *     --postcode=2035 \
- *     --location-id=cmoo1c3gt0002out7e0i5fjgo \
+ *     --location-id=<location-id> \
  *     --expected-cents=2200
  *
  *   # Pickup happy path (no zone-id; slot-id refers to a pickup slot)
  *   node scripts/smoke-carrier-service.mjs pickup \
- *     --shop=ordak-go-dev.myshopify.com \
- *     --location-id=cmoo1c3gt0002out7e0i5fjgo \
+ *     --shop=ordakgo-v3.myshopify.com \
+ *     --location-id=<location-id> \
  *     --slot-id=<pickup-slot-id> \
  *     --postcode=2038 \
  *     --expected-cents=0
