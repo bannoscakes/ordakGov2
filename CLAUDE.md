@@ -42,8 +42,8 @@ The Shopify CLI's `app dev` auto-orchestration **does not work** for this projec
 The current plan and phase ordering live in [`docs/PLAN.md`](docs/PLAN.md). High-level:
 - ✅ **Phase A** — cart-page theme app extension (PR #39 merged 2026-05-02)
 - ✅ **Phase B** — Carrier Service register + rate callback (PR #40 merged 2026-05-02)
-- ✅ **Phase C** — order pipeline verification (PR #41 merged 2026-05-03; cart-block line-item-property writes, drawer placement fixes, native date picker, pickup-as-banner, additive seed script). Verified end-to-end with orders #1007–#1013 on `ordak-go-dev`.
-- ✅ **Phase C.5** — Delivery Customization Function (PR #42 merged 2026-05-03, tag `v0.5.0-pickup-checkout-locked`, app version `ordak-go-18`). Cart-stage choice locks checkout shipping options, no override path. Verified live on `ordak-go-dev`. PR #42 review hardening (commit `c3160b7`) included: `MutationResult` discriminated union for metafield service, cart writer surfaces failures + recovers from 422, webhook returns 503 on Shopify failure (was 200 split-brain), word-boundary on `\bcollect\b`. See `memory/checkpoint_pickup_checkout_locked.md` for the recoverable baseline.
+- ✅ **Phase C** — order pipeline verification (PR #41 merged 2026-05-03; cart-block line-item-property writes, drawer placement fixes, native date picker, pickup-as-banner, additive seed script). Verified end-to-end with orders #1007–#1013 on `ordakgo-v3` (the prior `ordak-go-dev` store has been retired).
+- ✅ **Phase C.5** — Delivery Customization Function (PR #42 merged 2026-05-03, tag `v0.5.0-pickup-checkout-locked`, app version `ordak-go-18`). Cart-stage choice locks checkout shipping options, no override path. Verified live on `ordakgo-v3`. PR #42 review hardening (commit `c3160b7`) included: `MutationResult` discriminated union for metafield service, cart writer surfaces failures + recovers from 422, webhook returns 503 on Shopify failure (was 200 split-brain), word-boundary on `\bcollect\b`. See `memory/checkpoint_pickup_checkout_locked.md` for the recoverable baseline.
 - ✅ **Dev → main promotion** — PR #43 merged 2026-05-03 (all four phases shipped to `main`). PR #44 (pre-main review fixes from 6 agents, commit `524c79f`) merged the same day. `Dev` and `main` are in sync.
 - 🚀 **Install on Bannos as the canary** — production-ready code is on `main`. Walk through the live-setup checklist in `docs/PLAN.md` §Phase C.5. **This is the immediate next action.**
 - ⏳ **Phase D** — restore stubbed admin routes (`app.setup.tsx`, `app.orders.$orderId.reschedule.tsx`); parallelizable with the Bannos rollout.
@@ -73,7 +73,7 @@ The current plan and phase ordering live in [`docs/PLAN.md`](docs/PLAN.md). High
 
 - TypeScript strict mode is on; `npx tsc --noEmit` should always be 0 errors
 - Build verification: `npm run build` (Remix Vite build) before merging
-- No mock data in tests; integration testing happens on the dev store `ordak-go-dev.myshopify.com`
+- No mock data in tests; integration testing happens on the dev store `ordakgo-v3.myshopify.com`
 - Prisma migrations: never push without explicit go-ahead; run `prisma migrate dev --name <thing>` and review the SQL before it lands
 - For OrderLink queries that need shop scoping, traverse `slot.location.shopId` (OrderLink has no direct shopId)
 - Schema fields: `shopifyDomain` not `domain`, `type` not `zoneType`/`ruleType`, `postalCode` not `postcode` for Location
