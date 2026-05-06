@@ -69,7 +69,12 @@ This is the surface that bit us. Steps for any change to `extensions/_cart-block
 9. **Release** the draft version in Partners (Pipeline B "Release" click). Bundle goes live on every installed shop.
 10. **Roll-back plan:** if anything looks wrong on the live store, the previous version is one Partners "Release" click away. Document this in the PR description in advance.
 
-Note: `shopify app dev` is documented in [`CLAUDE.md`](../CLAUDE.md) as not working for this project (auto-tunnel never starts; `--tunnel-url <X>:443` errors EACCES). The `--no-release` draft + dev-store install path is the verified alternative.
+Note on `shopify app dev` vs this `--no-release` ritual:
+
+- **`shopify app dev` does work** for this project (verified 2026-05-06 — the long-standing CLAUDE.md "EACCES" claim was wrong inheritance from a misdiagnosed earlier failure). Form: `npx shopify app dev --store=ordakgo-v3.myshopify.com --tunnel-url=https://dev.ordak.vip:443 --no-update` run interactively (it prompts for the storefront password). See [`CLAUDE.md`](../CLAUDE.md) and [`docs/DEV_SETUP.md`](DEV_SETUP.md). It's the right path for **fast iterative work** on extensions — pushes a "Development" preview that hot-reloads on file changes.
+- **`shopify app deploy --no-release` + Partners "Install on a development store"** (the ritual above) is the right path for **one-shot production-style verification** of a finished change — creates a permanently-archived app version in Partners that's one click away from Release or rollback. Use this when a PR is ready for final pre-merge verification rather than mid-iteration.
+
+Both paths verify on a real dev store. Pick by use case.
 
 ## The Remix-admin deploy workflow
 
