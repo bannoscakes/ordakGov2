@@ -1,4 +1,4 @@
-// Test-data seeder for ordak-go-dev.
+// Test-data seeder for ordakgo-v3.
 //
 // DEFAULT (safe, additive): creates the Location/Zone/Rule rows only if
 // none exist for the shop, then upserts slots for the next 14 days. Safe
@@ -20,7 +20,7 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-const SHOP_DOMAIN = process.env.SHOP ?? "ordak-go-dev.myshopify.com";
+const SHOP_DOMAIN = process.env.SHOP ?? "ordakgo-v3.myshopify.com";
 
 const LOCATION = {
   name: "Sydney CBD",

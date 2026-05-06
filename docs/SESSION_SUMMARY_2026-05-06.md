@@ -95,7 +95,7 @@ These commands were verified passing at end of session and form the regression-g
 ```bash
 # Cart-vs-checkout total parity (the original bug)
 npm run smoke:carrier -- delivery \
-  --shop=ordak-go-dev.myshopify.com \
+  --shop=ordakgo-v3.myshopify.com \
   --zone-id=cmooyvw7z000iouvi9hfprzkf \
   --slot-id=cmorrcrex006rouoy3c0e2kvb \
   --postcode=2035 --location-id=cmoo1c3gt0002out7e0i5fjgo \
@@ -104,7 +104,7 @@ npm run smoke:carrier -- delivery \
 
 # Latency baseline (warm)
 npm run latency:carrier -- --iterations=10 \
-  --shop=ordak-go-dev.myshopify.com \
+  --shop=ordakgo-v3.myshopify.com \
   --zone-id=cmooyvw7z000iouvi9hfprzkf \
   --slot-id=cmorrcrex006rouoy3c0e2kvb \
   --postcode=2035 --location-id=cmoo1c3gt0002out7e0i5fjgo

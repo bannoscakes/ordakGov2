@@ -13,11 +13,11 @@
  *
  *   # Warm-state baseline (10 iterations, default)
  *   npm run latency:carrier -- \
- *     --shop=ordak-go-dev.myshopify.com \
- *     --zone-id=cmooyvw7z000iouvi9hfprzkf \
- *     --slot-id=cmorrcrex006rouoy3c0e2kvb \
+ *     --shop=ordakgo-v3.myshopify.com \
+ *     --zone-id=<delivery-zone-id> \
+ *     --slot-id=<delivery-slot-id> \
  *     --postcode=2035 \
- *     --location-id=cmoo1c3gt0002out7e0i5fjgo
+ *     --location-id=<location-id>
  *
  *   # Custom iteration count + per-call delay
  *   ... --iterations=20 --delay-ms=200

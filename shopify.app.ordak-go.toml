@@ -49,4 +49,4 @@ prefix = "apps"
 # automatically_update_urls_on_dev only fires under `shopify app dev`, which
 # this project doesn't use. We run a stable named tunnel; URLs above are pinned.
 automatically_update_urls_on_dev = false
-dev_store_url = "ordak-go-dev.myshopify.com"
+dev_store_url = "ordakgo-v3.myshopify.com"

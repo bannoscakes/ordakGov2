@@ -10,7 +10,7 @@ npm run dev:logs    # tail vite + cloudflared logs (Ctrl-C exits tail, processes
 npm run dev:down    # stop both
 ```
 
-That's it. `dev:up` runs `cloudflared tunnel run ordak-go-dev` (a stable named tunnel routed via Cloudflare DNS to **`https://dev.ordak.vip`**) in the background, then starts Vite. The tunnel hostname never changes, so `.env`, `shopify.app.ordak-go.toml`, and the Partners app URL are all pinned to `https://dev.ordak.vip` in committed state. The first `dev:up` after a fresh clone (or after toml URL changes) builds the cart-block extension and runs `shopify app deploy` once to push the URL to Partners; subsequent runs skip the deploy via a sentinel file (`.dev-logs/last-pushed-url.txt`).
+That's it. `dev:up` runs `cloudflared tunnel run ordak-go-dev` (a stable named tunnel routed via Cloudflare DNS to **`https://dev.ordak.vip`**) in the background, then starts Vite. The tunnel hostname never changes; the dev Partners app is pinned to `https://dev.ordak.vip` (committed `shopify.app.ordak-go-dev.toml`), separate from the production toml that points at Vercel. The first `dev:up` after a fresh clone (or after URL changes) builds the cart-block extension and runs `shopify app deploy --config ordak-go-dev` once to push the URL to Partners; subsequent runs skip the deploy via a sentinel file (`.dev-logs/last-pushed-url.txt`).
 
 ### How the tunnel was set up (one-time, already done)
 
@@ -74,7 +74,7 @@ Wait for the boxed output:
    SHOPIFY_APP_URL=<the trycloudflare URL>
    ```
 3. **Restart Vite** (Ctrl+C in Terminal 1, then `npm run vite:dev`) — needed to re-read `.env`.
-4. **Open the app**: `https://admin.shopify.com/store/ordak-go-dev/apps/ordak-go`
+4. **Open the app**: `https://admin.shopify.com/store/ordakgo-v3/apps/ordak-go`
 
 If this is the first install for this Partners-app version, you'll see Shopify's OAuth grant dialog. Click Install. The embedded admin should load showing the Ordak Go dashboard.
 
@@ -129,7 +129,7 @@ SHOPIFY_APP_URL=<populated each session from cloudflared output>
 DATABASE_URL=postgresql://postgres:<password>@db.zqwkqyviacvpjggesdbz.supabase.co:5432/postgres
 SESSION_SECRET=<openssl rand -hex 32>
 NODE_ENV=development
-DEV_STORE_DOMAIN=ordak-go-dev.myshopify.com
+DEV_STORE_DOMAIN=ordakgo-v3.myshopify.com
 ```
 
 If `@` appears in your DB password, URL-encode it as `%40` (otherwise the URL parser misreads the host).
@@ -165,6 +165,6 @@ set -a && source .env && set +a && npx prisma studio
 - `shopify app dev` (alone, no tunnel) — never updates Partners URL, app_home stays at example.com
 - `shopify app dev --use-localhost` — generates cert but doesn't spawn Vite, doesn't update Partners URL
 - `shopify app dev --tunnel-url <X>:443` — EACCES because flag's `:port` is a local-bind port, not the public one
-- Trying to convert a non-Partners dev store (like `bannoscakes`) into one — it can't be done; create a fresh dev store
+- Trying to convert a non-Partners store into a dev store — it can't be done; create a fresh dev store under Partners
 
 The 3-terminal flow above is the only thing that's been verified to work end-to-end.

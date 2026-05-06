@@ -16,7 +16,7 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-const SHOP = process.env.SHOP ?? "ordak-go-dev.myshopify.com";
+const SHOP = process.env.SHOP ?? "ordakgo-v3.myshopify.com";
 const API_VERSION = "2026-04";
 const FUNCTION_TITLE = "Ordak Go — hide rates by cart-stage choice";
 

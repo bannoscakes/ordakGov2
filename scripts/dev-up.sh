@@ -131,7 +131,7 @@ cat <<EOF
 
 ✓ Dev environment up.
   App URL    $APP_URL
-  Admin      https://admin.shopify.com/store/ordak-go-dev/apps/ordak-go
+  Admin      https://admin.shopify.com/store/ordakgo-v3/apps/ordak-go
   Tail logs  npm run dev:logs
   Stop       npm run dev:down
 
