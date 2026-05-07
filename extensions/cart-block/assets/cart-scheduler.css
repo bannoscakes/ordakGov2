@@ -281,3 +281,25 @@
     grid-template-columns: 1fr 1fr;
   }
 }
+
+/* Theme Check out button disabled state — applied by the cart-block JS when
+   the customer hasn't completed delivery method + (postcode-check for
+   delivery) + date + slot. The interceptor still preventDefault()s clicks
+   even if the disabled style isn't visible; this is purely the visual cue
+   that matches the Bannos UX ("Place order activates only after all 3
+   selected"). The selector targets any element the JS marked, regardless
+   of theme. */
+[data-ordak-disabled] {
+  opacity: 0.55 !important;
+  cursor: not-allowed !important;
+  pointer-events: auto; /* keep clicks reaching the interceptor */
+  filter: saturate(0.6);
+}
+[data-ordak-disabled]:hover,
+[data-ordak-disabled]:focus,
+[data-ordak-disabled]:active {
+  /* Defensive: some themes raise contrast on hover. Override so the
+     disabled state stays visually disabled. */
+  opacity: 0.55 !important;
+  filter: saturate(0.6);
+}

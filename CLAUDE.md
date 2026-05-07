@@ -53,14 +53,16 @@ This pushes a "Development" preview of every extension (cart-block, delivery-rat
 ## What's next
 
 The current plan and phase ordering live in [`docs/PLAN.md`](docs/PLAN.md). High-level:
-- ✅ **Phase A** — cart-page theme app extension (PR #39 merged 2026-05-02)
-- ✅ **Phase B** — Carrier Service register + rate callback (PR #40 merged 2026-05-02)
-- ✅ **Phase C** — order pipeline verification (PR #41 merged 2026-05-03; cart-block line-item-property writes, drawer placement fixes, native date picker, pickup-as-banner, additive seed script). Verified end-to-end at the time with orders #1007–#1013 on the now-retired `ordak-go-dev` store (those rows were dropped during the 2026-05-06 Supabase cleanup). The same Phase C code runs unchanged on `ordakgo-v3`, but **no real customer order has yet completed end-to-end there** — see [`docs/WORKFLOW.md`](docs/WORKFLOW.md) for the open verification gate.
-- ✅ **Phase C.5** — Delivery Customization Function (PR #42 merged 2026-05-03, tag `v0.5.0-pickup-checkout-locked`, app version `ordak-go-18`). Cart-stage choice locks checkout shipping options, no override path. Verified live on the retired `ordak-go-dev`; the Function bundle is identical in `ordak-go-35` and loaded on `ordakgo-v3`, but the cart-stage lock has not been re-verified there by a real flow. PR #42 review hardening (commit `c3160b7`) included: `MutationResult` discriminated union for metafield service, cart writer surfaces failures + recovers from 422, webhook returns 503 on Shopify failure (was 200 split-brain), word-boundary on `\bcollect\b`. See `memory/checkpoint_pickup_checkout_locked.md` for the recoverable baseline.
-- ✅ **Dev → main promotion** — PR #43 merged 2026-05-03 (all four phases shipped to `main`). PR #44 (pre-main review fixes from 6 agents, commit `524c79f`) merged the same day. `Dev` and `main` are in sync.
-- 🚀 **Install on Bannos as the canary** — production-ready code is on `main`. Walk through the live-setup checklist in `docs/PLAN.md` §Phase C.5. **This is the immediate next action.**
-- ⏳ **Phase D** — restore stubbed admin routes (`app.setup.tsx`, `app.orders.$orderId.reschedule.tsx`); parallelizable with the Bannos rollout.
-- ⏳ **Phase E** — App Store readiness
+- ✅ **Phase A–C.5** (PRs #39–#42, merged 2026-05-02/03) — cart-block, Carrier Service, order pipeline, Delivery Customization Function. Tag `v0.5.0-pickup-checkout-locked` is the recoverable baseline.
+- ✅ **Phase D — 10 steps** (PRs #53–#65, merged 2026-05-04/05) — schema migration (D1), per-Location admin shell (D2), per-Zone delivery slot admin (D3 headline), Carrier Service rewrite (D4), Cart Validation Function + cart-block UX cleanup (D5), wizard pipes through (D6), settings restructure (D7), orders calendar (D8), webhook destinations (D9), admin reschedule finalized (D10).
+- ✅ **Per-location pickup hours admin** (PR #95, merged 2026-05-07) — closes the gap Phase D missed. New "Pickup hours" tab on `/app/locations/:id` with shared `SlotsEditor` component. Setup wizard auto-detours through pickup-hours when `supportsPickup` is checked. Page-level + dashboard misconfig warnings when pickup is enabled but has no hours. See `memory/pickup_admin_per_location.md` for the architecture reference.
+- ✅ **Phase 1 verification gate CLOSED** (2026-05-07) — real test orders end-to-end on `ordakgo-v3`:
+  - #1001 delivery — slot 2026-05-15 11:00, `slot.booked=1`, OrderLink + EventLog rows present.
+  - #1002 pickup — slot 2026-05-07 09:00 at Bannos HQ, `slot.booked=1`, `order.linked` + `order.shopify_writes_attempted` (ok=true) events fired.
+- ✅ **`ordak-go-38`** released globally (cart-block + delivery-rate-filter + cart-validation), bundling the pickup-mode wording fix.
+- ⏳ **Phase 2 — App Store listing assets**: app icon 1200×1200, 3–6 screenshots @ 1600×900 from the new admin pages, demo screencast 60–90s, listing copy draft, "Free" pricing in Partners, reviewer instructions. **This is the immediate next action.**
+- ⏳ **Phase 3** — reviewer-experience hardening: carrier-service uninstall/reinstall test on `ordakgo-v3`, final pre-submission smoke.
+- ⏳ **Phase 4–6** — submit unlisted, address review feedback, install on Bannos + Flour Lane via the unlisted listing's direct link post-approval.
 
 ## Key directories
 
@@ -92,18 +94,11 @@ The current plan and phase ordering live in [`docs/PLAN.md`](docs/PLAN.md). High
 - Schema fields: `shopifyDomain` not `domain`, `type` not `zoneType`/`ruleType`, `postalCode` not `postcode` for Location
 - Admin forms use Remix's `<Form>` from `@remix-run/react`, **not** raw `<form method="post">`. Inside the embedded admin iframe a native form POST renders the redirect target's loader response as raw JSON instead of the React tree.
 
-## Two routes are stubbed (waiting for proper rebuild)
-
-- `app/routes/app.setup.tsx` — setup wizard placeholder pointing at granular admin pages
-- `app/routes/app.orders.$orderId.reschedule.tsx` — admin reschedule placeholder
-
-Don't accept these as "done" — they need real implementations as part of Phase D.
-
 ## Carrier Service contract — read before touching
 
 Shopify's Carrier Service rate-request body does **not** include cart `note_attributes`. Only `origin / destination / items / currency`. The cart-block mirrors the cart attributes onto every line as `_`-prefixed properties (`_delivery_method`, `_slot_id`, `_was_recommended`), which DO appear at `rate.items[*].properties` in the carrier service callback AND at `order.line_items[*].properties` for the `webhooks.orders.create` handler. This contract is enforced as of Phase C (PR #41) — don't strip any of those three writes without checking Phase B + Phase C readers.
 
-The carrier service is registered automatically in `afterAuth` and unregistered on `APP_UNINSTALLED`. The Shopify-assigned ID lives at `Shop.carrierServiceId`. Existing installs created BEFORE the afterAuth bootstrap landed need uninstall+reinstall to register — known limitation under token-exchange (which doesn't re-fire afterAuth). The `/app/install-carrier-service` convenience route is the manual workaround until Phase D / E delivers a reconciliation cron.
+The carrier service is registered automatically in `afterAuth` and unregistered on `APP_UNINSTALLED`. The Shopify-assigned ID lives at `Shop.carrierServiceId`. Existing installs created BEFORE the afterAuth bootstrap landed need uninstall+reinstall to register — known limitation under token-exchange (which doesn't re-fire afterAuth). The `/app/install-carrier-service` convenience route is the manual workaround. Not a v1 blocker because each fresh App Store install runs `afterAuth` cleanly.
 
 ## Checkout-lock invariants (Phase C.5) — DO NOT regress
 
@@ -134,7 +129,7 @@ If checkout filtering ever breaks, restore from `git tag v0.5.0-pickup-checkout-
 - `SHOPIFY_APP_STORE_CHECKLIST.md` — App Store submission requirements (Phase E)
 - `IMPROVEMENTS.md` — historical record of pre-2026-05 cleanup (don't re-do these)
 
-## Self-install convenience routes (Phase D will replace)
+## Self-install convenience routes
 
 When a shop misses an `afterAuth` bootstrap step (because token-exchange refresh doesn't re-fire `afterAuth`, or because a webhook topic was added after install), these routes let an admin self-heal by visiting them once:
 
