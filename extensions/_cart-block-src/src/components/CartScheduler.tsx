@@ -422,9 +422,14 @@ export function CartScheduler({ config, rootEl }: Props) {
 
   // Derived data
   const selectedDate = state.selectedDate.value;
+  // Empty array when no date picked yet — never fall back to "all slots" or
+  // we render every day's slots simultaneously (the v3.5 regression: same
+  // time window appearing 7+ times because slots span 14 days). The customer
+  // must pick a date first; the slot grid shows the "pick a date" empty
+  // state until then.
   const slotsForDate = selectedDate
     ? state.slots.value.filter((s) => s.date === selectedDate)
-    : state.slots.value;
+    : [];
   const isPickup = state.fulfillment.value === "pickup";
   const eligible = state.postcodeChecked.value
     ? state.servicesAvailable.value[state.fulfillment.value]
@@ -491,6 +496,12 @@ export function CartScheduler({ config, rootEl }: Props) {
           />
           {state.loading.value.slots ? (
             <p class="ordak-loading" role="status">Loading…</p>
+          ) : !selectedDate ? (
+            <p class="ordak-empty">
+              {isPickup
+                ? "Choose a pickup date above to see availability."
+                : "Choose a delivery date above to see available time slots."}
+            </p>
           ) : isPickup ? (
             slotsForDate.length === 0 ? (
               <p class="ordak-empty">Pickup not available on this date. Try another.</p>
