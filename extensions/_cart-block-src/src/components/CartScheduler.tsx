@@ -119,15 +119,17 @@ export function CartScheduler({ config, rootEl }: Props) {
   // Pickup doesn't need a postcode (the customer comes to the location), so
   // we kick off the location load immediately rather than waiting for the
   // postcode field that we hide for pickup mode.
+  //
+  // Date is NOT auto-set here — customer must explicitly open the calendar
+  // and pick a date. The pickup auto-slot effect (later in this file) only
+  // fires once the date is set, so the chain is: customer picks date → slot
+  // auto-fills (pickup has no time-grid UI) → Check out enables.
   useEffect(() => {
     return effect(() => {
       const isPickup = state.fulfillment.value === "pickup";
       const alreadyLoaded = state.pickupLocations.value.length > 0;
       const isLoading = state.loading.value.locations;
       if (isPickup && !alreadyLoaded && !isLoading) {
-        if (!state.selectedDate.value) {
-          state.selectedDate.value = dateRangeFromToday.value.start;
-        }
         void loadLocations();
       }
     });
@@ -157,6 +159,65 @@ export function CartScheduler({ config, rootEl }: Props) {
 
   // Re-apply cart attributes if the theme drops them after a re-render.
   useEffect(() => listenForCartUpdates(() => void cartWriter.ensure()), []);
+
+  // Reflect missing-selection state visually on the theme's Check out
+  // button. The click interceptor below is the load-bearing gate (it
+  // preventDefault()s the click), but rendering the button as disabled
+  // gives the customer an immediate cue that something's missing — they
+  // shouldn't have to click before the cart-block reveals the rule.
+  // Re-runs on every cart re-render via listenForCartUpdates because the
+  // theme replaces the cart drawer's HTML on AJAX cart updates.
+  useEffect(() => {
+    const ORDAK_DISABLED_FLAG = "data-ordak-disabled";
+
+    function applyDisabledState() {
+      const missing = describeMissingSelections(state);
+      const buttons = document.querySelectorAll(CHECKOUT_BUTTON_SELECTOR);
+      buttons.forEach((btn) => {
+        if (!(btn instanceof HTMLElement)) return;
+        // Only touch buttons inside or adjacent to a cart drawer / cart page —
+        // never the express-checkout iframes (they're cross-origin and
+        // unreachable anyway). The selector union is broad enough that we
+        // could match a button outside any cart context; bail if the button
+        // has no cart-related ancestor.
+        const inCartContext = !!btn.closest(
+          'cart-drawer, cart-drawer-component, [data-cart-drawer], #cart-drawer, .cart-drawer, .drawer--cart, form[action*="/cart"], main#MainContent, .cart',
+        );
+        if (!inCartContext) return;
+        if (missing) {
+          if (!btn.hasAttribute(ORDAK_DISABLED_FLAG)) {
+            btn.setAttribute(ORDAK_DISABLED_FLAG, "1");
+            btn.setAttribute("aria-disabled", "true");
+          }
+        } else if (btn.hasAttribute(ORDAK_DISABLED_FLAG)) {
+          btn.removeAttribute(ORDAK_DISABLED_FLAG);
+          btn.removeAttribute("aria-disabled");
+        }
+      });
+    }
+
+    // Apply on every state change (date/slot/postcode picked or cleared).
+    const stop = effect(() => {
+      // Read every signal that describeMissingSelections depends on so the
+      // effect re-runs when any of them changes.
+      void state.fulfillment.value;
+      void state.postcodeChecked.value;
+      void state.servicesAvailable.value;
+      void state.selectedLocation.value;
+      void state.selectedSlot.value;
+      void state.pickupLocations.value.length;
+      void state.loading.value.locations;
+      applyDisabledState();
+    });
+
+    // Re-apply after theme cart re-renders (the buttons get replaced).
+    const stopCartListener = listenForCartUpdates(applyDisabledState);
+
+    return () => {
+      stop();
+      stopCartListener();
+    };
+  }, [state]);
 
   // Intercept clicks on theme checkout buttons. The Cart Validation Function
   // is the authoritative backstop (it blocks express buttons too) but
@@ -251,13 +312,10 @@ export function CartScheduler({ config, rootEl }: Props) {
       state.postcodeChecked.value = true;
 
       if (res.eligible) {
-        // Default the date picker to today so it has a sensible initial value
-        // before slots come back. The user can change it; slot loading is
-        // independent of the picker — slots come for the whole 14-day range
-        // and the picker filters which day to show.
-        if (!state.selectedDate.value) {
-          state.selectedDate.value = dateRangeFromToday.value.start;
-        }
+        // Date is NOT auto-set here — customer must explicitly open the
+        // date picker and choose. Slot loading is independent of the picker
+        // (we fetch slots for the whole 14-day range up front) so the
+        // grid populates as soon as the customer picks a date.
         if (state.fulfillment.value === "pickup") {
           await loadLocations(postcode);
         } else {
@@ -287,16 +345,17 @@ export function CartScheduler({ config, rootEl }: Props) {
       if (res.meta?.widgetAppearance) {
         state.widgetAppearance.value = res.meta.widgetAppearance;
       }
-      // Only override the date if the user / handleCheckPostcode hasn't set
-      // one yet. The native date input owns the chosen date — we shouldn't
-      // yank it back to whatever the first slot happens to fall on.
-      if (!state.selectedDate.value && slots[0]?.date) {
-        state.selectedDate.value = slots[0].date;
-      }
-      if (config.autoSelectRecommended) {
-        const top = slots.find((s) => s.recommended && s.capacityRemaining > 0);
-        if (top) state.selectedSlot.value = top;
-      }
+      // Date and slot selection are explicit customer actions — never
+      // auto-set them server-side or based on slot data. Auto-selection
+      // here was the bypass mechanism that let customers reach checkout
+      // without consciously scheduling: cart attributes were populated by
+      // the auto-pick, the click interceptor's missing-selection check
+      // returned null, and Check out went through. The "recommended" badge
+      // on a slot tile (rendered by SlotGrid) is a visual hint only — it
+      // does not commit a selection until the customer clicks the tile.
+      // The legacy `autoSelectRecommended` config field is intentionally
+      // ignored here so existing installs that have it set to true don't
+      // continue to bypass the explicit-choice gate.
       if (!viewedTrackedRef.current) {
         viewedTrackedRef.current = true;
         api.trackViewed(
@@ -363,9 +422,14 @@ export function CartScheduler({ config, rootEl }: Props) {
 
   // Derived data
   const selectedDate = state.selectedDate.value;
+  // Empty array when no date picked yet — never fall back to "all slots" or
+  // we render every day's slots simultaneously (the v3.5 regression: same
+  // time window appearing 7+ times because slots span 14 days). The customer
+  // must pick a date first; the slot grid shows the "pick a date" empty
+  // state until then.
   const slotsForDate = selectedDate
     ? state.slots.value.filter((s) => s.date === selectedDate)
-    : state.slots.value;
+    : [];
   const isPickup = state.fulfillment.value === "pickup";
   const eligible = state.postcodeChecked.value
     ? state.servicesAvailable.value[state.fulfillment.value]
@@ -432,6 +496,12 @@ export function CartScheduler({ config, rootEl }: Props) {
           />
           {state.loading.value.slots ? (
             <p class="ordak-loading" role="status">Loading…</p>
+          ) : !selectedDate ? (
+            <p class="ordak-empty">
+              {isPickup
+                ? "Choose a pickup date above to see availability."
+                : "Choose a delivery date above to see available time slots."}
+            </p>
           ) : isPickup ? (
             slotsForDate.length === 0 ? (
               <p class="ordak-empty">Pickup not available on this date. Try another.</p>

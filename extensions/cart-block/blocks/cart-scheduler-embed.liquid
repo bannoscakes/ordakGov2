@@ -24,7 +24,7 @@
         "headingText": {{ block.settings.heading_text | default: 'When would you like your order?' | json }},
         "defaultFulfillment": {{ block.settings.default_fulfillment | default: 'delivery' | json }},
         "showPostcodeField": {{ block.settings.show_postcode_field | default: true | json }},
-        "autoSelectRecommended": {{ block.settings.auto_select_recommended | default: true | json }},
+        "autoSelectRecommended": {{ block.settings.auto_select_recommended | default: false | json }},
         "pickupInstructions": {{ block.settings.pickup_instructions | default: 'Pick up any time during store hours.' | json }},
         "daysAvailableHint": {{ block.settings.days_available_hint | default: 'Monday – Saturday only' | json }},
         "proxyBase": "/apps/ordak-go"
@@ -86,7 +86,8 @@
       "type": "checkbox",
       "id": "auto_select_recommended",
       "label": "Auto-select recommended slot",
-      "default": true
+      "info": "Legacy setting. Cart-block v3.5+ ignores this and always requires explicit customer slot selection — turning it on no longer bypasses the explicit-choice gate.",
+      "default": false
     },
     {
       "type": "text",
