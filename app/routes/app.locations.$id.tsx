@@ -30,10 +30,17 @@ import { useState } from "react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { logger } from "../utils/logger.server";
+import {
+  copyTemplatesBetweenDays,
+  getTemplatesByDay,
+  replaceTemplatesAndMaterialize,
+} from "../services/slot-materializer.server";
+import { SlotsEditor } from "../components/SlotsEditor";
 
-type Section = "setup" | "fulfillment" | "prep-time" | "block-dates" | "zones";
+type Section = "setup" | "fulfillment" | "pickup-hours" | "prep-time" | "block-dates" | "zones";
 
-const SECTIONS: { id: Section; label: string }[] = [
+// "Pickup hours" is appended at runtime when supportsPickup is true.
+const BASE_SECTIONS: { id: Section; label: string }[] = [
   { id: "setup", label: "Location setup" },
   { id: "fulfillment", label: "Fulfillment type" },
   { id: "prep-time", label: "Prep time & availability" },
@@ -42,7 +49,14 @@ const SECTIONS: { id: Section; label: string }[] = [
 ];
 
 function isSection(v: string | null): v is Section {
-  return v === "setup" || v === "fulfillment" || v === "prep-time" || v === "block-dates" || v === "zones";
+  return (
+    v === "setup" ||
+    v === "fulfillment" ||
+    v === "pickup-hours" ||
+    v === "prep-time" ||
+    v === "block-dates" ||
+    v === "zones"
+  );
 }
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
@@ -92,6 +106,16 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     orderBy: { createdAt: "desc" },
   });
 
+  // Pickup templates only matter when the location actually supports pickup.
+  // We still load them when supportsPickup is false so toggling the checkbox
+  // back on doesn't lose templates the merchant configured previously.
+  const pickupTemplatesByDay = await getTemplatesByDay({
+    kind: "location",
+    locationId: id,
+    fulfillmentType: "pickup",
+  });
+  const pickupTemplateCount = pickupTemplatesByDay.reduce((n, day) => n + day.length, 0);
+
   const url = new URL(request.url);
   const sectionParam = url.searchParams.get("section");
   const section: Section = isSection(sectionParam) ? sectionParam : "setup";
@@ -115,6 +139,17 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       blackoutDates: r.blackoutDates.map((d) => d.toISOString()),
       isActive: r.isActive,
     })),
+    pickupTemplatesByDay: pickupTemplatesByDay.map((day) =>
+      day.map((t) => ({
+        id: t.id,
+        timeStart: t.timeStart,
+        timeEnd: t.timeEnd,
+        capacity: t.capacity,
+        priceAdjustment: t.priceAdjustment.toString(),
+        isActive: t.isActive,
+      })),
+    ),
+    pickupTemplateCount,
     section,
   });
 }
@@ -203,6 +238,90 @@ export async function action({ request, params }: ActionFunctionArgs) {
       return redirect(`/app/locations/${id}?section=fulfillment&saved=1`);
     }
 
+    if (intent === "save-pickup-slots-day") {
+      const dayOfWeek = parseInt((formData.get("dayOfWeek") as string | null) ?? "-1", 10);
+      if (dayOfWeek < 0 || dayOfWeek > 6) {
+        return json<ActionResult>({ ok: false, error: "Invalid day" }, { status: 400 });
+      }
+      const rowsJson = (formData.get("rows") as string | null) ?? "[]";
+      let parsedRows: unknown;
+      try {
+        parsedRows = JSON.parse(rowsJson);
+      } catch {
+        return json<ActionResult>({ ok: false, error: "Malformed slot rows" }, { status: 400 });
+      }
+      if (!Array.isArray(parsedRows)) {
+        return json<ActionResult>({ ok: false, error: "Slot rows must be an array" }, { status: 400 });
+      }
+      const rows: Array<{
+        timeStart: string;
+        timeEnd: string;
+        capacity: number;
+        priceAdjustment: number;
+        isActive: boolean;
+      }> = [];
+      for (const r of parsedRows) {
+        if (typeof r !== "object" || r === null) continue;
+        const row = r as Record<string, unknown>;
+        const timeStart = String(row.timeStart ?? "");
+        const timeEnd = String(row.timeEnd ?? "");
+        const capacity = Number(row.capacity);
+        const priceAdjustment = Number(row.priceAdjustment ?? 0);
+        const isActive = row.isActive !== false;
+        if (!/^\d{2}:\d{2}$/.test(timeStart) || !/^\d{2}:\d{2}$/.test(timeEnd)) {
+          return json<ActionResult>(
+            { ok: false, error: "All time fields must be in HH:MM format" },
+            { status: 400 },
+          );
+        }
+        if (timeStart >= timeEnd) {
+          return json<ActionResult>(
+            { ok: false, error: `Slot ${timeStart}–${timeEnd}: start must be before end` },
+            { status: 400 },
+          );
+        }
+        if (!Number.isFinite(capacity) || capacity < 1) {
+          return json<ActionResult>(
+            { ok: false, error: "Capacity must be at least 1" },
+            { status: 400 },
+          );
+        }
+        if (!Number.isFinite(priceAdjustment) || priceAdjustment < 0) {
+          return json<ActionResult>(
+            { ok: false, error: "Price adjustment must be 0 or higher" },
+            { status: 400 },
+          );
+        }
+        rows.push({ timeStart, timeEnd, capacity, priceAdjustment, isActive });
+      }
+
+      await replaceTemplatesAndMaterialize({
+        scope: { kind: "location", locationId: id, fulfillmentType: "pickup" },
+        dayOfWeek,
+        rows,
+      });
+
+      return redirect(`/app/locations/${id}?section=pickup-hours&day=${dayOfWeek}&saved=1`);
+    }
+
+    if (intent === "copy-pickup-slots-day") {
+      const fromRaw = parseInt((formData.get("fromDayOfWeek") as string | null) ?? "-1", 10);
+      const toRaw = (formData.get("toDaysOfWeek") as string | null) ?? "";
+      const toDaysOfWeek = toRaw
+        .split(",")
+        .map((s) => parseInt(s, 10))
+        .filter((n) => Number.isFinite(n) && n >= 0 && n <= 6 && n !== fromRaw);
+      if (fromRaw < 0 || fromRaw > 6 || toDaysOfWeek.length === 0) {
+        return json<ActionResult>({ ok: false, error: "Invalid copy parameters" }, { status: 400 });
+      }
+      await copyTemplatesBetweenDays({
+        scope: { kind: "location", locationId: id, fulfillmentType: "pickup" },
+        fromDayOfWeek: fromRaw,
+        toDaysOfWeek,
+      });
+      return redirect(`/app/locations/${id}?section=pickup-hours&day=${fromRaw}&copied=${toDaysOfWeek.length}`);
+    }
+
     return json<ActionResult>({ ok: false, error: "Unknown intent" }, { status: 400 });
   } catch (error) {
     logger.error("Per-location admin action failed", error, { locationId: id, intent: String(intent) });
@@ -214,7 +333,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
 }
 
 export default function LocationAdmin() {
-  const { location, rules, section } = useLoaderData<typeof loader>();
+  const { location, rules, pickupTemplatesByDay, pickupTemplateCount, section } =
+    useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigate = useNavigate();
   const submit = useSubmit();
@@ -223,6 +343,8 @@ export default function LocationAdmin() {
 
   const errorMessage = actionData && actionData.ok === false ? actionData.error : null;
   const justSaved = searchParams.get("saved") === "1";
+  const copiedTo = searchParams.get("copied");
+  const fromWizard = searchParams.get("from") === "wizard";
 
   const goToSection = (s: Section) => {
     navigate(`/app/locations/${location.id}?section=${s}`, { replace: true });
@@ -236,6 +358,22 @@ export default function LocationAdmin() {
   };
 
   const hasUsage = location._count.slots > 0 || location._count.zones > 0;
+
+  // The "Pickup hours" sidebar entry only appears when this location actually
+  // does pickup. Hiding it when supportsPickup=false keeps delivery-only
+  // locations free of irrelevant config noise.
+  const sections = location.supportsPickup
+    ? [
+        ...BASE_SECTIONS.slice(0, 2),
+        { id: "pickup-hours" as Section, label: "Pickup hours" },
+        ...BASE_SECTIONS.slice(2),
+      ]
+    : BASE_SECTIONS;
+
+  // Misconfiguration we want the merchant to see no matter which tab they're on:
+  // they checked Supports pickup but never told us when pickup is available, so
+  // the cart-block has nothing to offer customers.
+  const pickupNeedsHours = location.supportsPickup && pickupTemplateCount === 0;
 
   return (
     <Page
@@ -262,11 +400,34 @@ export default function LocationAdmin() {
             </Banner>
           </Layout.Section>
         )}
+        {copiedTo && (
+          <Layout.Section>
+            <Banner tone="success">Copied pickup hours to {copiedTo} other day{copiedTo === "1" ? "" : "s"}.</Banner>
+          </Layout.Section>
+        )}
+        {pickupNeedsHours && section !== "pickup-hours" && (
+          <Layout.Section>
+            <Banner
+              tone="warning"
+              title="Pickup is enabled but has no hours configured"
+              action={{
+                content: "Configure pickup hours",
+                onAction: () => goToSection("pickup-hours"),
+              }}
+            >
+              <p>
+                You enabled Store Pickup for this location but haven&apos;t set when customers
+                can collect. Until pickup hours are configured, the cart-block will show
+                &quot;Pickup not available on this date&quot; for every date.
+              </p>
+            </Banner>
+          </Layout.Section>
+        )}
 
         <Layout.Section variant="oneThird">
           <Card padding="0">
             <BlockStack gap="0">
-              {SECTIONS.map((s) => (
+              {sections.map((s) => (
                 <SidebarItem
                   key={s.id}
                   label={s.label}
@@ -281,6 +442,19 @@ export default function LocationAdmin() {
         <Layout.Section>
           {section === "setup" && <SetupSection location={location} hasUsage={hasUsage} />}
           {section === "fulfillment" && <FulfillmentSection location={location} />}
+          {section === "pickup-hours" && location.supportsPickup && (
+            <PickupHoursSection
+              pickupTemplatesByDay={pickupTemplatesByDay}
+              fromWizard={fromWizard}
+              supportsDelivery={location.supportsDelivery}
+            />
+          )}
+          {section === "pickup-hours" && !location.supportsPickup && (
+            <Banner tone="info">
+              Store Pickup is turned off for this location. Enable it under
+              &quot;Fulfillment type&quot; first, then come back here to set hours.
+            </Banner>
+          )}
           {section === "prep-time" && <PrepTimeSection rules={rules.filter((r) => r.type === "lead_time")} />}
           {section === "block-dates" && <BlockDatesSection rules={rules.filter((r) => r.type === "blackout")} />}
           {section === "zones" && <ZonesSection location={location} />}
@@ -474,6 +648,11 @@ function FulfillmentSection({ location }: { location: LocationData }) {
   const [supportsDelivery, setSupportsDelivery] = useState(location.supportsDelivery);
   const [supportsPickup, setSupportsPickup] = useState(location.supportsPickup);
 
+  // Heads-up shown only when the merchant *just* enabled pickup in this form
+  // (it wasn't enabled when the page loaded). Hides after they save — at that
+  // point the page-level "needs pickup hours" banner takes over.
+  const showPickupNudge = supportsPickup && !location.supportsPickup;
+
   return (
     <Form method="post">
       <input type="hidden" name="intent" value="save-fulfillment" />
@@ -491,14 +670,21 @@ function FulfillmentSection({ location }: { location: LocationData }) {
               label="Local Delivery"
               checked={supportsDelivery}
               onChange={setSupportsDelivery}
-              helpText="Orders dispatched from this location to a customer's address"
+              helpText="Orders dispatched from this location to a customer's address. Delivery hours are configured per zone."
             />
             <Checkbox
               label="Store Pickup"
               checked={supportsPickup}
               onChange={setSupportsPickup}
-              helpText="Customers collect orders from this location"
+              helpText="Customers collect orders from this location. Pickup hours are configured here on the location, not on a zone."
             />
+            {showPickupNudge && (
+              <Banner tone="info">
+                After saving, you&apos;ll see a new <strong>Pickup hours</strong> tab in the
+                sidebar. Set the days and hours customers can collect, otherwise the cart-block
+                will show &quot;Pickup not available on this date&quot;.
+              </Banner>
+            )}
           </BlockStack>
         </Card>
 
@@ -521,6 +707,46 @@ function FulfillmentSection({ location }: { location: LocationData }) {
         </InlineStack>
       </FormLayout>
     </Form>
+  );
+}
+
+// ---------- Section: Pickup hours ----------
+
+function PickupHoursSection({
+  pickupTemplatesByDay,
+  fromWizard,
+  supportsDelivery,
+}: {
+  pickupTemplatesByDay: ReturnType<typeof useLoaderData<typeof loader>>["pickupTemplatesByDay"];
+  fromWizard: boolean;
+  supportsDelivery: boolean;
+}) {
+  return (
+    <BlockStack gap="400">
+      {fromWizard && (
+        <Banner
+          tone="info"
+          title="Pickup hours — wizard step"
+          action={
+            supportsDelivery
+              ? { content: "Continue to delivery zones", url: "/app/setup?step=2" }
+              : { content: "Finish setup", url: "/app" }
+          }
+        >
+          <p>
+            Save at least one day below, then click <strong>
+              {supportsDelivery ? "Continue to delivery zones" : "Finish setup"}
+            </strong> to keep going.
+          </p>
+        </Banner>
+      )}
+      <SlotsEditor
+        variant="pickup"
+        templatesByDay={pickupTemplatesByDay}
+        saveIntent="save-pickup-slots-day"
+        copyIntent="copy-pickup-slots-day"
+      />
+    </BlockStack>
   );
 }
 

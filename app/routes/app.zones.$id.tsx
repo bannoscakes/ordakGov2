@@ -23,10 +23,8 @@ import {
   InlineStack,
   Modal,
   Text,
-  Badge,
-  ButtonGroup,
 } from "@shopify/polaris";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { logger } from "../utils/logger.server";
@@ -35,6 +33,7 @@ import {
   getTemplatesByDay,
   replaceTemplatesAndMaterialize,
 } from "../services/slot-materializer.server";
+import { SlotsEditor } from "../components/SlotsEditor";
 
 type Section = "setup" | "pricing" | "slots";
 
@@ -43,9 +42,6 @@ const SECTIONS: { id: Section; label: string }[] = [
   { id: "pricing", label: "Pricing" },
   { id: "slots", label: "Time slots & limits" },
 ];
-
-const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const DAY_FULL = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 function isSection(v: string | null): v is Section {
   return v === "setup" || v === "pricing" || v === "slots";
@@ -681,382 +677,17 @@ function PricingSection({ zone }: { zone: ZoneData }) {
 
 // ---------- Section: Time slots & limits ----------
 
-type TemplateRow = {
-  id: string | null; // null for unsaved client rows
-  timeStart: string;
-  timeEnd: string;
-  capacity: number;
-  priceAdjustment: number;
-  isActive: boolean;
-};
-
 function SlotsSection({
   templatesByDay,
 }: {
   templatesByDay: ReturnType<typeof useLoaderData<typeof loader>>["templatesByDay"];
 }) {
-  const submit = useSubmit();
-  const navigation = useNavigation();
-  const [searchParams] = useSearchParams();
-  const isLoading = navigation.state === "submitting";
-
-  const dayParam = searchParams.get("day");
-  const initialDay = dayParam !== null ? parseInt(dayParam, 10) : 1; // default Monday
-  const [selectedDay, setSelectedDay] = useState(
-    Number.isFinite(initialDay) && initialDay >= 0 && initialDay <= 6 ? initialDay : 1,
-  );
-
-  // Local row state, keyed by day. Loaded from templatesByDay; reset when the
-  // loader returns new data (e.g. after save).
-  const [rowsByDay, setRowsByDay] = useState<TemplateRow[][]>(() =>
-    templatesByDay.map((day) =>
-      day.map((t) => ({
-        id: t.id,
-        timeStart: t.timeStart,
-        timeEnd: t.timeEnd,
-        capacity: t.capacity,
-        priceAdjustment: parseFloat(t.priceAdjustment),
-        isActive: t.isActive,
-      })),
-    ),
-  );
-
-  // Re-sync local state when loader data changes (after save).
-  useEffect(() => {
-    setRowsByDay(
-      templatesByDay.map((day) =>
-        day.map((t) => ({
-          id: t.id,
-          timeStart: t.timeStart,
-          timeEnd: t.timeEnd,
-          capacity: t.capacity,
-          priceAdjustment: parseFloat(t.priceAdjustment),
-          isActive: t.isActive,
-        })),
-      ),
-    );
-  }, [templatesByDay]);
-
-  const rows = rowsByDay[selectedDay] ?? [];
-
-  const updateRow = (idx: number, patch: Partial<TemplateRow>) => {
-    setRowsByDay((prev) => {
-      const next = prev.map((d) => d.slice());
-      next[selectedDay] = next[selectedDay].map((r, i) => (i === idx ? { ...r, ...patch } : r));
-      return next;
-    });
-  };
-
-  const addRow = () => {
-    setRowsByDay((prev) => {
-      const next = prev.map((d) => d.slice());
-      const lastEnd = next[selectedDay].length > 0
-        ? next[selectedDay][next[selectedDay].length - 1].timeEnd
-        : "09:00";
-      next[selectedDay].push({
-        id: null,
-        timeStart: lastEnd,
-        timeEnd: addHours(lastEnd, 2),
-        capacity: 10,
-        priceAdjustment: 0,
-        isActive: true,
-      });
-      return next;
-    });
-  };
-
-  const removeRow = (idx: number) => {
-    setRowsByDay((prev) => {
-      const next = prev.map((d) => d.slice());
-      next[selectedDay] = next[selectedDay].filter((_, i) => i !== idx);
-      return next;
-    });
-  };
-
-  const clearDay = () => {
-    setRowsByDay((prev) => {
-      const next = prev.map((d) => d.slice());
-      next[selectedDay] = [];
-      return next;
-    });
-  };
-
-  const onSave = () => {
-    const fd = new FormData();
-    fd.append("intent", "save-slots-day");
-    fd.append("dayOfWeek", String(selectedDay));
-    fd.append(
-      "rows",
-      JSON.stringify(
-        rows.map((r) => ({
-          timeStart: r.timeStart,
-          timeEnd: r.timeEnd,
-          capacity: r.capacity,
-          priceAdjustment: r.priceAdjustment,
-          isActive: r.isActive,
-        })),
-      ),
-    );
-    submit(fd, { method: "post" });
-  };
-
-  const onCopyToOtherDays = (targets: number[]) => {
-    if (targets.length === 0) return;
-    const fd = new FormData();
-    fd.append("intent", "copy-slots-day");
-    fd.append("fromDayOfWeek", String(selectedDay));
-    fd.append("toDaysOfWeek", targets.join(","));
-    submit(fd, { method: "post" });
-  };
-
-  const totalRows = rowsByDay.reduce((n, d) => n + d.length, 0);
-
   return (
-    <BlockStack gap="400">
-      <Card>
-        <BlockStack gap="300">
-          <Text as="h2" variant="headingMd">Time slots & limits — Delivery</Text>
-          <Text as="p" tone="subdued" variant="bodySm">
-            Set the time windows this zone accepts delivery orders, per day of the week.
-            Each row is a slot the customer can pick. Capacity = max orders per slot.
-            Price adjustment = extra fee added to the zone&apos;s base price for that slot.
-          </Text>
-          {totalRows === 0 && (
-            <Banner tone="info">
-              No slots configured yet. Pick a day below and add time windows. Slots
-              materialize automatically for the next 14 days when you save.
-            </Banner>
-          )}
-        </BlockStack>
-      </Card>
-
-      <Card>
-        <BlockStack gap="400">
-          <DayTabs selected={selectedDay} onSelect={setSelectedDay} rowsByDay={rowsByDay} />
-
-          <BlockStack gap="200">
-            {rows.length === 0 ? (
-              <Banner tone="info">No slots for {DAY_FULL[selectedDay]}. Click &quot;Add slot&quot; below.</Banner>
-            ) : (
-              rows.map((r, i) => (
-                <SlotRowEditor
-                  key={`${selectedDay}-${i}`}
-                  row={r}
-                  onChange={(patch) => updateRow(i, patch)}
-                  onRemove={() => removeRow(i)}
-                />
-              ))
-            )}
-          </BlockStack>
-
-          <InlineStack align="space-between" blockAlign="center">
-            <ButtonGroup>
-              <Button onClick={addRow}>Add slot</Button>
-              {rows.length > 0 && <Button onClick={clearDay} tone="critical">Clear all</Button>}
-            </ButtonGroup>
-            <ButtonGroup>
-              <CopyToDaysButton
-                fromDay={selectedDay}
-                onCopy={onCopyToOtherDays}
-                disabled={rows.length === 0}
-                isLoading={isLoading}
-              />
-              <Button variant="primary" onClick={onSave} loading={isLoading} disabled={isLoading}>
-                Save {DAY_FULL[selectedDay]}
-              </Button>
-            </ButtonGroup>
-          </InlineStack>
-        </BlockStack>
-      </Card>
-    </BlockStack>
+    <SlotsEditor
+      variant="delivery"
+      templatesByDay={templatesByDay}
+      saveIntent="save-slots-day"
+      copyIntent="copy-slots-day"
+    />
   );
-}
-
-function DayTabs({
-  selected,
-  onSelect,
-  rowsByDay,
-}: {
-  selected: number;
-  onSelect: (n: number) => void;
-  rowsByDay: TemplateRow[][];
-}) {
-  return (
-    <InlineStack gap="100">
-      {DAY_LABELS.map((label, idx) => {
-        const count = rowsByDay[idx]?.length ?? 0;
-        const active = idx === selected;
-        return (
-          <button
-            key={idx}
-            type="button"
-            onClick={() => onSelect(idx)}
-            style={{
-              padding: "8px 14px",
-              border: active
-                ? "1px solid var(--p-color-bg-fill-brand, #1a1a1a)"
-                : "1px solid var(--p-color-border, #d4d4d4)",
-              background: active ? "var(--p-color-bg-fill-brand, #1a1a1a)" : "transparent",
-              color: active ? "var(--p-color-text-inverse, #fff)" : "var(--p-color-text, #1a1a1a)",
-              borderRadius: 6,
-              cursor: "pointer",
-              fontSize: "13px",
-              fontWeight: active ? 600 : 400,
-            }}
-          >
-            {label}
-            {count > 0 && (
-              <span
-                style={{
-                  marginLeft: 6,
-                  padding: "0 6px",
-                  background: active ? "rgba(255,255,255,0.25)" : "var(--p-color-bg-surface-selected, #f1f1f1)",
-                  color: active ? "var(--p-color-text-inverse, #fff)" : "var(--p-color-text-subdued, #6d7175)",
-                  borderRadius: 10,
-                  fontSize: "11px",
-                }}
-              >
-                {count}
-              </span>
-            )}
-          </button>
-        );
-      })}
-    </InlineStack>
-  );
-}
-
-function SlotRowEditor({
-  row,
-  onChange,
-  onRemove,
-}: {
-  row: TemplateRow;
-  onChange: (patch: Partial<TemplateRow>) => void;
-  onRemove: () => void;
-}) {
-  return (
-    <Card>
-      <InlineStack gap="300" blockAlign="end" wrap={false}>
-        <div style={{ flex: 1 }}>
-          <TextField
-            label="Start"
-            value={row.timeStart}
-            onChange={(v) => onChange({ timeStart: v })}
-            type="time"
-            autoComplete="off"
-          />
-        </div>
-        <div style={{ flex: 1 }}>
-          <TextField
-            label="End"
-            value={row.timeEnd}
-            onChange={(v) => onChange({ timeEnd: v })}
-            type="time"
-            autoComplete="off"
-          />
-        </div>
-        <div style={{ flex: 1 }}>
-          <TextField
-            label="Capacity"
-            value={String(row.capacity)}
-            onChange={(v) => onChange({ capacity: parseInt(v, 10) || 0 })}
-            type="number"
-            min={1}
-            autoComplete="off"
-          />
-        </div>
-        <div style={{ flex: 1 }}>
-          <TextField
-            label="+ price (AUD)"
-            value={String(row.priceAdjustment)}
-            onChange={(v) => onChange({ priceAdjustment: parseFloat(v) || 0 })}
-            type="number"
-            step={0.01}
-            min={0}
-            prefix="$"
-            autoComplete="off"
-          />
-        </div>
-        <div style={{ paddingBottom: 4 }}>
-          <Badge tone={row.id ? "success" : undefined}>{row.id ? "Saved" : "New"}</Badge>
-        </div>
-        <Button onClick={onRemove} tone="critical">Remove</Button>
-      </InlineStack>
-    </Card>
-  );
-}
-
-function CopyToDaysButton({
-  fromDay,
-  onCopy,
-  disabled,
-  isLoading,
-}: {
-  fromDay: number;
-  onCopy: (targets: number[]) => void;
-  disabled: boolean;
-  isLoading: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const [targets, setTargets] = useState<number[]>([]);
-
-  const toggle = (n: number) => {
-    setTargets((prev) => (prev.includes(n) ? prev.filter((x) => x !== n) : [...prev, n]));
-  };
-
-  return (
-    <>
-      <Button onClick={() => setOpen(true)} disabled={disabled || isLoading}>
-        Copy {DAY_FULL[fromDay]} to…
-      </Button>
-      <Modal
-        open={open}
-        onClose={() => setOpen(false)}
-        title={`Copy ${DAY_FULL[fromDay]}'s slots to other days`}
-        primaryAction={{
-          content: targets.length === 0 ? "Pick at least one day" : `Copy to ${targets.length} day(s)`,
-          disabled: targets.length === 0 || isLoading,
-          loading: isLoading,
-          onAction: () => {
-            onCopy(targets);
-            setTargets([]);
-            setOpen(false);
-          },
-        }}
-        secondaryActions={[{ content: "Cancel", onAction: () => setOpen(false) }]}
-      >
-        <Modal.Section>
-          <BlockStack gap="300">
-            <Text as="p" tone="subdued">
-              Existing slots on the selected days will be replaced with {DAY_FULL[fromDay]}&apos;s
-              schedule. Bookings on those days are preserved.
-            </Text>
-            <BlockStack gap="200">
-              {DAY_FULL.map((d, i) => {
-                if (i === fromDay) return null;
-                return (
-                  <Checkbox
-                    key={i}
-                    label={d}
-                    checked={targets.includes(i)}
-                    onChange={() => toggle(i)}
-                  />
-                );
-              })}
-            </BlockStack>
-          </BlockStack>
-        </Modal.Section>
-      </Modal>
-    </>
-  );
-}
-
-function addHours(time: string, hours: number): string {
-  const [hh, mm] = time.split(":").map((s) => parseInt(s, 10));
-  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return time;
-  const total = hh * 60 + mm + hours * 60;
-  const newH = Math.min(23, Math.floor(total / 60));
-  const newM = total % 60;
-  return `${String(newH).padStart(2, "0")}:${String(newM).padStart(2, "0")}`;
 }
