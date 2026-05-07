@@ -25,7 +25,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       select: {
         id: true,
         locations: {
-          select: { id: true, name: true, isActive: true },
+          select: { id: true, name: true, isActive: true, supportsPickup: true },
         },
         zones: {
           select: { id: true, basePrice: true, isActive: true, locationId: true },
@@ -55,6 +55,27 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
     const activeLocations = shop.locations.filter((l) => l.isActive);
     const activeZones = shop.zones.filter((z) => z.isActive);
+
+    // Locations that say they do pickup but have zero pickup templates — the
+    // cart-block has nothing to surface for them and would render the
+    // misleading "Pickup not available on this date" message for any date.
+    const pickupCapableLocations = activeLocations.filter((l) => l.supportsPickup);
+    let pickupHoursMissingLocation: { id: string; name: string } | null = null;
+    if (pickupCapableLocations.length > 0) {
+      const counts = await Promise.all(
+        pickupCapableLocations.map((l) =>
+          prisma.slotTemplate.count({
+            where: {
+              locationId: l.id,
+              fulfillmentType: "pickup",
+              isActive: true,
+            },
+          }).then((count) => ({ id: l.id, name: l.name, count })),
+        ),
+      );
+      const missing = counts.find((c) => c.count === 0);
+      if (missing) pickupHoursMissingLocation = { id: missing.id, name: missing.name };
+    }
 
     let zoneWithPriceCount = 0;
     for (const z of activeZones) {
@@ -107,6 +128,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
         zonePriceSet: zoneWithPriceCount > 0,
         timeSlotsConfigured: templateCount > 0,
         firstZoneId,
+        pickupHoursRequired: pickupCapableLocations.length > 0,
+        pickupHoursMissingLocation,
       },
     });
   } catch (error) {
@@ -174,6 +197,25 @@ export default function Index() {
             }
           : { label: "Add zone first", to: "/app/setup?step=2" },
     },
+    ...(checklist.pickupHoursRequired
+      ? [
+          {
+            id: "pickup-hours",
+            label: "Configure pickup hours",
+            description:
+              checklist.pickupHoursMissingLocation
+                ? `${checklist.pickupHoursMissingLocation.name} supports pickup but has no hours configured. Customers can't book pickup until you set hours.`
+                : "Days, hours, and daily capacity for store pickup at each location.",
+            done: !checklist.pickupHoursMissingLocation,
+            cta: checklist.pickupHoursMissingLocation
+              ? {
+                  label: "Configure hours",
+                  to: `/app/locations/${checklist.pickupHoursMissingLocation.id}?section=pickup-hours`,
+                }
+              : { label: "Manage locations", to: "/app/locations" },
+          } satisfies ChecklistItem,
+        ]
+      : []),
     {
       id: "validation",
       label: "Activate cart validation",

@@ -122,7 +122,10 @@ export async function action({ request }: ActionFunctionArgs) {
         const latitude = latRaw ? parseFloat(latRaw) : null;
         const longitude = lngRaw ? parseFloat(lngRaw) : null;
 
-        await prisma.location.create({
+        const supportsDelivery = formData.get("supportsDelivery") === "true";
+        const supportsPickup = formData.get("supportsPickup") === "true";
+
+        const created = await prisma.location.create({
           data: {
             shopId: shop.id,
             name,
@@ -136,12 +139,20 @@ export async function action({ request }: ActionFunctionArgs) {
             phone: ((formData.get("phone") as string | null) || "").trim() || null,
             email: ((formData.get("email") as string | null) || "").trim() || null,
             timezone: ((formData.get("timezone") as string | null) || "UTC").trim() || "UTC",
-            supportsDelivery: formData.get("supportsDelivery") === "true",
-            supportsPickup: formData.get("supportsPickup") === "true",
+            supportsDelivery,
+            supportsPickup,
             isActive: formData.get("isActive") === "true",
           },
         });
 
+        // Pickup-supporting locations need hours configured before customers
+        // can book — and there's no way to do that from anywhere else in the
+        // wizard. Detour through the pickup-hours editor first; the banner
+        // there continues to either /app/setup?step=2 (if delivery is also
+        // enabled) or /app (if pickup-only).
+        if (supportsPickup) {
+          return redirect(`/app/locations/${created.id}?section=pickup-hours&from=wizard`);
+        }
         return redirect("/app/setup?step=2");
       }
 
