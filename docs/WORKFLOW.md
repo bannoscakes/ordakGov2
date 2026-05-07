@@ -111,29 +111,36 @@ Pipeline A is much simpler:
 | bannoscakes | `bannoscakes.myshopify.com` | Basic + CCS add-on | **Live production.** Out of scope until ordakGov2 is App Store approved. The current production app on Bannos is `checkout-validation` (separate repo); ordakGov2 has never been the production app on Bannos. |
 | flour-lane | `flour-lane.myshopify.com` | Basic | **Live production.** Same scope rule as Bannos. |
 
-## The open verification gate
+## The verification gate — CLOSED 2026-05-07
 
-Per [`docs/SESSION_SUMMARY_2026-05-05.md:84-85`](SESSION_SUMMARY_2026-05-05.md) and verified by Supabase query (`OrderLink` count = 0 for `ordakgo-v3` as of 2026-05-06), **no real customer order has been placed end-to-end on `ordakgo-v3`**. The Phase C code path was verified at the time on the retired `ordak-go-dev` store via orders #1007–#1013 (Supabase rows since deleted in the 2026-05-06 cleanup). The smoke test (`npm run smoke:carrier`, PR #73) verifies the carrier callback returns the right number when called with the right parameters; it does **not** verify the cart → checkout → ORDERS_CREATE webhook → OrderLink + slot.booked + metafield + tags chain.
+`OrderLink` count for `ordakgo-v3` = **2**:
+- **#1001 delivery** — slot 2026-05-15 11:00, `slot.booked=1`, OrderLink + EventLog rows present
+- **#1002 pickup** — slot 2026-05-07 09:00 at Bannos HQ, `slot.booked=1`, `order.linked` + `order.shopify_writes_attempted` (ok=true) events fired
 
-Closing this gate is the foundation work that has to happen before any App Store submission. It produces the following evidence:
+Foundation is verified. The cart → checkout → ORDERS_CREATE webhook → OrderLink + slot.booked + metafield + tags chain is now demonstrated end-to-end with both fulfillment paths.
+
+### What "verified" means going forward
+
+If a future incident requires re-verifying the foundation (e.g. after a major schema change), the evidence shape is:
 
 1. SQL: `OrderLink` row exists for the test order on `ordakgo-v3`.
 2. SQL: `Slot.booked` incremented by 1 (compare pre/post).
-3. Screenshot: Shopify Admin → Order detail → Metafields panel showing `ordak_scheduling`.
-4. Screenshot: Shopify Admin → Order detail → Tags showing the expected tags.
-5. Screenshots: cart-block preview total = checkout charged total.
-6. Vercel log lines: carrier-callback POST + ORDERS_CREATE webhook POST.
+3. SQL: `EventLog` rows for `order.linked` + `order.shopify_writes_attempted` with `ok=true`.
+4. Screenshot: Shopify Admin → Order detail → Metafields panel showing `ordak_scheduling`.
+5. Screenshot: Shopify Admin → Order detail → Tags showing the expected tags.
+6. Screenshots: cart-block preview total = checkout charged total.
+7. Vercel log lines: carrier-callback POST + ORDERS_CREATE webhook POST.
 
-Same evidence shape repeated for one delivery order and one pickup order = foundation gate closed.
+Same evidence shape for one delivery order AND one pickup order = foundation gate closed.
 
 ## Path to App Store unlisted listing (post-foundation)
 
-1. **Phase 0 — Clean baseline.** This file + the orders-#1007 lie fix in CLAUDE.md / PLAN.md = PR currently being prepared.
-2. **Phase 1 — Real e2e order on ordakgo-v3.** Closes the verification gate above.
-3. **Phase 2 — App Store user-action assets.** Icon, screenshots, screencast, listing copy, demo store reviewer instructions, "Free" pricing.
-4. **Phase 3 — Reviewer-experience hardening.** Carrier-service uninstall/reinstall test on `ordakgo-v3`. Final pre-submission smoke.
-5. **Phase 4 — Submit unlisted.**
-6. **Phase 5 — Address review feedback** iteratively.
-7. **Phase 6 — Post-approval install on Bannos and Flour Lane** via the unlisted listing's direct link. Replaces the existing `checkout-validation` app on Bannos.
+1. ✅ **Phase 0 — Clean baseline.** Done.
+2. ✅ **Phase 1 — Real e2e order on ordakgo-v3.** Closed 2026-05-07 (orders #1001 delivery, #1002 pickup).
+3. ⏳ **Phase 2 — App Store user-action assets.** Icon, screenshots, screencast, listing copy, demo store reviewer instructions, "Free" pricing. **This is the immediate next action.**
+4. ⏳ **Phase 3 — Reviewer-experience hardening.** Carrier-service uninstall/reinstall test on `ordakgo-v3`. Final pre-submission smoke.
+5. ⏳ **Phase 4 — Submit unlisted.**
+6. ⏳ **Phase 5 — Address review feedback** iteratively.
+7. ⏳ **Phase 6 — Post-approval install on Bannos and Flour Lane** via the unlisted listing's direct link. Replaces the existing `checkout-validation` app on Bannos.
 
 Bannos and Flour Lane are explicitly out of scope until Phase 6.
