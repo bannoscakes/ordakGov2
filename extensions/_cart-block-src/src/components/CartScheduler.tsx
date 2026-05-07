@@ -64,7 +64,9 @@ function describeMissingSelections(state: import("../state").AppState): string |
     }
   }
   if (!state.selectedSlot.value) {
-    return "Please choose a delivery date and time slot before checkout.";
+    return fulfillment === "pickup"
+      ? "Please choose a pickup date before checkout."
+      : "Please choose a delivery date and time slot before checkout.";
   }
   return null;
 }
