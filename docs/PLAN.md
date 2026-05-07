@@ -1,6 +1,6 @@
 # PLAN — what's next for Ordak Go
 
-Last updated: 2026-05-04 (afternoon) — Phase D re-cut after Pickeasy review session. The original Phase D framing ("restore the two stubbed admin routes") was incomplete because it ignored that the merchant cannot configure slots in the first place. New Phase D = 10 steps that deliver per-zone slot configuration, configurable pricing, calendar order view, settings restructure, webhook destinations, and a Cart Validation Function to block fast checkout. PR #48 (admin reschedule) is held until D1 ships.
+Last updated: 2026-05-07 (late session) — Phase 1 verification gate CLOSED with real test orders #1001 (delivery) + #1002 (pickup) on `ordakgo-v3`. Per-location pickup hours admin shipped in PR #95 (closes the slot-management gap the original Phase D missed — pickup is per-Location, not per-Zone). `ordak-go-38` released globally with the pickup-mode wording fix. Next gate is App Store listing assets (Phase 2 in `memory/next_steps_plan.md`).
 
 ## Where we are
 
@@ -212,7 +212,7 @@ The active plan supersedes Phase E below. See **`/Users/panospanayi/.claude/plan
 
 Locked decision: distribution mode is **public, unlisted**. Custom distribution does not span both stores on non-Plus plans. Functions activate automatically once App-Store-distributed.
 
-### Phase F status (2026-05-06)
+### Phase F status (2026-05-07)
 
 ✅ **Code-side App Store gates landed and held in production:**
 - Privacy policy at `/policies/privacy` with `panos@bannos.com.au` contact (PR #80)
@@ -226,22 +226,20 @@ Locked decision: distribution mode is **public, unlisted**. Custom distribution 
 - Setup Guide deep-links to cart template (PRs #68, #70)
 - Cart-block writes `_zone_id` correctly (PR #66, the original cart-vs-checkout fix)
 - Vercel production hosting on syd1 (PR #64)
+- Cart-block drawer placement fixed for Horizon (PR #90, `ordak-go-37`) — scope-aware `findHostTarget` + 5 unit tests
+- Per-location pickup hours admin (PR #95, `ordak-go-38`) — closes the slot-management gap; new "Pickup hours" tab on `/app/locations/:id`, shared `SlotsEditor` component, smart wizard detour. See `memory/pickup_admin_per_location.md`.
+- Phase 1 verification gate CLOSED — real test orders #1001 + #1002 on `ordakgo-v3` (see `memory/next_steps_plan.md` for the evidence)
 
-⚠️ **Open bug (held back from production):** cart-block embed placement on Horizon's cart drawer. Renders inside `cart-discount__form` instead of as a sibling above Check out. PRs #82 (CSS) + #83 (placement fix) were merged + deployed (`ordak-go-34`) but caused the embed to disappear from the drawer DOM entirely; reverted via PR #85 (`ordak-go-35`). Production is back to "embed renders in wrong place" baseline. Root-cause investigation captured in `memory/cart_block_drawer_placement_attempt.md`. Task #15 in the active session task list.
-
-❌ **User-action items still outstanding for App Store submission:**
-- 5.2 Final support email decision (`panos@bannos.com.au` placeholder)
+❌ **User-action items still outstanding for App Store submission (Phase 2):**
 - 5.3 App icon 1200×1200 PNG
-- 5.4 Screenshots (3–6 @ 1600×900)
+- 5.4 Screenshots (3–6 @ 1600×900) — capture from the new admin pages on `ordakgo-v3`
 - 5.4b Demo screencast (60–90s, English narration)
-- 5.5 Demo store with seed data + reviewer instructions
+- 5.5 Demo store reviewer instructions (use `ordakgo-v3.myshopify.com`, password `theuld`)
 - 5.6 Listing copy (intro/details/features) — Claude can draft, user approves
 - 5.6b Set listing pricing as "Free" in Partners
-- 5.8d Carrier-service re-registration test (uninstall+reinstall) — destructive
+- 5.8d Carrier-service re-registration test (uninstall+reinstall on `ordakgo-v3`) — destructive
 - 5.9 Stack-rot deferred items (Renovate config, quarterly cron) — mostly post-approval
-- 5.10 Final pre-submission smoke test on demo store
-
-The cart-drawer embed bug does NOT block App Store submission — the cart-page section block works correctly and is the primary UX surface. The drawer is a nice-to-have. Submission can proceed once the user-action items above land.
+- 5.10 Final pre-submission smoke test on `ordakgo-v3`
 
 ## Phase E · App Store readiness (legacy — superseded by Phase F)
 
