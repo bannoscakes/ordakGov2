@@ -135,7 +135,7 @@ export default function SettingsIndex() {
                 <ActionRow
                   icon={CheckCircleIcon}
                   title="Checkout rules"
-                  description="Toggles for the Cart Validation Function (require date, require valid zone)."
+                  description="Decide what's required at checkout — date, slot, valid delivery zone."
                   onClick={() => navigate("/app/settings/checkout-rules")}
                 />
                 <Divider />
