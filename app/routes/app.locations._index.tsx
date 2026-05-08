@@ -91,7 +91,7 @@ export default function LocationsIndex() {
     <Page
       title="Locations"
       primaryAction={{
-        content: "Add Location",
+        content: "Add location",
         icon: PlusIcon,
         onAction: () => navigate("/app/locations/new"),
       }}
@@ -104,7 +104,7 @@ export default function LocationsIndex() {
               <EmptyState
                 heading="Add your first location"
                 action={{
-                  content: "Add Location",
+                  content: "Add location",
                   onAction: () => navigate("/app/locations/new"),
                 }}
                 image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"

@@ -147,7 +147,7 @@ export default function ZonesList() {
     <Page
       title="Service Zones"
       primaryAction={{
-        content: "Add Zone",
+        content: "Add zone",
         onAction: () => navigate("/app/zones/new"),
       }}
     >
