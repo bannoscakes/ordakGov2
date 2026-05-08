@@ -4,11 +4,33 @@
   is detected, otherwise it no-ops.
 {%- endcomment -%}
 
+{%- if block.settings.hide_express_buttons -%}
+  {%- comment -%}
+    Block express checkout buttons that bypass the cart drawer. Customers who
+    use Shop Pay / Apple Pay / Buy-it-now skip the cart drawer entirely, which
+    means they skip the slot picker the cart-block surfaces. The CSS below
+    hides every common selector across modern Shopify themes; the cart-block
+    also runs a passive detector that POSTs back to the admin if buttons leak
+    through unrecognized selectors.
+  {%- endcomment -%}
+  <style>
+    .shopify-payment-button,
+    .additional-checkout-buttons,
+    [data-testid="dynamic-checkout-cart"],
+    [data-shopify-buttoncontainer],
+    .dynamic-checkout__buttons,
+    .dynamic-checkout__content {
+      display: none !important;
+    }
+  </style>
+{%- endif -%}
+
 {%- if block.settings.enabled -%}
   <div
     class="ordak-cart-scheduler-embed"
     data-ordak-cart-scheduler-embed
     data-ordak-drawer-selector="{{ block.settings.drawer_selector | default: '[data-cart-drawer], cart-drawer, #cart-drawer, .cart-drawer, .drawer--cart' }}"
+    data-ordak-hide-express-buttons="{{ block.settings.hide_express_buttons | default: true }}"
     style="--ordak-accent: {{ block.settings.accent_color | default: '#1a73e8' }};"
     hidden
   >
@@ -46,6 +68,13 @@
       "id": "enabled",
       "label": "Enable in cart drawer",
       "default": false
+    },
+    {
+      "type": "checkbox",
+      "id": "hide_express_buttons",
+      "label": "Hide express checkout buttons (Shop Pay / Apple Pay / Buy-it-now)",
+      "info": "Recommended ON. Express buttons skip the cart drawer entirely, which means customers skip the scheduling step. Their data is preserved into checkout so re-enabling Shopify's checkout-page express buttons is safe.",
+      "default": true
     },
     {
       "type": "text",

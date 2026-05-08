@@ -65,13 +65,14 @@ export default function SettingsIntegrations() {
                 cta="Install / re-enable"
                 onCta={() => navigate("/app/install-delivery-customization")}
               />
-              <InstallRow
-                label="Cart validation"
-                description="Blocks Shop Pay / Apple Pay / Buy-it-now express checkout when scheduling attributes are missing."
-                status="unknown"
-                cta="Install / re-enable"
-                onCta={() => navigate("/app/install-cart-validation")}
-              />
+              {/* Cart validation Function is deployed but not user-installable
+                  while the app distributes via custom-app — Shopify gates
+                  validationCreate behind Plus for non-listed apps. The
+                  hide-express-buttons toggle on the cart-scheduler-embed
+                  (theme editor → App embeds) covers the same surface via CSS
+                  on every plan. The Function auto-activates as defense-in-depth
+                  once the app is App-Store distributed, at which point this
+                  install row can come back. */}
             </BlockStack>
           </Card>
         </Layout.Section>

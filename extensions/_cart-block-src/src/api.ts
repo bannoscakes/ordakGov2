@@ -123,4 +123,18 @@ export class OrdakApi {
       console.warn("[ordak] analytics post failed", err);
     });
   }
+
+  // Passive diagnostic — POSTed once per page load when the cart-block
+  // detects whether express checkout buttons (Shop Pay / Apple Pay /
+  // Buy-it-now) are visible in the DOM despite the merchant's
+  // hide_express_buttons setting. Drives a dashboard warning Banner.
+  reportExpressButtonsVisible(visible: boolean): void {
+    void post(this.url("/diagnostics"), {
+      shopifyDomain: this.cfg.shopDomain,
+      expressButtonsVisible: visible,
+    }).catch((err) => {
+      // eslint-disable-next-line no-console
+      console.warn("[ordak] diagnostics post failed", err);
+    });
+  }
 }
