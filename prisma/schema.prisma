@@ -58,9 +58,14 @@ model Shop {
   showRecommendedBadge   Boolean   @default(false)
   showMostAvailableBadge Boolean   @default(true)
 
+  // Set to true by the cart-block storefront when it detects visible
+  // express checkout buttons (Shop Pay / Apple Pay / Buy-it-now). Drives
+  // the dashboard warning Banner that points the merchant at the
+  // hide-express-buttons toggle on the cart-scheduler-embed app embed.
+  diagnosticsExpressButtonsVisible Boolean @default(false)
+
   locations             Location[]
   zones                 Zone[]
-  rules                 Rule[]
   webhookDestinations   WebhookDestination[]
 
   createdAt             DateTime  @default(now())
@@ -145,36 +150,6 @@ model Zone {
 
   @@index([shopId])
   @@index([locationId])
-}
-
-model Rule {
-  id              String   @id @default(cuid())
-  shopId          String
-  shop            Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
-
-  name            String
-  type            String   // 'cutoff', 'lead_time', 'blackout', 'capacity'
-
-  // Cut-off time (e.g., "14:00" - no same-day orders after 2 PM)
-  cutoffTime      String?
-
-  // Lead time (minimum hours/days before delivery)
-  leadTimeHours   Int?
-  leadTimeDays    Int?
-
-  // Blackout dates
-  blackoutDates   DateTime[]
-
-  // Capacity
-  slotDuration    Int?     // minutes
-  slotCapacity    Int?     // max orders per slot
-
-  isActive        Boolean  @default(true)
-
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  @@index([shopId])
 }
 
 model Slot {

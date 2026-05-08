@@ -70,9 +70,6 @@ export async function loader({ request }: LoaderFunctionArgs) {
           location: true,
         },
       },
-      rules: {
-        where: { isActive: true },
-      },
     },
   });
 
@@ -220,15 +217,14 @@ export async function loader({ request }: LoaderFunctionArgs) {
             message: "No slots to check capacity",
           };
 
-    // Check 6: Active rules
-    const activeRulesCount = shop.rules.length;
+    // Check 6: legacy global Rules surface — removed in 1.5.D. Per-slot
+    // cutoff (1.5.A), per-Location blackout dates (1.5.B), and per-Location
+    // lead time (1.5.C) replace it. Keep the slot below in the array so the
+    // numbering of subsequent checks stays stable for screenshots/docs.
     const rulesActive: DiagnosticResult = {
       status: "pass",
-      message: `${activeRulesCount} active rule(s)`,
-      details:
-        activeRulesCount > 0
-          ? shop.rules.map((r) => `${r.name} (${r.type})`).join(", ")
-          : "No business rules are restricting availability",
+      message: "Per-resource rules (per-slot cutoff, per-Location blackout/lead time)",
+      details: "Legacy global Rules abstraction was removed in 1.5.D.",
     };
 
     // Check 7: Slots in date range
@@ -269,7 +265,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
         fullyBookedSlots,
         locations: locationsCount,
         zones: zonesCount,
-        activeRules: activeRulesCount,
+        activeRules: 0,
       },
     };
   }

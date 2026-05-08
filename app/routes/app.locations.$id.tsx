@@ -100,13 +100,6 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     throw new Response("Location not found", { status: 404 });
   }
 
-  // Per-shop rules (today these aren't location-scoped — placeholder sections will
-  // surface them with a link out to the global Rules admin).
-  const rules = await prisma.rule.findMany({
-    where: { shopId: shop.id, type: { in: ["lead_time", "blackout"] } },
-    orderBy: { createdAt: "desc" },
-  });
-
   // Pickup templates only matter when the location actually supports pickup.
   // We still load them when supportsPickup is false so toggling the checkbox
   // back on doesn't lose templates the merchant configured previously.
@@ -130,16 +123,6 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         basePrice: z.basePrice.toString(), // Decimal → string for client
       })),
     },
-    rules: rules.map((r) => ({
-      id: r.id,
-      name: r.name,
-      type: r.type,
-      cutoffTime: r.cutoffTime,
-      leadTimeHours: r.leadTimeHours,
-      leadTimeDays: r.leadTimeDays,
-      blackoutDates: r.blackoutDates.map((d) => d.toISOString()),
-      isActive: r.isActive,
-    })),
     pickupTemplatesByDay: pickupTemplatesByDay.map((day) =>
       day.map((t) => ({
         id: t.id,
@@ -350,7 +333,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 }
 
 export default function LocationAdmin() {
-  const { location, rules, pickupTemplatesByDay, pickupTemplateCount, section } =
+  const { location, pickupTemplatesByDay, pickupTemplateCount, section } =
     useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigate = useNavigate();
@@ -472,8 +455,8 @@ export default function LocationAdmin() {
               &quot;Fulfillment type&quot; first, then come back here to set hours.
             </Banner>
           )}
-          {section === "prep-time" && <PrepTimeSection rules={rules.filter((r) => r.type === "lead_time")} />}
-          {section === "block-dates" && <BlockDatesSection rules={rules.filter((r) => r.type === "blackout")} />}
+          {section === "prep-time" && <PrepTimeSection />}
+          {section === "block-dates" && <BlockDatesSection />}
           {section === "zones" && <ZonesSection location={location} />}
         </Layout.Section>
       </Layout>
@@ -769,7 +752,7 @@ function PickupHoursSection({
 
 // ---------- Section: Prep time ----------
 
-function PrepTimeSection({ rules }: { rules: ReturnType<typeof useLoaderData<typeof loader>>["rules"] }) {
+function PrepTimeSection() {
   return (
     <BlockStack gap="400">
       <Card>
@@ -784,32 +767,12 @@ function PrepTimeSection({ rules }: { rules: ReturnType<typeof useLoaderData<typ
 
       <Card>
         <BlockStack gap="300">
-          <Text as="h3" variant="headingMd">Current rules</Text>
-          {rules.length === 0 ? (
-            <Banner tone="info">
-              No lead-time rules configured yet. Add one in the global Rules admin.
-            </Banner>
-          ) : (
-            <BlockStack gap="200">
-              {rules.map((r) => (
-                <InlineStack key={r.id} gap="300" blockAlign="center">
-                  <Badge tone={r.isActive ? "success" : undefined}>{r.isActive ? "Active" : "Inactive"}</Badge>
-                  <Text as="p"><b>{r.name}</b></Text>
-                  <Text as="p" tone="subdued">
-                    {r.leadTimeDays ? `${r.leadTimeDays}d ` : ""}
-                    {r.leadTimeHours ? `${r.leadTimeHours}h` : ""}
-                  </Text>
-                </InlineStack>
-              ))}
-            </BlockStack>
-          )}
-          <Banner tone="info">
-            Rules are currently shop-wide, not per-location. Per-location prep time will be added
-            in a follow-up step.
+          <Banner tone="info" title="Coming in the next admin update">
+            <Text as="p">
+              Per-location lead time (hours and days) will land here. Until then, use per-slot
+              cutoff in the slot editor to gate same-day or short-notice availability.
+            </Text>
           </Banner>
-          <InlineStack>
-            <Button url="/app/rules">Manage rules globally</Button>
-          </InlineStack>
         </BlockStack>
       </Card>
     </BlockStack>
@@ -818,8 +781,7 @@ function PrepTimeSection({ rules }: { rules: ReturnType<typeof useLoaderData<typ
 
 // ---------- Section: Block dates ----------
 
-function BlockDatesSection({ rules }: { rules: ReturnType<typeof useLoaderData<typeof loader>>["rules"] }) {
-  const blackoutCount = rules.reduce((n, r) => n + (r.blackoutDates?.length ?? 0), 0);
+function BlockDatesSection() {
   return (
     <BlockStack gap="400">
       <Card>
@@ -833,34 +795,12 @@ function BlockDatesSection({ rules }: { rules: ReturnType<typeof useLoaderData<t
 
       <Card>
         <BlockStack gap="300">
-          <Text as="h3" variant="headingMd">Current blackout rules</Text>
-          {rules.length === 0 ? (
-            <Banner tone="info">
-              No blackout rules configured yet. Add one in the global Rules admin.
-            </Banner>
-          ) : (
-            <BlockStack gap="200">
-              {rules.map((r) => (
-                <InlineStack key={r.id} gap="300" blockAlign="center" wrap>
-                  <Badge tone={r.isActive ? "success" : undefined}>{r.isActive ? "Active" : "Inactive"}</Badge>
-                  <Text as="p"><b>{r.name}</b></Text>
-                  <Text as="p" tone="subdued">
-                    {r.blackoutDates.length} date{r.blackoutDates.length === 1 ? "" : "s"}
-                  </Text>
-                </InlineStack>
-              ))}
-              <Text as="p" tone="subdued" variant="bodySm">
-                Total blocked: {blackoutCount}
-              </Text>
-            </BlockStack>
-          )}
-          <Banner tone="info">
-            Rules are currently shop-wide, not per-location. Per-location blackouts (and time-of-day
-            blocks) will be added in a follow-up step.
+          <Banner tone="info" title="Coming in the next admin update">
+            <Text as="p">
+              Per-location blackout dates (calendar UI, click to toggle) will land here. Until
+              then, deactivate slots individually in the time-slot editor for one-off closures.
+            </Text>
           </Banner>
-          <InlineStack>
-            <Button url="/app/rules">Manage rules globally</Button>
-          </InlineStack>
         </BlockStack>
       </Card>
     </BlockStack>

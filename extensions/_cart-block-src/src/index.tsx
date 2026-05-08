@@ -1,10 +1,46 @@
 import { render } from "preact";
+import { OrdakApi } from "./api";
 import type { BlockConfig } from "./types";
 import { CartScheduler } from "./components/CartScheduler";
 
 const APP_BLOCK_ATTR = "data-ordak-cart-scheduler";
 const EMBED_ATTR = "data-ordak-cart-scheduler-embed";
 const MOUNTED_FLAG = "data-ordak-mounted";
+
+// Express checkout button selectors. Mirrors the CSS hide-list in
+// cart-scheduler-embed.liquid so the detector reports back when buttons
+// remain visible (theme-specific class, hide-toggle off, etc).
+const EXPRESS_BUTTON_SELECTORS = [
+  ".shopify-payment-button",
+  ".additional-checkout-buttons",
+  '[data-testid="dynamic-checkout-cart"]',
+  '[data-testid*="dynamic-checkout"]',
+  "[data-shopify-buttoncontainer]",
+  ".dynamic-checkout__buttons",
+].join(", ");
+
+function detectVisibleExpressButtons(): boolean {
+  const matches = document.querySelectorAll(EXPRESS_BUTTON_SELECTORS);
+  for (const el of Array.from(matches)) {
+    if (!(el instanceof HTMLElement)) continue;
+    // offsetParent is null when display: none (the hide-CSS works), so any
+    // truthy offsetParent means the button is rendering somewhere.
+    if (el.offsetParent !== null) return true;
+  }
+  return false;
+}
+
+let diagnosticsReported = false;
+function reportDiagnosticsOnce(config: BlockConfig) {
+  if (diagnosticsReported) return;
+  diagnosticsReported = true;
+  try {
+    const api = new OrdakApi(config);
+    api.reportExpressButtonsVisible(detectVisibleExpressButtons());
+  } catch {
+    // Diagnostics are passive — never block mount on a telemetry failure.
+  }
+}
 
 function readConfig(host: Element): BlockConfig | null {
   const node = host.querySelector("script[type='application/json'][data-ordak-config]");
@@ -23,6 +59,11 @@ function mountInto(host: Element) {
   host.setAttribute(MOUNTED_FLAG, "1");
   if (host.hasAttribute("hidden")) host.removeAttribute("hidden");
   render(<CartScheduler config={config} rootEl={host} />, host);
+  // Fire diagnostics once we have a config to address the proxy with.
+  // Defer slightly so the theme has a chance to render express buttons
+  // before we measure their visibility — themes lazy-load the dynamic
+  // checkout buttons after first paint.
+  setTimeout(() => reportDiagnosticsOnce(config), 1500);
 }
 
 function lazyMount(host: Element) {
