@@ -231,14 +231,14 @@ export function generateOrderNote(metafields: SchedulingMetafields): string {
   // it human-readable — internal IDs (slot id, location id) live in the
   // ordak_scheduling metafields panel for diagnostics, not here.
   const lines = [
-    `📅 ${type} Scheduled`,
+    `${type} scheduled`,
     "",
     `Date: ${date}`,
     `Time: ${metafields.slotTimeStart} - ${metafields.slotTimeEnd}`,
     `Location: ${metafields.locationName}`,
   ];
   if (metafields.wasRecommended) {
-    lines.push("⭐ Recommended slot selected");
+    lines.push("Recommended slot selected");
   }
   return lines.join("\n");
 }

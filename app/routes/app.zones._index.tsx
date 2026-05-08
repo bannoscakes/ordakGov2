@@ -17,7 +17,13 @@ import {
   BlockStack,
   InlineStack,
   Text,
+  Icon,
 } from "@shopify/polaris";
+import {
+  NoteIcon,
+  ChartVerticalIcon,
+  TargetIcon,
+} from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
@@ -169,15 +175,24 @@ export default function ZonesList() {
                   By Type
                 </Text>
                 <BlockStack gap="100">
-                  <Text as="p" variant="bodyMd">
-                    📝 Postcode Lists: {stats.byType.postcode_list}
-                  </Text>
-                  <Text as="p" variant="bodyMd">
-                    📊 Postcode Ranges: {stats.byType.postcode_range}
-                  </Text>
-                  <Text as="p" variant="bodyMd">
-                    🎯 Radius Zones: {stats.byType.radius}
-                  </Text>
+                  <InlineStack gap="200" blockAlign="center">
+                    <Icon source={NoteIcon} tone="base" />
+                    <Text as="p" variant="bodyMd">
+                      Postcode Lists: {stats.byType.postcode_list}
+                    </Text>
+                  </InlineStack>
+                  <InlineStack gap="200" blockAlign="center">
+                    <Icon source={ChartVerticalIcon} tone="base" />
+                    <Text as="p" variant="bodyMd">
+                      Postcode Ranges: {stats.byType.postcode_range}
+                    </Text>
+                  </InlineStack>
+                  <InlineStack gap="200" blockAlign="center">
+                    <Icon source={TargetIcon} tone="base" />
+                    <Text as="p" variant="bodyMd">
+                      Radius Zones: {stats.byType.radius}
+                    </Text>
+                  </InlineStack>
                 </BlockStack>
               </BlockStack>
             </Card>

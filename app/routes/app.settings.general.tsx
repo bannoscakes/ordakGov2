@@ -48,7 +48,12 @@ export default function SettingsGeneral() {
             <BlockStack gap="300">
               <Text as="h2" variant="headingMd">Per-location timezones</Text>
               {locations.length === 0 ? (
-                <Text as="p" tone="subdued">No locations yet.</Text>
+                <Banner
+                  tone="info"
+                  action={{ content: "Add location", url: "/app/locations/new" }}
+                >
+                  No locations yet. Add one to start accepting delivery and pickup orders.
+                </Banner>
               ) : (
                 <BlockStack gap="200">
                   {locations.map((l) => (
