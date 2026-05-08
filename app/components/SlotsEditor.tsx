@@ -60,7 +60,9 @@ const COPY: Record<SlotsEditorVariant, {
     helpText:
       "Set the time windows this zone accepts delivery orders, per day of the week. " +
       "Each row is a slot the customer can pick. Capacity = max orders per slot. " +
-      "Price adjustment = extra fee added to the zone's base price for that slot.",
+      "Price adjustment = extra fee added to the zone's base price for that slot. " +
+      "Cutoff (hrs) = hide this slot from the storefront N hours before its start time " +
+      "(e.g. 4 = no orders less than 4 h before; blank = no cutoff).",
     emptyAllText:
       "No slots configured yet. Pick a day below and add time windows. Slots " +
       "materialize automatically for the next 14 days when you save.",
@@ -73,7 +75,9 @@ const COPY: Record<SlotsEditorVariant, {
       "Set the days and hours customers can collect from this location. " +
       "Customers see only the date in the cart-block (the times communicate when " +
       "the location is open via the cart-block's pickup banner setting). " +
-      "Capacity is the max number of pickups per window per day.",
+      "Capacity is the max number of pickups per window per day. " +
+      "Cutoff (hrs) = hide this window from the storefront N hours before its start " +
+      "(e.g. 12 = no same-day after 12 h before opening; blank = no cutoff).",
     emptyAllText:
       "No pickup hours configured yet. Pick a day below and add a window — " +
       "most stores use one full-day window like 09:00–17:00. Slots materialize " +
@@ -374,8 +378,7 @@ function SlotRowEditor({
         )}
         <div style={{ flex: 1 }}>
           <TextField
-            label="Cutoff (hours)"
-            helpText="Hide N hours before start. 0.5 = 30 min. Blank = no cutoff."
+            label="Cutoff (hrs)"
             value={cutoffMinutesToHoursInput(row.cutoffOffsetMinutes)}
             onChange={(v) => onChange({ cutoffOffsetMinutes: hoursInputToCutoffMinutes(v) })}
             type="number"
