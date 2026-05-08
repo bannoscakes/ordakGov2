@@ -346,16 +346,34 @@ export default function Index() {
                     wrap={false}
                     gap="400"
                   >
-                    <BlockStack gap="050">
-                      <Text as="p" variant="bodySm" tone="subdued">Up next</Text>
-                      <Text as="p" fontWeight="semibold">{upNext.label}</Text>
-                      <Text as="p" tone="subdued" variant="bodySm">
-                        {upNext.description}
-                      </Text>
-                    </BlockStack>
-                    <Button onClick={() => onCta(upNext)} variant="primary">
-                      Resume setup
-                    </Button>
+                    {/* min-width: 0 lets the BlockStack shrink below its
+                        intrinsic content width, which is what makes the
+                        line-clamp on the description actually kick in
+                        instead of pushing the Resume button off-screen. */}
+                    <div style={{ minWidth: 0, flex: "1 1 auto" }}>
+                      <BlockStack gap="050">
+                        <Text as="p" variant="bodySm" tone="subdued">Up next</Text>
+                        <Text as="p" fontWeight="semibold">{upNext.label}</Text>
+                        <span
+                          style={{
+                            display: "-webkit-box",
+                            WebkitLineClamp: 1,
+                            WebkitBoxOrient: "vertical",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                          }}
+                        >
+                          <Text as="span" tone="subdued" variant="bodySm">
+                            {upNext.description}
+                          </Text>
+                        </span>
+                      </BlockStack>
+                    </div>
+                    <div style={{ flex: "0 0 auto" }}>
+                      <Button onClick={() => onCta(upNext)} variant="primary">
+                        Resume setup
+                      </Button>
+                    </div>
                   </InlineStack>
                 </Card>
               ) : null}
