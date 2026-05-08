@@ -354,74 +354,81 @@ function SlotRowEditor({
   onChange: (patch: Partial<SlotTemplateRow>) => void;
   onRemove: () => void;
 }) {
+  // Layout note: time inputs (HH:MM with clock icon) have intrinsic width
+  // ~130 px and don't compress well below that. Number inputs need at least
+  // ~110 px to show 3-4 digit values plus the spinner arrows. Using flex: 1
+  // on every cell squeezed the number inputs down to ~70 px — values were
+  // physically clipped and looked like ghost characters even though the
+  // React state was correct. The grid below pins time columns to a fixed
+  // width and gives number columns a generous floor + room to grow.
   return (
     <Card>
-      <InlineStack gap="300" blockAlign="end" wrap={false}>
-        <div style={{ flex: 1 }}>
-          <TextField
-            label="Start"
-            value={row.timeStart}
-            onChange={(v) => onChange({ timeStart: v })}
-            type="time"
-            autoComplete="off"
-          />
-        </div>
-        <div style={{ flex: 1 }}>
-          <TextField
-            label="End"
-            value={row.timeEnd}
-            onChange={(v) => onChange({ timeEnd: v })}
-            type="time"
-            autoComplete="off"
-          />
-        </div>
-        <div style={{ flex: 1 }}>
-          <TextField
-            label="Capacity"
-            value={String(row.capacity)}
-            onChange={(v) => onChange({ capacity: parseInt(v, 10) || 0 })}
-            type="number"
-            min={1}
-            max={9999}
-            autoComplete="off"
-            selectTextOnFocus
-          />
-        </div>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns:
+            showPriceAdjustment
+              ? "130px 130px minmax(110px,1fr) minmax(120px,1fr) minmax(110px,1fr) auto auto"
+              : "130px 130px minmax(110px,1fr) minmax(110px,1fr) auto auto",
+          gap: "12px",
+          alignItems: "end",
+        }}
+      >
+        <TextField
+          label="Start"
+          value={row.timeStart}
+          onChange={(v) => onChange({ timeStart: v })}
+          type="time"
+          autoComplete="off"
+        />
+        <TextField
+          label="End"
+          value={row.timeEnd}
+          onChange={(v) => onChange({ timeEnd: v })}
+          type="time"
+          autoComplete="off"
+        />
+        <TextField
+          label="Capacity"
+          value={String(row.capacity)}
+          onChange={(v) => onChange({ capacity: parseInt(v, 10) || 0 })}
+          type="number"
+          min={1}
+          max={9999}
+          autoComplete="off"
+          selectTextOnFocus
+        />
         {showPriceAdjustment && (
-          <div style={{ flex: 1 }}>
-            <TextField
-              label="+ price (AUD)"
-              value={String(row.priceAdjustment)}
-              onChange={(v) => onChange({ priceAdjustment: parseFloat(v) || 0 })}
-              type="number"
-              step={0.01}
-              min={0}
-              max={9999}
-              prefix="$"
-              autoComplete="off"
-              selectTextOnFocus
-            />
-          </div>
-        )}
-        <div style={{ flex: 1 }}>
           <TextField
-            label="Cutoff (hrs)"
-            value={cutoffMinutesToHoursInput(row.cutoffOffsetMinutes)}
-            onChange={(v) => onChange({ cutoffOffsetMinutes: hoursInputToCutoffMinutes(v) })}
+            label="+ price (AUD)"
+            value={String(row.priceAdjustment)}
+            onChange={(v) => onChange({ priceAdjustment: parseFloat(v) || 0 })}
             type="number"
-            step={0.25}
+            step={0.01}
             min={0}
-            max={24}
-            placeholder="—"
+            max={9999}
+            prefix="$"
             autoComplete="off"
             selectTextOnFocus
           />
-        </div>
+        )}
+        <TextField
+          label="Cutoff (hrs)"
+          value={cutoffMinutesToHoursInput(row.cutoffOffsetMinutes)}
+          onChange={(v) => onChange({ cutoffOffsetMinutes: hoursInputToCutoffMinutes(v) })}
+          type="number"
+          step={0.25}
+          min={0}
+          max={24}
+          placeholder="—"
+          autoComplete="off"
+          selectTextOnFocus
+        />
         <div style={{ paddingBottom: 4 }}>
           <Badge tone={row.id ? "success" : undefined}>{row.id ? "Saved" : "New"}</Badge>
         </div>
         <Button onClick={onRemove} tone="critical">Remove</Button>
-      </InlineStack>
+      </div>
     </Card>
   );
 }
