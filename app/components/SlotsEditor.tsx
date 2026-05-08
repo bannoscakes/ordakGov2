@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigation, useSearchParams, useSubmit } from "@remix-run/react";
 import {
   Badge,
@@ -114,6 +114,28 @@ export function SlotsEditor({ variant, templatesByDay, saveIntent, copyIntent }:
     ),
   );
 
+  // Re-sync local state from props ONLY when the server-side content
+  // actually changes (e.g. after a successful save → loader revalidation).
+  // Depending on `templatesByDay` reference identity caused unrelated Remix
+  // revalidations to wipe in-progress edits on existing rows — newly added
+  // rows survived because they had no server-side counterpart to reset to.
+  // The content-derived key compares values, so a re-render with the same
+  // data is a no-op and the user's local edits stay intact.
+  const templatesByDayKey = useMemo(
+    () =>
+      templatesByDay
+        .map((day) =>
+          day
+            .map(
+              (t) =>
+                `${t.id}|${t.timeStart}|${t.timeEnd}|${t.capacity}|${t.priceAdjustment}|${t.cutoffOffsetMinutes ?? "_"}|${t.isActive}`,
+            )
+            .join(","),
+        )
+        .join("||"),
+    [templatesByDay],
+  );
+
   useEffect(() => {
     setRowsByDay(
       templatesByDay.map((day) =>
@@ -128,7 +150,8 @@ export function SlotsEditor({ variant, templatesByDay, saveIntent, copyIntent }:
         })),
       ),
     );
-  }, [templatesByDay]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [templatesByDayKey]);
 
   const rows = rowsByDay[selectedDay] ?? [];
 
