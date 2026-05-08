@@ -35,6 +35,7 @@ import {
   getTemplatesByDay,
   replaceTemplatesAndMaterialize,
 } from "../services/slot-materializer.server";
+import { isValidIanaTimezone, parseCutoffOffsetMinutes } from "../services/slot-cutoff.server";
 import { SlotsEditor } from "../components/SlotsEditor";
 
 type Section = "setup" | "fulfillment" | "pickup-hours" | "prep-time" | "block-dates" | "zones";
@@ -146,6 +147,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         timeEnd: t.timeEnd,
         capacity: t.capacity,
         priceAdjustment: t.priceAdjustment.toString(),
+        cutoffOffsetMinutes: t.cutoffOffsetMinutes,
         isActive: t.isActive,
       })),
     ),
@@ -203,6 +205,13 @@ export async function action({ request, params }: ActionFunctionArgs) {
       if (!name || !address) {
         return json<ActionResult>({ ok: false, error: "Name and address are required" }, { status: 400 });
       }
+      const timezone = ((formData.get("timezone") as string | null) || "UTC").trim() || "UTC";
+      if (!isValidIanaTimezone(timezone)) {
+        return json<ActionResult>(
+          { ok: false, error: `Invalid timezone "${timezone}". Use an IANA name like "Australia/Sydney" or "UTC".` },
+          { status: 400 },
+        );
+      }
       const latRaw = formData.get("latitude") as string | null;
       const lngRaw = formData.get("longitude") as string | null;
       const latitude = latRaw ? parseFloat(latRaw) : null;
@@ -220,7 +229,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
           longitude: longitude !== null && Number.isFinite(longitude) ? longitude : null,
           phone: ((formData.get("phone") as string | null) || "").trim() || null,
           email: ((formData.get("email") as string | null) || "").trim() || null,
-          timezone: ((formData.get("timezone") as string | null) || "UTC").trim() || "UTC",
+          timezone,
           isActive: formData.get("isActive") === "true",
         },
       });
@@ -258,6 +267,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
         timeEnd: string;
         capacity: number;
         priceAdjustment: number;
+        cutoffOffsetMinutes: number | null;
         isActive: boolean;
       }> = [];
       for (const r of parsedRows) {
@@ -267,6 +277,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
         const timeEnd = String(row.timeEnd ?? "");
         const capacity = Number(row.capacity);
         const priceAdjustment = Number(row.priceAdjustment ?? 0);
+        const cutoffOffsetMinutes = parseCutoffOffsetMinutes(row.cutoffOffsetMinutes);
         const isActive = row.isActive !== false;
         if (!/^\d{2}:\d{2}$/.test(timeStart) || !/^\d{2}:\d{2}$/.test(timeEnd)) {
           return json<ActionResult>(
@@ -292,7 +303,13 @@ export async function action({ request, params }: ActionFunctionArgs) {
             { status: 400 },
           );
         }
-        rows.push({ timeStart, timeEnd, capacity, priceAdjustment, isActive });
+        if (cutoffOffsetMinutes !== null && (cutoffOffsetMinutes < 0 || cutoffOffsetMinutes > 1440)) {
+          return json<ActionResult>(
+            { ok: false, error: "Cutoff must be between 0 and 24 hours" },
+            { status: 400 },
+          );
+        }
+        rows.push({ timeStart, timeEnd, capacity, priceAdjustment, cutoffOffsetMinutes, isActive });
       }
 
       await replaceTemplatesAndMaterialize({

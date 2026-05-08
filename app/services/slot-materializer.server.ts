@@ -108,6 +108,7 @@ export async function materializeSlots(
           capacity: t.capacity,
           booked: 0,
           priceAdjustment: t.priceAdjustment,
+          cutoffOffsetMinutes: t.cutoffOffsetMinutes,
           fulfillmentType: t.fulfillmentType,
           isActive: true,
         });
@@ -190,6 +191,7 @@ export async function replaceTemplatesAndMaterialize(params: {
     timeEnd: string;
     capacity: number;
     priceAdjustment: number;
+    cutoffOffsetMinutes: number | null;
     isActive: boolean;
   }>;
   horizonDays?: number;
@@ -217,6 +219,7 @@ export async function replaceTemplatesAndMaterialize(params: {
           timeEnd: r.timeEnd,
           capacity: r.capacity,
           priceAdjustment: r.priceAdjustment,
+          cutoffOffsetMinutes: r.cutoffOffsetMinutes,
           isActive: r.isActive,
         })),
       });
@@ -263,6 +266,7 @@ export async function copyTemplatesBetweenDays(params: {
             timeEnd: s.timeEnd,
             capacity: s.capacity,
             priceAdjustment: s.priceAdjustment,
+            cutoffOffsetMinutes: s.cutoffOffsetMinutes,
             isActive: s.isActive,
           })),
         });
