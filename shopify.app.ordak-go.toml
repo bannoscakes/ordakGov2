@@ -3,7 +3,7 @@
 client_id = "ab729e4046f8cdea55d24bfffd815e6a"
 name = "Ordak Go"
 handle = "ordak-go"
-application_url = "https://ordak-go.vercel.app/"
+application_url = "https://ordak-go-git-dev-bannos-and-flour-lane.vercel.app/"
 embedded = true
 
 [access_scopes]
@@ -24,7 +24,7 @@ embedded = true
 scopes = "write_orders,read_locations,write_delivery_customizations,write_shipping,write_validations"
 
 [auth]
-redirect_urls = [ "https://ordak-go.vercel.app/api/auth" ]
+redirect_urls = [ "https://ordak-go-git-dev-bannos-and-flour-lane.vercel.app/api/auth" ]
 
 [webhooks]
 # Pinned to the current quarter (April 2026). Bumped quarterly via the
@@ -37,11 +37,13 @@ embedded = false
 [app_proxy]
 # Storefront calls https://{shop}.myshopify.com/apps/ordak-go/* → forwarded to
 # <app-host>/apps/proxy/* and handled by Remix routes app/routes/apps.proxy.*.
-# Pointed at the Vercel production deploy (project: ordak-go under team
-# bannos-and-flour-lane). For local debugging, set up a SEPARATE Partners app
-# pointed at the dev tunnel — URL flips on this production toml are not
-# supported (CLI dev workflow doesn't apply here; see `npm run dev:up`).
-url = "https://ordak-go.vercel.app/apps/proxy"
+# Pointed at the Dev branch Vercel deploy (project: ordak-go under team
+# bannos-and-flour-lane). Pre-launch workflow: ordakgo-v3 loads the app from
+# Dev so push-to-Dev → Vercel auto-deploy → reload-admin shows changes
+# without merging to main. main is the "stable" line; flip these URLs back
+# to ordak-go.vercel.app when the App Store unlisted listing lands and
+# Bannos / Flour Lane install via the listing.
+url = "https://ordak-go-git-dev-bannos-and-flour-lane.vercel.app/apps/proxy"
 subpath = "ordak-go"
 prefix = "apps"
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigation, useSearchParams, useSubmit } from "@remix-run/react";
 import {
   Badge,
@@ -23,6 +23,9 @@ export type SlotTemplateRow = {
   timeEnd: string;
   capacity: number;
   priceAdjustment: number;
+  // Storage is minutes (NULL = no cutoff). The editor input is in hours
+  // (decimal, so 0.5 = 30 min) but the row state mirrors the storage shape.
+  cutoffOffsetMinutes: number | null;
   isActive: boolean;
 };
 
@@ -32,6 +35,7 @@ export type SlotsEditorTemplate = {
   timeEnd: string;
   capacity: number;
   priceAdjustment: string;
+  cutoffOffsetMinutes: number | null;
   isActive: boolean;
 };
 
@@ -56,11 +60,13 @@ const COPY: Record<SlotsEditorVariant, {
     helpText:
       "Set the time windows this zone accepts delivery orders, per day of the week. " +
       "Each row is a slot the customer can pick. Capacity = max orders per slot. " +
-      "Price adjustment = extra fee added to the zone's base price for that slot.",
+      "Price adjustment = extra fee added to the zone's base price for that slot. " +
+      "Cutoff (hrs) = hide this slot from the storefront N hours before its start time " +
+      "(e.g. 4 = no orders less than 4 h before; blank = no cutoff).",
     emptyAllText:
       "No slots configured yet. Pick a day below and add time windows. Slots " +
       "materialize automatically for the next 14 days when you save.",
-    defaultRow: () => ({ timeStart: "09:00", timeEnd: "11:00", capacity: 10, priceAdjustment: 0 }),
+    defaultRow: () => ({ timeStart: "09:00", timeEnd: "11:00", capacity: 10, priceAdjustment: 0, cutoffOffsetMinutes: null }),
     showPriceAdjustment: true,
   },
   pickup: {
@@ -69,12 +75,14 @@ const COPY: Record<SlotsEditorVariant, {
       "Set the days and hours customers can collect from this location. " +
       "Customers see only the date in the cart-block (the times communicate when " +
       "the location is open via the cart-block's pickup banner setting). " +
-      "Capacity is the max number of pickups per window per day.",
+      "Capacity is the max number of pickups per window per day. " +
+      "Cutoff (hrs) = hide this window from the storefront N hours before its start " +
+      "(e.g. 12 = no same-day after 12 h before opening; blank = no cutoff).",
     emptyAllText:
       "No pickup hours configured yet. Pick a day below and add a window — " +
       "most stores use one full-day window like 09:00–17:00. Slots materialize " +
       "automatically for the next 14 days when you save.",
-    defaultRow: () => ({ timeStart: "09:00", timeEnd: "17:00", capacity: 20, priceAdjustment: 0 }),
+    defaultRow: () => ({ timeStart: "09:00", timeEnd: "17:00", capacity: 20, priceAdjustment: 0, cutoffOffsetMinutes: null }),
     showPriceAdjustment: false,
   },
 };
@@ -100,9 +108,32 @@ export function SlotsEditor({ variant, templatesByDay, saveIntent, copyIntent }:
         timeEnd: t.timeEnd,
         capacity: t.capacity,
         priceAdjustment: parseFloat(t.priceAdjustment),
+        cutoffOffsetMinutes: t.cutoffOffsetMinutes,
         isActive: t.isActive,
       })),
     ),
+  );
+
+  // Re-sync local state from props ONLY when the server-side content
+  // actually changes (e.g. after a successful save → loader revalidation).
+  // Depending on `templatesByDay` reference identity caused unrelated Remix
+  // revalidations to wipe in-progress edits on existing rows — newly added
+  // rows survived because they had no server-side counterpart to reset to.
+  // The content-derived key compares values, so a re-render with the same
+  // data is a no-op and the user's local edits stay intact.
+  const templatesByDayKey = useMemo(
+    () =>
+      templatesByDay
+        .map((day) =>
+          day
+            .map(
+              (t) =>
+                `${t.id}|${t.timeStart}|${t.timeEnd}|${t.capacity}|${t.priceAdjustment}|${t.cutoffOffsetMinutes ?? "_"}|${t.isActive}`,
+            )
+            .join(","),
+        )
+        .join("||"),
+    [templatesByDay],
   );
 
   useEffect(() => {
@@ -114,11 +145,13 @@ export function SlotsEditor({ variant, templatesByDay, saveIntent, copyIntent }:
           timeEnd: t.timeEnd,
           capacity: t.capacity,
           priceAdjustment: parseFloat(t.priceAdjustment),
+          cutoffOffsetMinutes: t.cutoffOffsetMinutes,
           isActive: t.isActive,
         })),
       ),
     );
-  }, [templatesByDay]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [templatesByDayKey]);
 
   const rows = rowsByDay[selectedDay] ?? [];
 
@@ -147,6 +180,7 @@ export function SlotsEditor({ variant, templatesByDay, saveIntent, copyIntent }:
         timeEnd,
         capacity: preset.capacity,
         priceAdjustment: preset.priceAdjustment,
+        cutoffOffsetMinutes: preset.cutoffOffsetMinutes,
         isActive: true,
       });
       return next;
@@ -181,6 +215,7 @@ export function SlotsEditor({ variant, templatesByDay, saveIntent, copyIntent }:
           timeEnd: r.timeEnd,
           capacity: r.capacity,
           priceAdjustment: r.priceAdjustment,
+          cutoffOffsetMinutes: r.cutoffOffsetMinutes,
           isActive: r.isActive,
         })),
       ),
@@ -200,7 +235,22 @@ export function SlotsEditor({ variant, templatesByDay, saveIntent, copyIntent }:
   const totalRows = rowsByDay.reduce((n, d) => n + d.length, 0);
 
   return (
-    <BlockStack gap="400">
+    <div className="ordak-slots-editor">
+      <BlockStack gap="400">
+      {/* Hide browser-native spinner arrows on number inputs inside the slot
+          editor. They eat ~20 px per column for no real value — typing is
+          faster than clicking the arrows, and we control min/max via Polaris.
+          Scoped with a class so it doesn't affect number inputs elsewhere. */}
+      <style>{`
+        .ordak-slots-editor input[type="number"]::-webkit-inner-spin-button,
+        .ordak-slots-editor input[type="number"]::-webkit-outer-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
+        .ordak-slots-editor input[type="number"] {
+          -moz-appearance: textfield;
+        }
+      `}</style>
       <Card>
         <BlockStack gap="300">
           <Text as="h2" variant="headingMd">{copy.header}</Text>
@@ -251,6 +301,7 @@ export function SlotsEditor({ variant, templatesByDay, saveIntent, copyIntent }:
         </BlockStack>
       </Card>
     </BlockStack>
+    </div>
   );
 }
 
@@ -319,10 +370,35 @@ function SlotRowEditor({
   onChange: (patch: Partial<SlotTemplateRow>) => void;
   onRemove: () => void;
 }) {
+  // Layout note: time inputs (HH:MM with clock icon) have intrinsic width
+  // ~115 px and don't compress well below that. Number inputs need at least
+  // ~80 px to show 2-3 digit values plus the spinner arrows. Using flex: 1
+  // on every cell squeezed the number inputs down to ~70 px — values were
+  // physically clipped and looked like ghost characters even though the
+  // React state was correct. The grid below pins time columns to a fixed
+  // width and gives number columns a floor + room to grow.
+  //
+  // Polaris Page lays out two-column at wide viewports (tabs sidebar + right
+  // content card), one-column at narrow viewports. The right content card at
+  // wide viewports can be NARROWER than the full-width single-column layout
+  // at narrow viewports — so a row that fits when the user shrinks the window
+  // can fail at wider widths if we naively stretch it. CSS Grid with explicit
+  // columns can't gracefully wrap a row to two lines when overflowing, so we
+  // use flexbox with wrap: when the row's total min-width exceeds available,
+  // the action cluster (Saved + remove) wraps to a second line below the
+  // inputs. Inputs themselves never wrap to one-per-line because their
+  // flex-basis is large enough to keep three+ on a line.
   return (
     <Card>
-      <InlineStack gap="300" blockAlign="end" wrap={false}>
-        <div style={{ flex: 1 }}>
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "8px",
+          alignItems: "end",
+        }}
+      >
+        <div style={{ flex: "0 0 100px" }}>
           <TextField
             label="Start"
             value={row.timeStart}
@@ -331,7 +407,7 @@ function SlotRowEditor({
             autoComplete="off"
           />
         </div>
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: "0 0 100px" }}>
           <TextField
             label="End"
             value={row.timeEnd}
@@ -340,35 +416,53 @@ function SlotRowEditor({
             autoComplete="off"
           />
         </div>
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: "1 1 80px", minWidth: 80 }}>
           <TextField
             label="Capacity"
             value={String(row.capacity)}
             onChange={(v) => onChange({ capacity: parseInt(v, 10) || 0 })}
             type="number"
             min={1}
+            max={9999}
             autoComplete="off"
+            selectTextOnFocus
           />
         </div>
         {showPriceAdjustment && (
-          <div style={{ flex: 1 }}>
+          <div style={{ flex: "1 1 95px", minWidth: 95 }}>
             <TextField
-              label="+ price (AUD)"
+              label="Price"
               value={String(row.priceAdjustment)}
               onChange={(v) => onChange({ priceAdjustment: parseFloat(v) || 0 })}
               type="number"
               step={0.01}
               min={0}
+              max={9999}
               prefix="$"
               autoComplete="off"
+              selectTextOnFocus
             />
           </div>
         )}
-        <div style={{ paddingBottom: 4 }}>
-          <Badge tone={row.id ? "success" : undefined}>{row.id ? "Saved" : "New"}</Badge>
+        <div style={{ flex: "1 1 80px", minWidth: 80 }}>
+          <TextField
+            label="Cutoff"
+            value={cutoffMinutesToHoursInput(row.cutoffOffsetMinutes)}
+            onChange={(v) => onChange({ cutoffOffsetMinutes: hoursInputToCutoffMinutes(v) })}
+            type="number"
+            step={0.25}
+            min={0}
+            max={24}
+            placeholder="—"
+            autoComplete="off"
+            selectTextOnFocus
+          />
         </div>
-        <Button onClick={onRemove} tone="critical">Remove</Button>
-      </InlineStack>
+        <div style={{ display: "flex", gap: "8px", alignItems: "center", paddingBottom: 4, flex: "0 0 auto" }}>
+          <Badge tone={row.id ? "success" : undefined} size="small">{row.id ? "Saved" : "New"}</Badge>
+          <Button onClick={onRemove} tone="critical" size="slim" accessibilityLabel="Remove slot">✕</Button>
+        </div>
+      </div>
     </Card>
   );
 }
@@ -445,4 +539,23 @@ function addHours(time: string, hours: number): string {
   const newH = Math.min(23, Math.floor(total / 60));
   const newM = total % 60;
   return `${String(newH).padStart(2, "0")}:${String(newM).padStart(2, "0")}`;
+}
+
+// Storage is minutes; the input is hours-with-decimals so merchants type
+// "4" for 4h instead of "240" for 240 min. Round-tripping through hours
+// also keeps trailing zeros out of the rendered value.
+function cutoffMinutesToHoursInput(minutes: number | null): string {
+  if (minutes == null) return "";
+  return (minutes / 60).toString();
+}
+
+function hoursInputToCutoffMinutes(input: string): number | null {
+  const trimmed = input.trim();
+  if (trimmed === "") return null;
+  const hours = parseFloat(trimmed);
+  if (!Number.isFinite(hours) || hours < 0) return null;
+  // Cap at 24h (1440 min). Anything longer is almost certainly a typo —
+  // the merchant probably meant "0.X hours" or hit an extra digit.
+  const minutes = Math.min(1440, Math.round(hours * 60));
+  return minutes;
 }

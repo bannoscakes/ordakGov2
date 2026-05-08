@@ -16,6 +16,7 @@ import type { Slot, Zone } from "@prisma/client";
 import prisma from "../db.server";
 import { logger } from "../utils/logger.server";
 import { postcodeMatchesZone } from "../utils/postcode-match.server";
+import { isSlotCutoffPassed } from "../services/slot-cutoff.server";
 
 interface RateRequestItem {
   name?: string;
@@ -139,11 +140,14 @@ export async function action({ request }: ActionFunctionArgs) {
     // Slot lookup is shop-scoped via location.shopId so a customer cannot
     // reference a slot from a different shop by stamping its id into
     // _slot_id. Per-branch fulfillmentType + zone/location guards apply
-    // below.
-    let selectedSlot: Slot | null = null;
+    // below. Pull the location's timezone for the cutoff check.
+    let selectedSlot:
+      | (Slot & { location: { timezone: string } })
+      | null = null;
     if (requestedSlotId) {
       selectedSlot = await prisma.slot.findFirst({
         where: { id: requestedSlotId, location: { shopId: shop.id } },
+        include: { location: { select: { timezone: true } } },
       });
       if (!selectedSlot) {
         logger.warn("Carrier service: requested slot not found in shop", {
@@ -152,6 +156,42 @@ export async function action({ request }: ActionFunctionArgs) {
         });
       } else {
         selectedSlotForLog = selectedSlot;
+      }
+    }
+
+    // Defense-in-depth cutoff gate. The slot loader filters at cart-time, but
+    // a customer can hold the cart open across the cutoff. Empty rates here
+    // collapses checkout the same way a no-zone-match does. Per-location
+    // timezone is used (matches the loader filter).
+    //
+    // If the location's tz is misconfigured the helper throws — log the
+    // error and skip the gate (allowing the rate to compute) rather than
+    // hard-blocking checkout for a tz typo. Failing-open here matches the
+    // loader's failing-open behavior and keeps tz misconfig observable in
+    // logs without nuking checkout.
+    if (selectedSlot) {
+      let cutoffPassed = false;
+      try {
+        cutoffPassed = isSlotCutoffPassed(
+          selectedSlot,
+          new Date(),
+          selectedSlot.location.timezone,
+        );
+      } catch (err) {
+        logger.warn("Carrier service: cutoff check failed — allowing rate", {
+          shopifyDomain,
+          slotId: selectedSlot.id,
+          locationTimezone: selectedSlot.location.timezone,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+      if (cutoffPassed) {
+        logger.warn("Carrier service: requested slot past cutoff", {
+          shopifyDomain,
+          slotId: selectedSlot.id,
+          cutoffOffsetMinutes: selectedSlot.cutoffOffsetMinutes,
+        });
+        return json({ rates: [] });
       }
     }
 
