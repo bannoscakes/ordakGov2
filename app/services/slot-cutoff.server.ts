@@ -59,6 +59,26 @@ function parseHHMM(s: string): [number, number] {
 }
 
 /**
+ * Validates that `tz` is an IANA timezone name accepted by
+ * `Intl.DateTimeFormat` — i.e. one that won't make `isSlotCutoffPassed`
+ * throw at runtime. Use at the form save layer for any field that flows
+ * into a slot's location timezone, so the helper's "throws on bad tz"
+ * contract becomes a defense-in-depth backstop rather than something the
+ * runtime fail-open path actually reaches.
+ *
+ * Empty string / non-string / unrecognized name → false.
+ */
+export function isValidIanaTimezone(tz: unknown): tz is string {
+  if (typeof tz !== "string" || tz.trim() === "") return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Coerce a cutoff value off form-submitted JSON. Accepts:
  *   null/undefined → null
  *   finite non-negative number → that number (rounded to int minutes)

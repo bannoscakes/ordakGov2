@@ -9,9 +9,44 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { isSlotCutoffPassed } from "../app/services/slot-cutoff.server";
+import { isSlotCutoffPassed, isValidIanaTimezone } from "../app/services/slot-cutoff.server";
 
 const utcDate = (iso: string): Date => new Date(iso);
+
+describe("isValidIanaTimezone — form-save guard", () => {
+  // The location form-save action calls this to reject bad input before it
+  // reaches the DB, making the helper's "throws on bad tz" runtime guard
+  // genuinely unreachable in normal operation.
+  it("accepts known IANA names", () => {
+    expect(isValidIanaTimezone("UTC")).toBe(true);
+    expect(isValidIanaTimezone("Australia/Sydney")).toBe(true);
+    expect(isValidIanaTimezone("America/New_York")).toBe(true);
+    expect(isValidIanaTimezone("Europe/London")).toBe(true);
+  });
+
+  it("rejects empty string and whitespace-only", () => {
+    expect(isValidIanaTimezone("")).toBe(false);
+    expect(isValidIanaTimezone("   ")).toBe(false);
+  });
+
+  it("rejects names ICU does not recognize", () => {
+    // The job here is "won't make Intl.DateTimeFormat throw at runtime,"
+    // not "is canonical IANA." ICU accepts some legacy aliases like "PST"
+    // and "GMT" — those won't throw, so they pass. The form-save guard's
+    // purpose is catching typos like "Asia/InvalidZone" before they reach
+    // the DB and trip the runtime fail-open path.
+    expect(isValidIanaTimezone("Asia/InvalidZone")).toBe(false);
+    expect(isValidIanaTimezone("Not/A_Real_Tz")).toBe(false);
+    expect(isValidIanaTimezone("Australia/NotARealCity")).toBe(false);
+  });
+
+  it("rejects non-strings", () => {
+    expect(isValidIanaTimezone(undefined)).toBe(false);
+    expect(isValidIanaTimezone(null)).toBe(false);
+    expect(isValidIanaTimezone(42)).toBe(false);
+    expect(isValidIanaTimezone({})).toBe(false);
+  });
+});
 
 describe("isSlotCutoffPassed — null cutoff", () => {
   it("returns false regardless of tz when cutoffOffsetMinutes is null", () => {
