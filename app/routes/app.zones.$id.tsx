@@ -33,7 +33,6 @@ import {
   getTemplatesByDay,
   replaceTemplatesAndMaterialize,
 } from "../services/slot-materializer.server";
-import { parseCutoffOffsetMinutes } from "../services/slot-cutoff.server";
 import { SlotsEditor } from "../components/SlotsEditor";
 
 type Section = "setup" | "pricing" | "slots";
@@ -100,7 +99,6 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         timeEnd: t.timeEnd,
         capacity: t.capacity,
         priceAdjustment: t.priceAdjustment.toString(),
-        cutoffOffsetMinutes: t.cutoffOffsetMinutes,
         isActive: t.isActive,
       })),
     ),
@@ -244,7 +242,6 @@ export async function action({ request, params }: ActionFunctionArgs) {
         timeEnd: string;
         capacity: number;
         priceAdjustment: number;
-        cutoffOffsetMinutes: number | null;
         isActive: boolean;
       }> = [];
       for (const r of parsedRows) {
@@ -254,7 +251,6 @@ export async function action({ request, params }: ActionFunctionArgs) {
         const timeEnd = String(row.timeEnd ?? "");
         const capacity = Number(row.capacity);
         const priceAdjustment = Number(row.priceAdjustment);
-        const cutoffOffsetMinutes = parseCutoffOffsetMinutes(row.cutoffOffsetMinutes);
         const isActive = row.isActive !== false;
         if (!/^\d{2}:\d{2}$/.test(timeStart) || !/^\d{2}:\d{2}$/.test(timeEnd)) {
           return json<ActionResult>(
@@ -280,13 +276,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
             { status: 400 },
           );
         }
-        if (cutoffOffsetMinutes !== null && (cutoffOffsetMinutes < 0 || cutoffOffsetMinutes > 1440)) {
-          return json<ActionResult>(
-            { ok: false, error: "Cutoff must be between 0 and 24 hours" },
-            { status: 400 },
-          );
-        }
-        rows.push({ timeStart, timeEnd, capacity, priceAdjustment, cutoffOffsetMinutes, isActive });
+        rows.push({ timeStart, timeEnd, capacity, priceAdjustment, isActive });
       }
 
       const result = await replaceTemplatesAndMaterialize({
