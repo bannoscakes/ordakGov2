@@ -382,7 +382,9 @@ function SlotRowEditor({
             onChange={(v) => onChange({ capacity: parseInt(v, 10) || 0 })}
             type="number"
             min={1}
+            max={9999}
             autoComplete="off"
+            selectTextOnFocus
           />
         </div>
         {showPriceAdjustment && (
@@ -394,8 +396,10 @@ function SlotRowEditor({
               type="number"
               step={0.01}
               min={0}
+              max={9999}
               prefix="$"
               autoComplete="off"
+              selectTextOnFocus
             />
           </div>
         )}
@@ -410,6 +414,7 @@ function SlotRowEditor({
             max={24}
             placeholder="—"
             autoComplete="off"
+            selectTextOnFocus
           />
         </div>
         <div style={{ paddingBottom: 4 }}>
