@@ -355,12 +355,17 @@ function SlotRowEditor({
   onRemove: () => void;
 }) {
   // Layout note: time inputs (HH:MM with clock icon) have intrinsic width
-  // ~130 px and don't compress well below that. Number inputs need at least
-  // ~110 px to show 3-4 digit values plus the spinner arrows. Using flex: 1
+  // ~115 px and don't compress well below that. Number inputs need at least
+  // ~80 px to show 2-3 digit values plus the spinner arrows. Using flex: 1
   // on every cell squeezed the number inputs down to ~70 px — values were
   // physically clipped and looked like ghost characters even though the
   // React state was correct. The grid below pins time columns to a fixed
-  // width and gives number columns a generous floor + room to grow.
+  // width and gives number columns a floor + room to grow.
+  //
+  // Total minimum at narrow card widths:
+  //   115 + 115 + 80 + 100 + 80 + ~75 (badge) + ~80 (remove) + 12*6 (gaps) ≈ 717 px
+  // which fits inside the standard Polaris Page card width (~720-760 px in
+  // the embedded admin iframe). At wider widths the 1fr columns grow.
   return (
     <Card>
       <div
@@ -368,8 +373,8 @@ function SlotRowEditor({
           display: "grid",
           gridTemplateColumns:
             showPriceAdjustment
-              ? "130px 130px minmax(110px,1fr) minmax(120px,1fr) minmax(110px,1fr) auto auto"
-              : "130px 130px minmax(110px,1fr) minmax(110px,1fr) auto auto",
+              ? "115px 115px minmax(80px,1fr) minmax(100px,1fr) minmax(80px,1fr) auto auto"
+              : "115px 115px minmax(80px,1fr) minmax(80px,1fr) auto auto",
           gap: "12px",
           alignItems: "end",
         }}
