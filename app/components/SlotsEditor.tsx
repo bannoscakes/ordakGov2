@@ -137,6 +137,9 @@ export function SlotsEditor({ variant, templatesByDay, saveIntent, copyIntent }:
   );
 
   useEffect(() => {
+    // TEMP DIAG (remove after diagnosing input bug 2026-05-08)
+    // eslint-disable-next-line no-console
+    console.log("[ordak-diag] sync effect fired — keyLen=", templatesByDayKey.length);
     setRowsByDay(
       templatesByDay.map((day) =>
         day.map((t) => ({
@@ -156,9 +159,16 @@ export function SlotsEditor({ variant, templatesByDay, saveIntent, copyIntent }:
   const rows = rowsByDay[selectedDay] ?? [];
 
   const updateRow = (idx: number, patch: Partial<SlotTemplateRow>) => {
+    // TEMP DIAG (remove after diagnosing input bug 2026-05-08)
+    // eslint-disable-next-line no-console
+    console.log("[ordak-diag] updateRow", { idx, selectedDay, patch });
     setRowsByDay((prev) => {
       const next = prev.map((d) => d.slice());
+      const before = next[selectedDay][idx];
       next[selectedDay] = next[selectedDay].map((r, i) => (i === idx ? { ...r, ...patch } : r));
+      const after = next[selectedDay][idx];
+      // eslint-disable-next-line no-console
+      console.log("[ordak-diag] updateRow result", { before, after });
       return next;
     });
   };
@@ -379,7 +389,12 @@ function SlotRowEditor({
           <TextField
             label="Capacity"
             value={String(row.capacity)}
-            onChange={(v) => onChange({ capacity: parseInt(v, 10) || 0 })}
+            onChange={(v) => {
+              // TEMP DIAG
+              // eslint-disable-next-line no-console
+              console.log("[ordak-diag] Capacity onChange", { rowId: row.id, raw: v, parsed: parseInt(v, 10) });
+              onChange({ capacity: parseInt(v, 10) || 0 });
+            }}
             type="number"
             min={1}
             autoComplete="off"
@@ -390,7 +405,12 @@ function SlotRowEditor({
             <TextField
               label="+ price (AUD)"
               value={String(row.priceAdjustment)}
-              onChange={(v) => onChange({ priceAdjustment: parseFloat(v) || 0 })}
+              onChange={(v) => {
+                // TEMP DIAG
+                // eslint-disable-next-line no-console
+                console.log("[ordak-diag] Price onChange", { rowId: row.id, raw: v, parsed: parseFloat(v) });
+                onChange({ priceAdjustment: parseFloat(v) || 0 });
+              }}
               type="number"
               step={0.01}
               min={0}
@@ -403,7 +423,12 @@ function SlotRowEditor({
           <TextField
             label="Cutoff (hrs)"
             value={cutoffMinutesToHoursInput(row.cutoffOffsetMinutes)}
-            onChange={(v) => onChange({ cutoffOffsetMinutes: hoursInputToCutoffMinutes(v) })}
+            onChange={(v) => {
+              // TEMP DIAG
+              // eslint-disable-next-line no-console
+              console.log("[ordak-diag] Cutoff onChange", { rowId: row.id, raw: v, parsedMinutes: hoursInputToCutoffMinutes(v) });
+              onChange({ cutoffOffsetMinutes: hoursInputToCutoffMinutes(v) });
+            }}
             type="number"
             step={0.25}
             min={0}
