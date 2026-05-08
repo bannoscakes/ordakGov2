@@ -35,7 +35,7 @@ import {
   getTemplatesByDay,
   replaceTemplatesAndMaterialize,
 } from "../services/slot-materializer.server";
-import { parseCutoffOffsetMinutes } from "../services/slot-cutoff.server";
+import { isValidIanaTimezone, parseCutoffOffsetMinutes } from "../services/slot-cutoff.server";
 import { SlotsEditor } from "../components/SlotsEditor";
 
 type Section = "setup" | "fulfillment" | "pickup-hours" | "prep-time" | "block-dates" | "zones";
@@ -205,6 +205,13 @@ export async function action({ request, params }: ActionFunctionArgs) {
       if (!name || !address) {
         return json<ActionResult>({ ok: false, error: "Name and address are required" }, { status: 400 });
       }
+      const timezone = ((formData.get("timezone") as string | null) || "UTC").trim() || "UTC";
+      if (!isValidIanaTimezone(timezone)) {
+        return json<ActionResult>(
+          { ok: false, error: `Invalid timezone "${timezone}". Use an IANA name like "Australia/Sydney" or "UTC".` },
+          { status: 400 },
+        );
+      }
       const latRaw = formData.get("latitude") as string | null;
       const lngRaw = formData.get("longitude") as string | null;
       const latitude = latRaw ? parseFloat(latRaw) : null;
@@ -222,7 +229,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
           longitude: longitude !== null && Number.isFinite(longitude) ? longitude : null,
           phone: ((formData.get("phone") as string | null) || "").trim() || null,
           email: ((formData.get("email") as string | null) || "").trim() || null,
-          timezone: ((formData.get("timezone") as string | null) || "UTC").trim() || "UTC",
+          timezone,
           isActive: formData.get("isActive") === "true",
         },
       });
