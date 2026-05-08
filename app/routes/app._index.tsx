@@ -10,6 +10,7 @@ import {
   InlineStack,
   Button,
   Badge,
+  Banner,
   ProgressBar,
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
@@ -24,6 +25,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       where: { shopifyDomain: session.shop },
       select: {
         id: true,
+        diagnosticsExpressButtonsVisible: true,
         locations: {
           select: { id: true, name: true, isActive: true, supportsPickup: true },
         },
@@ -112,10 +114,19 @@ export async function loader({ request }: LoaderFunctionArgs) {
     const shopHandle = session.shop.replace(".myshopify.com", "");
     const themeEditorUrl =
       `https://admin.shopify.com/store/${shopHandle}/themes/current/editor?template=cart`;
+    // App Embeds tab deep link with the cart-scheduler-embed pre-selected.
+    // The activateAppId param takes the form `{extension_uuid}/{handle}` —
+    // the extension uuid lives in extensions/cart-block/shopify.extension.toml
+    // and is stable across stores (it identifies the bundle, not the install).
+    const cartSchedulerEmbedUrl =
+      `https://admin.shopify.com/store/${shopHandle}/themes/current/editor` +
+      `?context=apps&activateAppId=c9e975ac-5a87-7a0c-c4f8-a5b69a342ca6a3e4e584/cart-scheduler-embed`;
 
     return json({
       shop: session.shop,
       themeEditorUrl,
+      cartSchedulerEmbedUrl,
+      diagnosticsExpressButtonsVisible: shop.diagnosticsExpressButtonsVisible,
       stats: {
         locations: activeLocations.length,
         zones: activeZones.length,
@@ -149,7 +160,14 @@ type ChecklistItem = {
 };
 
 export default function Index() {
-  const { shop, themeEditorUrl, stats, checklist } = useLoaderData<typeof loader>();
+  const {
+    shop,
+    themeEditorUrl,
+    cartSchedulerEmbedUrl,
+    diagnosticsExpressButtonsVisible,
+    stats,
+    checklist,
+  } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
 
   const items: ChecklistItem[] = [
@@ -217,12 +235,14 @@ export default function Index() {
         ]
       : []),
     {
-      id: "validation",
-      label: "Activate cart validation",
-      description: "Blocks Shop Pay / Apple Pay express checkout when scheduling is missing.",
+      id: "hide-express-buttons",
+      label: "Hide express checkout buttons",
+      description:
+        "Shop Pay / Apple Pay / Buy-it-now bypass the cart drawer, skipping the scheduling step. " +
+        "Open theme editor → App embeds → Ordak Cart Scheduler → enable \"Hide express checkout buttons\".",
       done: false,
       manual: true,
-      cta: { label: "Install", to: "/app/install-cart-validation" },
+      cta: { label: "Open app embed", to: cartSchedulerEmbedUrl, external: true },
     },
     {
       id: "delivery-customization",
@@ -275,6 +295,25 @@ export default function Index() {
             </BlockStack>
           </Card>
         </Layout.Section>
+
+        {diagnosticsExpressButtonsVisible && (
+          <Layout.Section>
+            <Banner
+              tone="warning"
+              title="Express checkout buttons are visible on your storefront"
+              action={{
+                content: "Open app embed",
+                onAction: () => window.open(cartSchedulerEmbedUrl, "_top"),
+              }}
+            >
+              <Text as="p">
+                Shop Pay / Apple Pay / Buy-it-now buttons let customers skip the cart drawer,
+                which bypasses the scheduling step. Enable &quot;Hide express checkout buttons&quot;
+                in the cart-scheduler app embed to block them.
+              </Text>
+            </Banner>
+          </Layout.Section>
+        )}
 
         <Layout.Section>
           <Card>

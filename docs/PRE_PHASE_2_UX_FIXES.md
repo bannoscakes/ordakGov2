@@ -1,6 +1,6 @@
 # Pre-Phase-2 UX + Wiring Fixes
 
-Status: **plan locked 2026-05-08**, code work pending.
+Status: **1.5.A shipped to `main` 2026-05-08 (PR #110). 1.5.B–D pending.**
 
 This document captures two structural problems found during Phase 1 closure that need to land **before** the App Store unlisted submission (Phase 2). Both relate to merchant onboarding UX — the bar isn't "the app technically works" but "a merchant can install it from the App Store and successfully configure it without our help."
 
@@ -168,12 +168,12 @@ Dashboard then shows a warning row: *"Express checkout buttons are visible on yo
 
 Tracking the work as four sequential branches off `Dev`, smallest first. Each closes one verification gate per `docs/WORKFLOW.md`.
 
-| # | Branch | Scope | Touches |
-|---|---|---|---|
-| 1.5.A | `feat/cutoff-per-slot` | Schema + admin UI + slot loader | `prisma/`, `app/routes/app.zones.$id.tsx`, `app/routes/app.locations.$id.*pickup-hours*`, `app/routes/api.recommendations.slots.tsx`, `app/routes/api.carrier-service.rates.tsx` |
-| 1.5.B | `feat/blackout-dates-per-location` | Schema + admin tab + slot loader + express-button detection | `prisma/`, `app/routes/app.locations.$id.tsx` (new section), `app/routes/api.recommendations.slots.tsx`, `app/routes/api.storefront.diagnostics.tsx` (new), `extensions/_cart-block-src/src/` |
-| 1.5.C | `feat/leadtime-per-location` | Schema + form fields + slot loader | `prisma/`, `app/routes/app.locations.$id.tsx`, `app/routes/api.recommendations.slots.tsx` |
-| 1.5.D | `chore/replace-rules-and-cart-validation-install` | Drop `/app/rules` routes, replace dashboard row with deep-link to theme editor, add `hide_express_buttons` setting to cart-scheduler-embed, remove `/app/install-cart-validation` route | `app/routes/app.rules.*` (delete), `app/routes/app.install-cart-validation.tsx` (delete), `app/routes/app._index.tsx` (or wherever the setup guide rows live), `extensions/cart-block/blocks/cart-scheduler-embed.liquid` |
+| # | Status | Branch | Scope | Touches |
+|---|---|---|---|---|
+| 1.5.A | **✅ Shipped 2026-05-08 (PR #110)** | merged into `main` via Dev | Schema + admin UI + slot loader | `prisma/` (`cutoffOffsetMinutes Int?` on `Slot` + `SlotTemplate`), `app/components/SlotsEditor.tsx`, `app/services/slot-cutoff.server.ts`, `app/routes/app.zones.$id.tsx`, location pickup-hours form, slot loaders. Verified live on `ordakgo-v3` admin |
+| 1.5.B | ⏳ Next | `feat/blackout-dates-per-location` | Schema + admin tab + slot loader + express-button detection | `prisma/`, `app/routes/app.locations.$id.tsx` (new section), `app/routes/api.recommendations.slots.tsx`, `app/routes/api.storefront.diagnostics.tsx` (new), `extensions/_cart-block-src/src/` |
+| 1.5.C | ⏳ Pending | `feat/leadtime-per-location` | Schema + form fields + slot loader | `prisma/`, `app/routes/app.locations.$id.tsx`, `app/routes/api.recommendations.slots.tsx` |
+| 1.5.D | ⏳ Pending | `chore/replace-rules-and-cart-validation-install` | Drop `/app/rules` routes, replace dashboard row with deep-link to theme editor, add `hide_express_buttons` setting to cart-scheduler-embed, remove `/app/install-cart-validation` route | `app/routes/app.rules.*` (delete), `app/routes/app.install-cart-validation.tsx` (delete), `app/routes/app._index.tsx` (or wherever the setup guide rows live), `extensions/cart-block/blocks/cart-scheduler-embed.liquid` |
 
 Verification per PR (per Pipeline B steps in `docs/WORKFLOW.md`):
 
@@ -189,3 +189,28 @@ Verification per PR (per Pipeline B steps in `docs/WORKFLOW.md`):
 ## What this changes in `next_steps_plan.md` memory
 
 The "Immediate next step" pointer flips from "Phase 2 — App Store listing assets" to "Phase 1.5 — Merchant onboarding UX cleanup (this doc)." Phase 2 now starts after 1.5.D merges.
+
+---
+
+## 1.5.A retrospective — what we learned from the 17 commits
+
+PR #110 shipped after 17 commits' worth of iteration. Useful signal for 1.5.B onwards:
+
+- **The cutoff feature itself was small** (one schema field, one helper, one column in the editor, one loader filter). The expensive part was the admin-UI layout — Polaris `TextField` inside a flex/grid row clipped values at narrower card widths in non-obvious ways. **Lesson:** for any new admin column, build it inside the existing `SlotsEditor.tsx` flex-wrap row pattern (lines ~310–410) rather than inventing a new layout. The wrapping action cluster (Saved badge + ✕ Remove) is now the proven pattern.
+- **PR #106 shipped to `main` with a broken layout, then was reverted** (#108/#109) before being redone on Dev. **Lesson:** don't merge to `main` until layout has been verified on the Dev preview URL with a screenshot. The Partners toml URL routing (below) makes this dead simple — no excuse to skip it.
+- **Content-key memoization** in `SlotsEditor.tsx` (lines 117–154) prevents Remix revalidations from clobbering local state. Any future column added to the editor should be included in the `templatesByDayKey` join — otherwise typing into the new column will get reset every save round-trip.
+
+## The proven pre-launch loop (verified 2026-05-08)
+
+While ordakGov2 has zero production installs, `shopify.app.ordak-go.toml` points at the Dev branch Vercel deploy URL (`ordak-go-git-dev-bannos-and-flour-lane.vercel.app`). Result: push to `Dev` → Vercel auto-deploys in ~30s → reload the embedded admin in `ordakgo-v3` → see the change immediately. **No `Dev → main` merge required to verify a change in the embedded admin.**
+
+The 1.5.B–D loop should be:
+
+1. Branch off `Dev` (`feat/<thing>`)
+2. Edit + `npx tsc --noEmit && npm run build` locally
+3. Push the branch (or commit straight to Dev for small fixes; the branch hook only blocks `main`)
+4. Wait for the Vercel "READY" deploy (≤60s)
+5. Reload the `ordakgo-v3` admin and verify the change visually
+6. PR to `Dev`, merge, then PR `Dev → main` once the feature is solid
+
+**Flip toml URLs back to `ordak-go.vercel.app` only when the App Store unlisted listing lands and Bannos / Flour Lane install via the listing.** Until then, the Dev URL routing stays — it's the loop.

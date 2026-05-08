@@ -29,20 +29,21 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { logger } from "../utils/logger.server";
 
-type Step = 1 | 2 | 3;
+type Step = 1 | 2;
 
 const STEP_LABELS: Record<Step, string> = {
   1: "Add a location",
   2: "Define a service zone",
-  3: "Add a scheduling rule (optional)",
 };
 
 function pickStep(searchParam: string | null, hasLocations: boolean, hasZones: boolean): Step {
   const parsed = searchParam ? Number(searchParam) : NaN;
-  if (parsed === 1 || parsed === 2 || parsed === 3) return parsed;
+  if (parsed === 1 || parsed === 2) return parsed;
   if (!hasLocations) return 1;
   if (!hasZones) return 2;
-  return 3;
+  // Both present and the loader didn't redirect (caller passed an explicit
+  // step param) → treat as "edit zone again" by returning step 2.
+  return 2;
 }
 
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -56,7 +57,6 @@ export async function loader({ request }: LoaderFunctionArgs) {
         orderBy: { name: "asc" },
       },
       zones: { select: { id: true, name: true, isActive: true } },
-      rules: { select: { id: true, name: true, type: true, isActive: true } },
     },
   });
 
@@ -86,7 +86,6 @@ export async function loader({ request }: LoaderFunctionArgs) {
     step,
     locations: shop.locations,
     zones: shop.zones,
-    rules: shop.rules,
   });
 }
 
@@ -238,122 +237,6 @@ export async function action({ request }: ActionFunctionArgs) {
         return redirect(`/app/zones/${created.id}?section=slots&from=wizard`);
       }
 
-      case "create-rule": {
-        const name = (formData.get("name") as string | null)?.trim() ?? "";
-        const type = (formData.get("type") as string | null) ?? "";
-        if (!name || !type) {
-          return json<ActionResult>(
-            { ok: false, error: "Name and rule type are required" },
-            { status: 400 },
-          );
-        }
-
-        let cutoffTime: string | null = null;
-        let leadTimeHours: number | null = null;
-        let leadTimeDays: number | null = null;
-        let blackoutDates: Date[] = [];
-        let slotDuration: number | null = null;
-        let slotCapacity: number | null = null;
-
-        if (type === "cutoff") {
-          cutoffTime = ((formData.get("cutoffTime") as string | null) || "").trim();
-          if (!/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(cutoffTime)) {
-            return json<ActionResult>(
-              { ok: false, error: "Cut-off time must be in HH:MM (e.g., 14:00)" },
-              { status: 400 },
-            );
-          }
-        } else if (type === "lead_time") {
-          const hRaw = (formData.get("leadTimeHours") as string | null) ?? "";
-          const dRaw = (formData.get("leadTimeDays") as string | null) ?? "";
-          if (hRaw) {
-            const h = parseInt(hRaw, 10);
-            if (!Number.isFinite(h) || h < 0) {
-              return json<ActionResult>(
-                { ok: false, error: "Lead time hours must be a non-negative number" },
-                { status: 400 },
-              );
-            }
-            leadTimeHours = h;
-          }
-          if (dRaw) {
-            const d = parseInt(dRaw, 10);
-            if (!Number.isFinite(d) || d < 0) {
-              return json<ActionResult>(
-                { ok: false, error: "Lead time days must be a non-negative number" },
-                { status: 400 },
-              );
-            }
-            leadTimeDays = d;
-          }
-          if (leadTimeHours == null && leadTimeDays == null) {
-            return json<ActionResult>(
-              { ok: false, error: "Enter either hours or days for lead time" },
-              { status: 400 },
-            );
-          }
-        } else if (type === "blackout") {
-          const raw = (formData.get("blackoutDates") as string | null) ?? "";
-          const parts = raw.split(",").map((d) => d.trim()).filter((d) => d.length > 0);
-          for (const part of parts) {
-            const d = new Date(part);
-            if (isNaN(d.getTime())) {
-              return json<ActionResult>(
-                { ok: false, error: `Invalid date: ${part}. Use YYYY-MM-DD.` },
-                { status: 400 },
-              );
-            }
-            blackoutDates.push(d);
-          }
-          if (blackoutDates.length === 0) {
-            return json<ActionResult>(
-              { ok: false, error: "Enter at least one blackout date" },
-              { status: 400 },
-            );
-          }
-        } else if (type === "capacity") {
-          const dRaw = (formData.get("slotDuration") as string | null) ?? "";
-          const cRaw = (formData.get("slotCapacity") as string | null) ?? "";
-          slotDuration = parseInt(dRaw, 10);
-          slotCapacity = parseInt(cRaw, 10);
-          if (!Number.isFinite(slotDuration) || slotDuration <= 0) {
-            return json<ActionResult>(
-              { ok: false, error: "Slot duration must be a positive number" },
-              { status: 400 },
-            );
-          }
-          if (!Number.isFinite(slotCapacity) || slotCapacity <= 0) {
-            return json<ActionResult>(
-              { ok: false, error: "Slot capacity must be a positive number" },
-              { status: 400 },
-            );
-          }
-        } else {
-          return json<ActionResult>({ ok: false, error: "Invalid rule type" }, { status: 400 });
-        }
-
-        await prisma.rule.create({
-          data: {
-            shopId: shop.id,
-            name,
-            type,
-            cutoffTime,
-            leadTimeHours,
-            leadTimeDays,
-            blackoutDates,
-            slotDuration,
-            slotCapacity,
-            isActive: formData.get("isActive") === "true",
-          },
-        });
-
-        return redirect("/app");
-      }
-
-      case "skip-rules": {
-        return redirect("/app");
-      }
-
       default:
         return json<ActionResult>({ ok: false, error: "Unknown action" }, { status: 400 });
     }
@@ -367,7 +250,7 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export default function Setup() {
-  const { shop, step, locations, zones, rules } = useLoaderData<typeof loader>();
+  const { shop, step, locations, zones } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -394,7 +277,7 @@ export default function Setup() {
             <BlockStack gap="300">
               <InlineStack align="space-between" blockAlign="center">
                 <Text as="h2" variant="headingMd">
-                  Step {step} of 3 · {STEP_LABELS[step]}
+                  Step {step} of 2 · {STEP_LABELS[step]}
                 </Text>
                 <InlineStack gap="200">
                   <Badge tone={locations.length > 0 ? "success" : undefined}>
@@ -403,12 +286,9 @@ export default function Setup() {
                   <Badge tone={zones.length > 0 ? "success" : undefined}>
                     {zones.length > 0 ? `${zones.length} zone${zones.length === 1 ? "" : "s"}` : "No zones"}
                   </Badge>
-                  <Badge tone={rules.length > 0 ? "success" : undefined}>
-                    {rules.length > 0 ? `${rules.length} rule${rules.length === 1 ? "" : "s"}` : "No rules"}
-                  </Badge>
                 </InlineStack>
               </InlineStack>
-              <ProgressBar progress={(step / 3) * 100} size="small" />
+              <ProgressBar progress={(step / 2) * 100} size="small" />
             </BlockStack>
           </Card>
         </Layout.Section>
@@ -425,13 +305,7 @@ export default function Setup() {
             locations={locations}
             existingCount={zones.length}
             onBack={() => goToStep(1)}
-            onSkip={() => goToStep(3)}
-          />
-        )}
-        {step === 3 && (
-          <RuleStep
-            existingCount={rules.length}
-            onBack={() => goToStep(2)}
+            onSkip={() => navigate("/app")}
           />
         )}
       </Layout>
@@ -694,7 +568,7 @@ function ZoneStep({
           {existingCount > 0 && (
             <Banner tone="info">
               You already have {existingCount} zone{existingCount === 1 ? "" : "s"}. Add another below
-              or <Button variant="plain" onClick={onSkip}>continue to rules</Button>.
+              or <Button variant="plain" onClick={onSkip}>finish setup</Button>.
             </Banner>
           )}
 
@@ -827,7 +701,7 @@ function ZoneStep({
           <InlineStack align="space-between">
             <Button onClick={onBack}>Back</Button>
             <InlineStack gap="200">
-              {existingCount > 0 && <Button onClick={onSkip}>Skip — continue to rules</Button>}
+              {existingCount > 0 && <Button onClick={onSkip}>Finish setup</Button>}
               <Button variant="primary" submit loading={isLoading}>
                 Save zone and continue
               </Button>
@@ -839,201 +713,3 @@ function ZoneStep({
   );
 }
 
-// ---------- Step 3: Rule ----------
-
-function RuleStep({ existingCount, onBack }: { existingCount: number; onBack: () => void }) {
-  const navigation = useNavigation();
-  const isLoading = navigation.state === "submitting";
-
-  const [name, setName] = useState("");
-  const [type, setType] = useState("cutoff");
-  const [cutoffTime, setCutoffTime] = useState("");
-  const [leadTimeHours, setLeadTimeHours] = useState("");
-  const [leadTimeDays, setLeadTimeDays] = useState("");
-  const [blackoutDates, setBlackoutDates] = useState("");
-  const [slotDuration, setSlotDuration] = useState("");
-  const [slotCapacity, setSlotCapacity] = useState("");
-  const [isActive, setIsActive] = useState(true);
-
-  const typeOptions = [
-    { label: "Cut-off time", value: "cutoff" },
-    { label: "Lead time", value: "lead_time" },
-    { label: "Blackout dates", value: "blackout" },
-    { label: "Slot capacity", value: "capacity" },
-  ];
-
-  return (
-    <Layout.Section>
-      <BlockStack gap="400">
-        <Banner tone="info" title="Rules are optional">
-          <p>
-            Rules are constraints like daily cut-off times or lead-time minimums. You can skip
-            this step and add rules later from <Button variant="plain" url="/app/rules">Rules</Button>.
-          </p>
-        </Banner>
-
-        <Form method="post">
-          <input type="hidden" name="intent" value="create-rule" />
-          <input type="hidden" name="isActive" value={isActive.toString()} />
-          <FormLayout>
-            {existingCount > 0 && (
-              <Banner tone="info">
-                You already have {existingCount} rule{existingCount === 1 ? "" : "s"}. Add another below or
-                finish setup.
-              </Banner>
-            )}
-
-            <Card>
-              <BlockStack gap="400">
-                <TextField
-                  label="Rule name"
-                  name="name"
-                  value={name}
-                  onChange={setName}
-                  placeholder="e.g., Same-day cut-off at 2pm"
-                  autoComplete="off"
-                  requiredIndicator
-                />
-                <Select
-                  label="Rule type"
-                  name="type"
-                  options={typeOptions}
-                  value={type}
-                  onChange={setType}
-                  requiredIndicator
-                />
-              </BlockStack>
-            </Card>
-
-            {type === "cutoff" && (
-              <Card>
-                <BlockStack gap="400">
-                  <TextField
-                    label="Cut-off time"
-                    name="cutoffTime"
-                    value={cutoffTime}
-                    onChange={setCutoffTime}
-                    placeholder="14:00"
-                    type="time"
-                    autoComplete="off"
-                    helpText="Same-day orders placed after this time won't see today's slots"
-                    requiredIndicator
-                  />
-                </BlockStack>
-              </Card>
-            )}
-
-            {type === "lead_time" && (
-              <Card>
-                <BlockStack gap="400">
-                  <InlineStack gap="400">
-                    <div style={{ flex: 1 }}>
-                      <TextField
-                        label="Days"
-                        name="leadTimeDays"
-                        value={leadTimeDays}
-                        onChange={setLeadTimeDays}
-                        type="number"
-                        min={0}
-                        placeholder="e.g., 1"
-                        autoComplete="off"
-                      />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <TextField
-                        label="Hours"
-                        name="leadTimeHours"
-                        value={leadTimeHours}
-                        onChange={setLeadTimeHours}
-                        type="number"
-                        min={0}
-                        placeholder="e.g., 24"
-                        autoComplete="off"
-                      />
-                    </div>
-                  </InlineStack>
-                </BlockStack>
-              </Card>
-            )}
-
-            {type === "blackout" && (
-              <Card>
-                <BlockStack gap="400">
-                  <TextField
-                    label="Blackout dates"
-                    name="blackoutDates"
-                    value={blackoutDates}
-                    onChange={setBlackoutDates}
-                    placeholder="e.g., 2026-12-25, 2026-12-26, 2027-01-01"
-                    multiline={3}
-                    autoComplete="off"
-                    helpText="YYYY-MM-DD, comma-separated"
-                    requiredIndicator
-                  />
-                </BlockStack>
-              </Card>
-            )}
-
-            {type === "capacity" && (
-              <Card>
-                <BlockStack gap="400">
-                  <InlineStack gap="400">
-                    <div style={{ flex: 1 }}>
-                      <TextField
-                        label="Slot duration (minutes)"
-                        name="slotDuration"
-                        value={slotDuration}
-                        onChange={setSlotDuration}
-                        type="number"
-                        min={1}
-                        placeholder="e.g., 60"
-                        autoComplete="off"
-                        requiredIndicator
-                      />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <TextField
-                        label="Max orders per slot"
-                        name="slotCapacity"
-                        value={slotCapacity}
-                        onChange={setSlotCapacity}
-                        type="number"
-                        min={1}
-                        placeholder="e.g., 10"
-                        autoComplete="off"
-                        requiredIndicator
-                      />
-                    </div>
-                  </InlineStack>
-                </BlockStack>
-              </Card>
-            )}
-
-            <Card>
-              <Checkbox
-                label="Active"
-                checked={isActive}
-                onChange={setIsActive}
-                helpText="Inactive rules aren't enforced"
-              />
-            </Card>
-
-            <InlineStack align="space-between">
-              <Button onClick={onBack}>Back</Button>
-              <Button variant="primary" submit loading={isLoading}>
-                Save rule and finish
-              </Button>
-            </InlineStack>
-          </FormLayout>
-        </Form>
-
-        <Form method="post">
-          <input type="hidden" name="intent" value="skip-rules" />
-          <InlineStack align="end">
-            <Button submit>Skip rules and finish setup</Button>
-          </InlineStack>
-        </Form>
-      </BlockStack>
-    </Layout.Section>
-  );
-}

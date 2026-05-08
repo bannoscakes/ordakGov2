@@ -137,10 +137,88 @@ Same evidence shape for one delivery order AND one pickup order = foundation gat
 
 1. ✅ **Phase 0 — Clean baseline.** Done.
 2. ✅ **Phase 1 — Real e2e order on ordakgo-v3.** Closed 2026-05-07 (orders #1001 delivery, #1002 pickup).
-3. ⏳ **Phase 2 — App Store user-action assets.** Icon, screenshots, screencast, listing copy, demo store reviewer instructions, "Free" pricing. **This is the immediate next action.**
-4. ⏳ **Phase 3 — Reviewer-experience hardening.** Carrier-service uninstall/reinstall test on `ordakgo-v3`. Final pre-submission smoke.
-5. ⏳ **Phase 4 — Submit unlisted.**
-6. ⏳ **Phase 5 — Address review feedback** iteratively.
-7. ⏳ **Phase 6 — Post-approval install on Bannos and Flour Lane** via the unlisted listing's direct link. Replaces the existing `checkout-validation` app on Bannos.
+3. **Phase 1.5 — Pre-Phase-2 UX + Wiring Fixes.** See [`PRE_PHASE_2_UX_FIXES.md`](PRE_PHASE_2_UX_FIXES.md). Four sequential PRs: 1.5.A → 1.5.D.
+   - ✅ **1.5.A — Per-slot cutoff** shipped 2026-05-08 (PR #110 → `main`). `cutoffOffsetMinutes` on `Slot` + `SlotTemplate`, Cutoff column in slot editor (with content-key memoization + flex-wrap row layout that survives narrow card widths), `isSlotCutoffPassed()` helper, slot loader filter. Verified live on `ordakgo-v3`.
+   - ⏳ **1.5.B — Blackout dates per Location** (next).
+   - ⏳ **1.5.C — Lead time per Location.**
+   - ⏳ **1.5.D — Drop `/app/rules`, replace cart-validation install row with theme-editor deep link, add `hide_express_buttons` setting to cart-scheduler-embed.**
+4. ⏳ **Phase 2 — App Store user-action assets.** Icon, screenshots, screencast, listing copy, demo store reviewer instructions, "Free" pricing. Starts after 1.5.D merges.
+5. ⏳ **Phase 3 — Reviewer-experience hardening.** Carrier-service uninstall/reinstall test on `ordakgo-v3`. Final pre-submission smoke.
+6. ⏳ **Phase 4 — Submit unlisted.**
+7. ⏳ **Phase 5 — Address review feedback** iteratively.
+8. ⏳ **Phase 6 — Post-approval install on Bannos and Flour Lane** via the unlisted listing's direct link. Replaces the existing `checkout-validation` app on Bannos.
 
 Bannos and Flour Lane are explicitly out of scope until Phase 6.
+
+## The proven pre-launch loop — push to Dev, verify in embedded admin (no merge required)
+
+Verified 2026-05-08 across the 17-commit Phase 1.5.A iteration. Until ordakGov2 has production installs, the embedded admin in `ordakgo-v3` loads the Remix app from the **Dev branch** Vercel deploy URL — not from `main`. This is the entire pre-launch development loop:
+
+1. Branch off `Dev`, or commit straight to `Dev` for small fixes (the `main`-edit-block hook in `~/.claude/settings.json` only blocks `main`).
+2. `npx tsc --noEmit && npm run build` locally.
+3. Push.
+4. Vercel auto-deploys the Dev branch URL `ordak-go-git-dev-bannos-and-flour-lane.vercel.app` in ~30–60s. Watch for `READY` state via `gh` or the Vercel API.
+5. Reload the Shopify admin → Apps → Ordak Go on `ordakgo-v3` → the new code is live.
+6. Verify visually (or via DOM snapshot through `chrome-devtools-mcp` if needed).
+7. Once the feature is solid, PR `Dev → main` to land it on the stable line.
+
+`shopify.app.ordak-go.toml` pins both `application_url` and `app_proxy.url` to the Dev branch URL while we're pre-launch:
+
+```
+application_url = "https://ordak-go-git-dev-bannos-and-flour-lane.vercel.app/"
+[auth] redirect_urls = ["https://ordak-go-git-dev-bannos-and-flour-lane.vercel.app/api/auth"]
+[app_proxy] url = "https://ordak-go-git-dev-bannos-and-flour-lane.vercel.app/apps/proxy"
+```
+
+**Flip these URLs back to `ordak-go.vercel.app` (production) only at App Store listing time**, when Bannos and Flour Lane install via the unlisted listing. Until then, Dev branch routing IS the canonical pre-launch surface.
+
+This addresses the long-standing "validated in dev → broken in prod" risk by making "dev" and "the embedded admin merchants would see" the same surface during pre-launch development. There's no separate prod environment to drift away from yet.
+
+### How 1.5.A actually shipped — concrete walkthrough
+
+Useful as a template for 1.5.B–D. This is the operational sequence we ran on 2026-05-08, not the abstracted rules.
+
+**Starting state:**
+- `main` was clean; PR #106 (an earlier 1.5.A attempt) had been reverted via #108/#109 because it shipped with a broken row layout.
+- Cutoff helper + schema migrations had been cherry-picked back onto `Dev`.
+- `shopify.app.ordak-go.toml` already pinned Partners URLs to the Dev branch Vercel deploy (`1db2a77`).
+
+**The iteration loop (repeated 17 times):**
+
+1. **Edit** — change `app/components/SlotsEditor.tsx` (the column layout / number-input rendering).
+2. **Local check** — `npx tsc --noEmit && npm run build` (build is ~200ms; tsc is ~3s).
+3. **Commit straight to Dev** — for layout-iteration commits. The `main`-only edit-block hook means Dev edits go through. (For larger feature work, branch off `Dev` and PR back, but small fix commits are fine direct.)
+4. **Push** — `git push origin Dev`.
+5. **Wait for Vercel** — Vercel auto-deploys the Dev branch URL on every push. Poll the Vercel REST API until `state == READY` (deploy times ~30–45s):
+   ```bash
+   AUTH=~/Library/Application\ Support/com.vercel.cli/auth.json
+   TOKEN=$(python3 -c "import json; print(json.load(open('$AUTH'))['token'])")
+   for i in 1 2 3 4 5; do
+     curl -s "https://api.vercel.com/v6/deployments?projectId=prj_47J3tVZhbUseigMm9gnqGNy7Gu36&teamId=team_Wr9Vn5crRLWwlOlMxcyTHFDJ&limit=1" \
+       -H "Authorization: Bearer $TOKEN" \
+       | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); dep=d['deployments'][0]; print(dep['state'], dep.get('meta',{}).get('githubCommitSha','?')[:8])"
+     sleep 5
+   done
+   ```
+   Match the SHA against `git rev-parse --short HEAD` to confirm the deploy is for the latest push.
+6. **User reloads admin** — user reloads `ordakgo-v3` admin → Apps → Ordak Go → relevant page. The new code renders.
+7. **Verify visually** — for layout work, the user shared screenshots showing the rendered card. For state/data work, `chrome-devtools-mcp` (`take_snapshot`, `evaluate_script`, `fill` by uid) lets us inspect across the cross-origin iframe boundary that blocks console capture. Cross-origin iframes silo console output, so don't rely on `mcp__plugin_chrome-devtools-mcp__list_console_messages` to read embedded admin logs — use the accessibility-tree snapshot or evaluate scripts inside the iframe by uid.
+8. **Iterate or land** — if the screenshot showed clipping/wrong layout, repeat from step 1 with another fix. If it looked right, go to step 9.
+
+**Landing the feature on `main`:**
+
+9. **Open the PR** — `gh pr create --base main --head Dev --title "..." --body "..."`. Body lists the commits since the last `Dev → main` merge; clearly distinguishes "verified live on `ordakgo-v3`" from "code-review only" rows.
+10. **Wait for CI** — `gh pr checks <num>`. Loop until no `pending` rows. Vercel and Supabase Preview integrations both report into the PR.
+11. **Merge** — `gh pr merge <num> --merge` (preserve commit history; we use `--merge` not `--squash` because the iteration commits are diagnostic signal). `--delete-branch=false` because `Dev` is the long-lived integration branch.
+12. **Wait for prod deploy** — same Vercel REST poll as step 5 but with `target=production`. Match SHA against the merge commit SHA.
+13. **No further user-visible action.** Because the toml still routes the embedded admin at `ordakgo-v3` to the **Dev branch** URL, the prod deploy is a "stable line" event, not a "users see the change" event. They already saw it during step 7.
+
+**Non-obvious findings that should not be re-discovered:**
+
+- **Polaris responsive layout is counter-intuitive at narrow widths.** A `Page` with sectioned tabs (`/app/zones/$id`) renders the tabs as a left sidebar at wider viewports and stacked above the content at narrower viewports. **The wider the monitor, the narrower the content card** in the right column. A row that fits at 1280px viewport may clip at 1600px. The fix is `display: flex; flex-wrap: wrap` for any horizontal row inside the content card so action clusters wrap to a second line instead of clipping right.
+- **Cross-origin iframe console silo.** The embedded Shopify admin runs the Remix app in a cross-origin iframe. Console output from that iframe does NOT surface to `mcp__plugin_chrome-devtools-mcp__list_console_messages`. Use `take_snapshot` (accessibility tree, works across origins) or `evaluate_script` targeted at the iframe by uid.
+- **Programmatic input fill on cross-origin iframe inputs WORKS via uid.** Earlier sessions assumed it didn't. Verified 2026-05-08 — `mcp__plugin_chrome-devtools-mcp__fill { uid, value }` writes directly to the iframe's input.value and triggers React's controlled-input change pipeline correctly.
+- **Remix revalidations clobber controlled-input state inside collection editors.** `useEffect(...)` on a parent-prop array re-fires on every save round-trip and resets `useState` to the parent value. Solution: derive a content key (a stable string of the meaningful fields) and depend on the key, not the array reference. See `app/components/SlotsEditor.tsx` lines ~117–154 for the pattern.
+- **Hide native `<input type="number">` spinner arrows.** They eat ~25–30px on the right side of the input. Hiding them via scoped CSS frees the column to render 4-character values like `5.75` without clipping. See the `.ordak-slots-editor` scoped CSS in `SlotsEditor.tsx`.
+- **Vercel SSO protection blocks preview URLs by default.** If a Dev branch preview returns 401, disable SSO via `PATCH /v9/projects/{id}` with `ssoProtection: null`. We did this on the project once; it should not re-enable.
+- **Vercel env vars need explicit `target` scoping.** The Dev branch preview hit `FUNCTION_INVOCATION_FAILED` until we mirrored production env vars to `target: ['production', 'preview']` via the Vercel API. New env vars should be added with both targets.
