@@ -39,6 +39,7 @@ import {
 } from "../services/slot-materializer.server";
 import { isValidIanaTimezone, parseCutoffOffsetMinutes } from "../services/slot-cutoff.server";
 import { formatDateKey, parseDateStrings } from "../services/slot-blackout";
+import { parseLeadTimeField } from "../services/slot-leadtime.server";
 import { SlotsEditor } from "../components/SlotsEditor";
 
 type Section = "setup" | "fulfillment" | "pickup-hours" | "prep-time" | "block-dates" | "zones";
@@ -328,6 +329,37 @@ export async function action({ request, params }: ActionFunctionArgs) {
       return redirect(`/app/locations/${id}?section=pickup-hours&day=${fromRaw}&copied=${toDaysOfWeek.length}`);
     }
 
+    if (intent === "save-prep-time") {
+      const days = parseLeadTimeField(formData.get("leadTimeDays"));
+      const hours = parseLeadTimeField(formData.get("leadTimeHours"));
+      // Sanity bounds: cap days at 90 and hours at 23 so a typo can't
+      // brick a storefront. Hours ≥ 24 should roll into days; the form
+      // hint nudges that, this is the server backstop.
+      if (days != null && (days < 0 || days > 90)) {
+        return json<ActionResult>(
+          { ok: false, error: "Lead time in days must be between 0 and 90" },
+          { status: 400 },
+        );
+      }
+      if (hours != null && (hours < 0 || hours > 23)) {
+        return json<ActionResult>(
+          { ok: false, error: "Lead time in hours must be between 0 and 23" },
+          { status: 400 },
+        );
+      }
+      await prisma.location.update({
+        where: { id },
+        data: {
+          // Treat a 0 input as null so the column reflects "no lead time"
+          // rather than an explicit zero — equivalent at runtime, cleaner
+          // in the DB.
+          leadTimeDays: days && days > 0 ? days : null,
+          leadTimeHours: hours && hours > 0 ? hours : null,
+        },
+      });
+      return redirect(`/app/locations/${id}?section=prep-time&saved=1`);
+    }
+
     if (intent === "save-blackout-dates") {
       // Form sends a comma-separated list of YYYY-MM-DD strings. Parse server-
       // side via the same helper the slot loader uses so the stored DateTime[]
@@ -486,7 +518,7 @@ export default function LocationAdmin() {
               &quot;Fulfillment type&quot; first, then come back here to set hours.
             </Banner>
           )}
-          {section === "prep-time" && <PrepTimeSection />}
+          {section === "prep-time" && <PrepTimeSection location={location} />}
           {section === "block-dates" && <BlockDatesSection location={location} />}
           {section === "zones" && <ZonesSection location={location} />}
         </Layout.Section>
@@ -783,31 +815,107 @@ function PickupHoursSection({
 
 // ---------- Section: Prep time ----------
 
-function PrepTimeSection() {
-  return (
-    <BlockStack gap="400">
-      <Card>
-        <BlockStack gap="300">
-          <Text as="h2" variant="headingMd">Prep time & availability</Text>
-          <Text as="p" tone="subdued" variant="bodySm">
-            Minimum lead time required between order placement and fulfillment (e.g. &quot;orders
-            placed today are eligible for tomorrow at the earliest&quot;).
-          </Text>
-        </BlockStack>
-      </Card>
+function PrepTimeSection({ location }: { location: LocationData }) {
+  const navigation = useNavigation();
+  const isLoading = navigation.state === "submitting";
 
-      <Card>
-        <BlockStack gap="300">
-          <Banner tone="info" title="Coming in the next admin update">
-            <Text as="p">
-              Per-location lead time (hours and days) will land here. Until then, use per-slot
-              cutoff in the slot editor to gate same-day or short-notice availability.
-            </Text>
-          </Banner>
-        </BlockStack>
-      </Card>
-    </BlockStack>
+  // Local string state — TextField keeps "" / "0" / "5" verbatim so the
+  // merchant can clear a field without it snapping back to "0". Action
+  // re-parses both via parseLeadTimeField.
+  const [days, setDays] = useState(
+    location.leadTimeDays != null ? String(location.leadTimeDays) : "",
   );
+  const [hours, setHours] = useState(
+    location.leadTimeHours != null ? String(location.leadTimeHours) : "",
+  );
+
+  const initial = useMemo(
+    () => ({
+      days: location.leadTimeDays != null ? String(location.leadTimeDays) : "",
+      hours: location.leadTimeHours != null ? String(location.leadTimeHours) : "",
+    }),
+    [location.leadTimeDays, location.leadTimeHours],
+  );
+  const isDirty = days !== initial.days || hours !== initial.hours;
+
+  const daysNum = parseFieldOrZero(days);
+  const hoursNum = parseFieldOrZero(hours);
+  const totalHours = daysNum * 24 + hoursNum;
+
+  return (
+    <Form method="post">
+      <input type="hidden" name="intent" value="save-prep-time" />
+      <BlockStack gap="400">
+        <Card>
+          <BlockStack gap="400">
+            <BlockStack gap="100">
+              <Text as="h2" variant="headingMd">Prep time &amp; availability</Text>
+              <Text as="p" tone="subdued" variant="bodySm">
+                Minimum lead time between an order being placed and the slot's start.
+                The cart-block hides slots that fall inside this window; the carrier-service
+                callback returns no rates for orders that try to use them.
+              </Text>
+            </BlockStack>
+            <FormLayout>
+              <FormLayout.Group>
+                <TextField
+                  label="Lead time (days)"
+                  name="leadTimeDays"
+                  value={days}
+                  onChange={setDays}
+                  type="number"
+                  min={0}
+                  max={90}
+                  autoComplete="off"
+                  helpText="Whole days, 0–90."
+                  placeholder="0"
+                />
+                <TextField
+                  label="Lead time (hours)"
+                  name="leadTimeHours"
+                  value={hours}
+                  onChange={setHours}
+                  type="number"
+                  min={0}
+                  max={23}
+                  autoComplete="off"
+                  helpText="Additional hours, 0–23. Use the days field for ≥24 hours."
+                  placeholder="0"
+                />
+              </FormLayout.Group>
+            </FormLayout>
+            <Text as="p" tone="subdued" variant="bodySm">
+              Effective lead time:{" "}
+              <strong>
+                {totalHours === 0
+                  ? "none — all future slots are eligible"
+                  : `${totalHours} hour${totalHours === 1 ? "" : "s"}`}
+              </strong>
+            </Text>
+          </BlockStack>
+        </Card>
+
+        <InlineStack align="end">
+          <Button
+            variant="primary"
+            submit
+            loading={isLoading}
+            disabled={!isDirty || isLoading}
+          >
+            Save
+          </Button>
+        </InlineStack>
+      </BlockStack>
+    </Form>
+  );
+}
+
+function parseFieldOrZero(s: string): number {
+  const trimmed = s.trim();
+  if (trimmed === "") return 0;
+  const n = Number(trimmed);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.floor(n);
 }
 
 // ---------- Section: Block dates ----------

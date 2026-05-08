@@ -15,6 +15,7 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { logger } from "../utils/logger.server";
 import { isSlotDateBlackedOut } from "../services/slot-blackout";
+import { isSlotWithinLeadTime } from "../services/slot-leadtime.server";
 import {
   writeEventLogTx,
   dispatchEventLog,
@@ -82,6 +83,35 @@ export async function action({ request }: ActionFunctionArgs) {
         },
         { status: 400 },
       );
+    }
+
+    // Reject reschedule into the prep-time lead window. Same fail-open
+    // policy on tz misconfig as elsewhere — log and fall through rather
+    // than 400 on a tz typo.
+    try {
+      if (
+        isSlotWithinLeadTime(
+          newSlot,
+          new Date(),
+          newSlot.location.timezone,
+          newSlot.location.leadTimeHours,
+          newSlot.location.leadTimeDays,
+        )
+      ) {
+        return json<UpdateScheduleResponse>(
+          {
+            success: false,
+            error: "That slot starts inside the location's prep-time lead window",
+          },
+          { status: 400 },
+        );
+      }
+    } catch (err) {
+      logger.warn("update-schedule: lead-time check failed — allowing reschedule", {
+        slotId: newSlot.id,
+        locationTimezone: newSlot.location.timezone,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
 
     // Check if slot has capacity

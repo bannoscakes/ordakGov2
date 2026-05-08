@@ -109,8 +109,12 @@ export function parseCutoffOffsetMinutes(value: unknown): number | null {
  * Approach: pretend the wall clock is UTC, format that naive UTC instant in
  * `tz` to discover what `tz` thinks the wall clock is, and back out the
  * offset.
+ *
+ * Exported so the lead-time filter (`slot-leadtime.server.ts`) can reuse the
+ * same wall-clock-to-UTC conversion the cutoff filter uses — keeping the
+ * two filters consistent on DST-day edge cases.
  */
-function wallClockInTzToUtcMs(
+export function wallClockInTzToUtcMs(
   parts: { y: number; mo: number; d: number; h: number; m: number },
   tz: string,
 ): number {
