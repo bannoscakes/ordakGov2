@@ -21,10 +21,25 @@ type SlotForCutoff = {
   cutoffOffsetMinutes: number | null;
 };
 
+/**
+ * Returns true once the slot's cutoff has passed in `tz`. The slot is
+ * always sourced from a Location, so `tz` should be `slot.location.timezone`
+ * (per-location timezone, not shop-level — multi-location merchants can
+ * ship from different time zones).
+ *
+ * Throws `RangeError` if `tz` is empty or not a valid IANA tz name —
+ * `Intl.DateTimeFormat` enforces this. Callers should treat the throw as
+ * "tz is misconfigured; can't safely apply the cutoff" and fall through to
+ * leaving the slot visible (over-filtering would silently empty the
+ * storefront grid for a single bad timezone, which is worse UX than
+ * letting one slot slip past its cutoff). Both call sites
+ * (`api.recommendations.slots.tsx` and `api.carrier-service.rates.tsx`)
+ * wrap in try/catch and log a warn on bad tz.
+ */
 export function isSlotCutoffPassed(
   slot: SlotForCutoff,
   now: Date,
-  shopTz: string,
+  tz: string,
 ): boolean {
   if (slot.cutoffOffsetMinutes == null) return false;
 
@@ -33,7 +48,7 @@ export function isSlotCutoffPassed(
   const mo = slot.date.getUTCMonth();
   const d = slot.date.getUTCDate();
 
-  const slotStartUtcMs = wallClockInTzToUtcMs({ y, mo, d, h, m }, shopTz);
+  const slotStartUtcMs = wallClockInTzToUtcMs({ y, mo, d, h, m }, tz);
   const cutoffAtMs = slotStartUtcMs - slot.cutoffOffsetMinutes * 60_000;
   return now.getTime() >= cutoffAtMs;
 }

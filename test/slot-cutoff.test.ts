@@ -64,6 +64,38 @@ describe("isSlotCutoffPassed — UTC tz", () => {
   });
 });
 
+describe("isSlotCutoffPassed — invalid tz (caller is responsible for fallback)", () => {
+  // Document the helper's contract explicitly so a future refactor can't
+  // silently swap in a fall-through-to-UTC branch. The two call sites
+  // wrap in try/catch and treat throws as "leave slot visible" + warn log.
+  const slot = {
+    date: utcDate("2026-05-09T00:00:00Z"),
+    timeStart: "11:00",
+    cutoffOffsetMinutes: 60,
+  };
+
+  it("throws RangeError on empty tz string", () => {
+    expect(() => isSlotCutoffPassed(slot, utcDate("2026-05-09T10:30:00Z"), "")).toThrow(
+      RangeError,
+    );
+  });
+
+  it("throws RangeError on non-IANA tz name", () => {
+    expect(() =>
+      isSlotCutoffPassed(slot, utcDate("2026-05-09T10:30:00Z"), "Not/A_Real_Tz"),
+    ).toThrow(RangeError);
+  });
+
+  it("does not throw on null cutoffOffsetMinutes regardless of tz validity", () => {
+    // Short-circuit: null cutoff means the helper never reaches the Intl
+    // call, so even a garbage tz is safe. Lets callers skip the try/catch
+    // for the common-case "no cutoff configured" path.
+    const noCutoff = { ...slot, cutoffOffsetMinutes: null };
+    expect(() => isSlotCutoffPassed(noCutoff, utcDate("2026-05-09T10:30:00Z"), "")).not.toThrow();
+    expect(isSlotCutoffPassed(noCutoff, utcDate("2026-05-09T10:30:00Z"), "")).toBe(false);
+  });
+});
+
 describe("isSlotCutoffPassed — Australia/Sydney tz (catches the offset bug)", () => {
   // Sydney is UTC+10 in May (standard time). The slot's wall clock
   // "May 9 11:00 Sydney" is the real UTC instant 2026-05-09T01:00Z.
