@@ -249,7 +249,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
     if (existingAuZone && ratesToCreate.length === 0) {
       const msg = hasStaleStandardRate
-        ? "AU zone exists with Pickup at Annandale. ⚠️ Manual 'Standard delivery' rate also detected — visit /app/cleanup-shipping-zones to remove it (carrier service handles delivery pricing now)."
+        ? "AU zone exists with Pickup at Annandale. Manual 'Standard delivery' rate also detected — visit /app/cleanup-shipping-zones to remove it (carrier service handles delivery pricing now)."
         : "AU zone exists with Pickup at Annandale rate.";
       steps.push(msg);
       return json<Status>({ ok: true, steps });
@@ -428,7 +428,7 @@ export default function SetupAuShipping() {
                 <List.Item>Pickup at Annandale rate: {state.hasPickupRate ? "✓" : "✗"}</List.Item>
                 {state.hasManualStandardDeliveryRate ? (
                   <List.Item>
-                    ⚠️ Manual &quot;Standard delivery&quot; rate detected — visit{" "}
+                    Manual &quot;Standard delivery&quot; rate detected — visit{" "}
                     <a href="/app/cleanup-shipping-zones">/app/cleanup-shipping-zones</a>{" "}
                     to remove it. Delivery pricing is handled by the carrier service
                     (zone.basePrice + slot.priceAdjustment).

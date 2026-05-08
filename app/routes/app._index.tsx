@@ -1,6 +1,7 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { useLoaderData, useNavigate } from "@remix-run/react";
+import { useState } from "react";
 import {
   Page,
   Layout,
@@ -12,6 +13,7 @@ import {
   Badge,
   Banner,
   ProgressBar,
+  Collapsible,
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
@@ -275,6 +277,9 @@ export default function Index() {
   const totalCount = autoTracked.length;
   const progressPct = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
   const setupComplete = totalCount > 0 && completedCount === totalCount;
+  const upNext = items.find((i) => !i.done) ?? null;
+
+  const [showAllTasks, setShowAllTasks] = useState(false);
 
   function onCta(item: ChecklistItem) {
     if (item.cta.external) {
@@ -318,12 +323,12 @@ export default function Index() {
         <Layout.Section>
           <Card>
             <BlockStack gap="400">
-              <InlineStack align="space-between" blockAlign="center">
+              <InlineStack align="space-between" blockAlign="center" wrap={false}>
                 <BlockStack gap="100">
                   <Text as="h2" variant="headingMd">Setup guide</Text>
                   <Text as="p" tone="subdued" variant="bodySm">
                     {setupComplete
-                      ? "Core setup complete. The manual steps below are also worth ticking off before going live."
+                      ? "Core setup complete. Manual steps below are worth ticking off before going live."
                       : `${completedCount} of ${totalCount} core steps complete`}
                   </Text>
                 </BlockStack>
@@ -332,11 +337,53 @@ export default function Index() {
                 </Badge>
               </InlineStack>
               <ProgressBar progress={progressPct} size="small" />
-              <BlockStack gap="200">
-                {items.map((item) => (
-                  <ChecklistRow key={item.id} item={item} onCta={() => onCta(item)} />
-                ))}
-              </BlockStack>
+
+              {upNext ? (
+                <Card background="bg-surface-secondary">
+                  <InlineStack
+                    align="space-between"
+                    blockAlign="center"
+                    wrap={false}
+                    gap="400"
+                  >
+                    <BlockStack gap="050">
+                      <Text as="p" variant="bodySm" tone="subdued">Up next</Text>
+                      <Text as="p" fontWeight="semibold">{upNext.label}</Text>
+                      <Text as="p" tone="subdued" variant="bodySm">
+                        {upNext.description}
+                      </Text>
+                    </BlockStack>
+                    <Button onClick={() => onCta(upNext)} variant="primary">
+                      Resume setup
+                    </Button>
+                  </InlineStack>
+                </Card>
+              ) : null}
+
+              <InlineStack align="start">
+                <Button
+                  variant="plain"
+                  onClick={() => setShowAllTasks((v) => !v)}
+                  ariaExpanded={showAllTasks}
+                  ariaControls="setup-guide-all-tasks"
+                >
+                  {showAllTasks
+                    ? "Hide all tasks"
+                    : `Show all ${items.length} tasks`}
+                </Button>
+              </InlineStack>
+
+              <Collapsible
+                id="setup-guide-all-tasks"
+                open={showAllTasks}
+                transition={{ duration: "150ms", timingFunction: "ease-in-out" }}
+              >
+                <BlockStack gap="200">
+                  {items.map((item) => (
+                    <ChecklistRow key={item.id} item={item} onCta={() => onCta(item)} />
+                  ))}
+                </BlockStack>
+              </Collapsible>
             </BlockStack>
           </Card>
         </Layout.Section>
