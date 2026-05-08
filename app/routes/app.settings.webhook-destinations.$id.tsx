@@ -15,18 +15,20 @@ import {
   Text,
   BlockStack,
   Banner,
-  Button,
   Checkbox,
   TextField,
-  FormLayout,
   InlineStack,
   Modal,
   Badge,
 } from "@shopify/polaris";
-import { useState } from "react";
+import { SaveBar } from "@shopify/app-bridge-react";
+import { useEffect, useRef, useState } from "react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { logger } from "../utils/logger.server";
+import { useDirtyForm } from "../components/useDirtyForm";
+import { useToastFeedback } from "../components/useToastFeedback";
+import { SaveBarButton } from "../components/SaveBarButton";
 
 const KNOWN_EVENT_TYPES = [
   { value: "order.scheduled", label: "Order scheduled" },
@@ -159,22 +161,55 @@ export default function EditWebhookDestination() {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const submit = useSubmit();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const isLoading = navigation.state === "submitting";
 
-  const [url, setUrl] = useState(dest.url);
-  const [secret, setSecret] = useState("");
-  const [enabled, setEnabled] = useState(dest.enabled);
-  const [selectedTypes, setSelectedTypes] = useState<string[]>(dest.eventTypes);
+  // Initial form values — secret starts blank because the existing one
+  // is opaque (length-only). Typing anything into secret => rotate.
+  const initialValues = {
+    url: dest.url,
+    secret: "",
+    enabled: dest.enabled,
+    eventTypes: [...dest.eventTypes],
+  };
+  const { values, setField, isDirty, reset, rebaseline } = useDirtyForm(initialValues);
+
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  const { showToast } = useToastFeedback();
 
   const errorMessage = actionData && actionData.ok === false ? actionData.error : null;
   const justSaved = searchParams.get("saved") === "1";
   const justCreated = searchParams.get("created") === "1";
 
+  // Re-baseline + toast after successful save (and strip ?saved so refreshes
+  // don't replay the toast).
+  useEffect(() => {
+    if (justSaved && !errorMessage) {
+      rebaseline({
+        url: dest.url,
+        secret: "",
+        enabled: dest.enabled,
+        eventTypes: [...dest.eventTypes],
+      });
+      showToast("Saved");
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete("saved");
+          return next;
+        },
+        { replace: true },
+      );
+    }
+  }, [justSaved, errorMessage, dest.url, dest.enabled, dest.eventTypes, rebaseline, showToast, setSearchParams]);
+
   const toggleType = (value: string) => {
-    setSelectedTypes((prev) =>
-      prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value],
+    setField(
+      "eventTypes",
+      values.eventTypes.includes(value)
+        ? values.eventTypes.filter((v) => v !== value)
+        : [...values.eventTypes, value],
     );
   };
 
@@ -183,6 +218,14 @@ export default function EditWebhookDestination() {
     fd.append("intent", "delete");
     submit(fd, { method: "post" });
     setDeleteOpen(false);
+  };
+
+  const handleSave = () => {
+    formRef.current?.requestSubmit();
+  };
+
+  const handleDiscard = () => {
+    reset();
   };
 
   return (
@@ -209,11 +252,6 @@ export default function EditWebhookDestination() {
             </Banner>
           </Layout.Section>
         )}
-        {justSaved && !errorMessage && (
-          <Layout.Section>
-            <Banner tone="success">Saved.</Banner>
-          </Layout.Section>
-        )}
         {errorMessage && (
           <Layout.Section>
             <Banner tone="critical">{errorMessage}</Banner>
@@ -234,10 +272,10 @@ export default function EditWebhookDestination() {
           </Layout.Section>
         )}
 
-        <Form method="post">
+        <Form method="post" ref={formRef}>
           <input type="hidden" name="intent" value="save" />
-          <input type="hidden" name="enabled" value={enabled.toString()} />
-          <input type="hidden" name="eventTypes" value={selectedTypes.join(",")} />
+          <input type="hidden" name="enabled" value={values.enabled.toString()} />
+          <input type="hidden" name="eventTypes" value={values.eventTypes.join(",")} />
 
           <Layout.AnnotatedSection
             title="Receiver"
@@ -248,16 +286,16 @@ export default function EditWebhookDestination() {
                 <TextField
                   label="URL"
                   name="url"
-                  value={url}
-                  onChange={setUrl}
+                  value={values.url}
+                  onChange={(v) => setField("url", v)}
                   autoComplete="off"
                   requiredIndicator
                 />
                 <TextField
                   label="Rotate HMAC secret"
                   name="secret"
-                  value={secret}
-                  onChange={setSecret}
+                  value={values.secret}
+                  onChange={(v) => setField("secret", v)}
                   placeholder="Leave blank to keep existing secret"
                   helpText={`Existing secret is ${dest.secretLength} characters. Enter at least 16 characters to rotate; leave blank to keep the current value.`}
                   autoComplete="off"
@@ -278,7 +316,7 @@ export default function EditWebhookDestination() {
                     key={t.value}
                     label={t.label}
                     helpText={t.value}
-                    checked={selectedTypes.includes(t.value)}
+                    checked={values.eventTypes.includes(t.value)}
                     onChange={() => toggleType(t.value)}
                   />
                 ))}
@@ -294,8 +332,8 @@ export default function EditWebhookDestination() {
               <Checkbox
                 label="Enabled"
                 helpText="Disabled destinations skip dispatch but stay in the list."
-                checked={enabled}
-                onChange={setEnabled}
+                checked={values.enabled}
+                onChange={(checked) => setField("enabled", checked)}
               />
             </Card>
           </Layout.AnnotatedSection>
@@ -320,14 +358,20 @@ export default function EditWebhookDestination() {
                 <Text as="p" tone="subdued" variant="bodySm">
                   Created: {new Date(dest.createdAt).toLocaleString("en-AU")}
                 </Text>
-                <InlineStack align="end">
-                  <Button variant="primary" submit loading={isLoading}>Save</Button>
-                </InlineStack>
               </BlockStack>
             </Card>
           </Layout.AnnotatedSection>
         </Form>
       </Layout>
+
+      <SaveBar id="webhook-destination-save-bar" open={isDirty}>
+        <SaveBarButton variant="primary" onClick={handleSave} loading={isLoading}>
+          Save
+        </SaveBarButton>
+        <SaveBarButton onClick={handleDiscard} disabled={isLoading}>
+          Discard
+        </SaveBarButton>
+      </SaveBar>
 
       <Modal
         open={deleteOpen}
