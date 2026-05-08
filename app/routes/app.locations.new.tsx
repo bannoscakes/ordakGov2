@@ -21,7 +21,6 @@ import {
 import { useState } from "react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
-import { isValidIanaTimezone } from "../services/slot-cutoff.server";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   await authenticate.admin(request);
@@ -55,14 +54,6 @@ export async function action({ request }: ActionFunctionArgs) {
     );
   }
 
-  const tz = (timezone || "UTC").trim() || "UTC";
-  if (!isValidIanaTimezone(tz)) {
-    return json(
-      { error: `Invalid timezone "${tz}". Use an IANA name like "Australia/Sydney" or "UTC".` },
-      { status: 400 },
-    );
-  }
-
   // Get shop
   const shop = await prisma.shop.findUnique({
     where: { shopifyDomain: session.shop },
@@ -86,7 +77,7 @@ export async function action({ request }: ActionFunctionArgs) {
       longitude: longitude ? parseFloat(longitude) : null,
       phone: phone || null,
       email: email || null,
-      timezone: tz,
+      timezone: timezone || "UTC",
       supportsDelivery,
       supportsPickup,
       isActive,
