@@ -56,9 +56,24 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
 
-    // Find the new slot
-    const newSlot = await prisma.slot.findUnique({
-      where: { id: slotId },
+    // Resolve shop and find the new slot scoped to this shop. Without the
+    // shop guard, an authenticated session could reference a slot that
+    // belongs to a different shop, and downstream business-logic checks
+    // (blackout, lead-time, capacity) would run against the wrong row.
+    // The reschedule UI route uses the same pattern.
+    const shop = await prisma.shop.findUnique({
+      where: { shopifyDomain: session.shop },
+      select: { id: true },
+    });
+    if (!shop) {
+      return json<UpdateScheduleResponse>(
+        { success: false, error: "Shop not found" },
+        { status: 404 },
+      );
+    }
+
+    const newSlot = await prisma.slot.findFirst({
+      where: { id: slotId, location: { shopId: shop.id } },
       include: {
         location: true,
       },
