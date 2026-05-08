@@ -378,79 +378,88 @@ function SlotRowEditor({
   // React state was correct. The grid below pins time columns to a fixed
   // width and gives number columns a floor + room to grow.
   //
-  // Total minimum at narrow card widths (with spinner arrows hidden via the
-  // .ordak-slots-editor scoped CSS in the parent component):
-  //   100 + 100 + 80 + 95 + 80 + ~70 (badge.small) + ~32 (icon-only remove) + 8*6 (gaps) ≈ 605 px
-  // Comfortable fit inside the standard Polaris Page card width even on
-  // narrower viewports. At wider widths the 1fr columns grow to use the
-  // available space.
+  // Polaris Page lays out two-column at wide viewports (tabs sidebar + right
+  // content card), one-column at narrow viewports. The right content card at
+  // wide viewports can be NARROWER than the full-width single-column layout
+  // at narrow viewports — so a row that fits when the user shrinks the window
+  // can fail at wider widths if we naively stretch it. CSS Grid with explicit
+  // columns can't gracefully wrap a row to two lines when overflowing, so we
+  // use flexbox with wrap: when the row's total min-width exceeds available,
+  // the action cluster (Saved + remove) wraps to a second line below the
+  // inputs. Inputs themselves never wrap to one-per-line because their
+  // flex-basis is large enough to keep three+ on a line.
   return (
     <Card>
       <div
         style={{
-          display: "grid",
-          gridTemplateColumns:
-            showPriceAdjustment
-              ? "100px 100px minmax(80px,1fr) minmax(95px,1fr) minmax(80px,1fr) auto auto"
-              : "100px 100px minmax(80px,1fr) minmax(80px,1fr) auto auto",
+          display: "flex",
+          flexWrap: "wrap",
           gap: "8px",
           alignItems: "end",
         }}
       >
-        <TextField
-          label="Start"
-          value={row.timeStart}
-          onChange={(v) => onChange({ timeStart: v })}
-          type="time"
-          autoComplete="off"
-        />
-        <TextField
-          label="End"
-          value={row.timeEnd}
-          onChange={(v) => onChange({ timeEnd: v })}
-          type="time"
-          autoComplete="off"
-        />
-        <TextField
-          label="Capacity"
-          value={String(row.capacity)}
-          onChange={(v) => onChange({ capacity: parseInt(v, 10) || 0 })}
-          type="number"
-          min={1}
-          max={9999}
-          autoComplete="off"
-          selectTextOnFocus
-        />
-        {showPriceAdjustment && (
+        <div style={{ flex: "0 0 100px" }}>
           <TextField
-            label="Price"
-            value={String(row.priceAdjustment)}
-            onChange={(v) => onChange({ priceAdjustment: parseFloat(v) || 0 })}
+            label="Start"
+            value={row.timeStart}
+            onChange={(v) => onChange({ timeStart: v })}
+            type="time"
+            autoComplete="off"
+          />
+        </div>
+        <div style={{ flex: "0 0 100px" }}>
+          <TextField
+            label="End"
+            value={row.timeEnd}
+            onChange={(v) => onChange({ timeEnd: v })}
+            type="time"
+            autoComplete="off"
+          />
+        </div>
+        <div style={{ flex: "1 1 80px", minWidth: 80 }}>
+          <TextField
+            label="Capacity"
+            value={String(row.capacity)}
+            onChange={(v) => onChange({ capacity: parseInt(v, 10) || 0 })}
             type="number"
-            step={0.01}
-            min={0}
+            min={1}
             max={9999}
-            prefix="$"
             autoComplete="off"
             selectTextOnFocus
           />
-        )}
-        <TextField
-          label="Cutoff"
-          value={cutoffMinutesToHoursInput(row.cutoffOffsetMinutes)}
-          onChange={(v) => onChange({ cutoffOffsetMinutes: hoursInputToCutoffMinutes(v) })}
-          type="number"
-          step={0.25}
-          min={0}
-          max={24}
-          placeholder="—"
-          autoComplete="off"
-          selectTextOnFocus
-        />
-        <div style={{ paddingBottom: 4 }}>
-          <Badge tone={row.id ? "success" : undefined} size="small">{row.id ? "Saved" : "New"}</Badge>
         </div>
-        <div style={{ paddingBottom: 4 }}>
+        {showPriceAdjustment && (
+          <div style={{ flex: "1 1 95px", minWidth: 95 }}>
+            <TextField
+              label="Price"
+              value={String(row.priceAdjustment)}
+              onChange={(v) => onChange({ priceAdjustment: parseFloat(v) || 0 })}
+              type="number"
+              step={0.01}
+              min={0}
+              max={9999}
+              prefix="$"
+              autoComplete="off"
+              selectTextOnFocus
+            />
+          </div>
+        )}
+        <div style={{ flex: "1 1 80px", minWidth: 80 }}>
+          <TextField
+            label="Cutoff"
+            value={cutoffMinutesToHoursInput(row.cutoffOffsetMinutes)}
+            onChange={(v) => onChange({ cutoffOffsetMinutes: hoursInputToCutoffMinutes(v) })}
+            type="number"
+            step={0.25}
+            min={0}
+            max={24}
+            placeholder="—"
+            autoComplete="off"
+            selectTextOnFocus
+          />
+        </div>
+        <div style={{ display: "flex", gap: "8px", alignItems: "center", paddingBottom: 4, flex: "0 0 auto" }}>
+          <Badge tone={row.id ? "success" : undefined} size="small">{row.id ? "Saved" : "New"}</Badge>
           <Button onClick={onRemove} tone="critical" size="slim" accessibilityLabel="Remove slot">✕</Button>
         </div>
       </div>
