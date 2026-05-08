@@ -137,10 +137,39 @@ Same evidence shape for one delivery order AND one pickup order = foundation gat
 
 1. ✅ **Phase 0 — Clean baseline.** Done.
 2. ✅ **Phase 1 — Real e2e order on ordakgo-v3.** Closed 2026-05-07 (orders #1001 delivery, #1002 pickup).
-3. ⏳ **Phase 2 — App Store user-action assets.** Icon, screenshots, screencast, listing copy, demo store reviewer instructions, "Free" pricing. **This is the immediate next action.**
-4. ⏳ **Phase 3 — Reviewer-experience hardening.** Carrier-service uninstall/reinstall test on `ordakgo-v3`. Final pre-submission smoke.
-5. ⏳ **Phase 4 — Submit unlisted.**
-6. ⏳ **Phase 5 — Address review feedback** iteratively.
-7. ⏳ **Phase 6 — Post-approval install on Bannos and Flour Lane** via the unlisted listing's direct link. Replaces the existing `checkout-validation` app on Bannos.
+3. **Phase 1.5 — Pre-Phase-2 UX + Wiring Fixes.** See [`PRE_PHASE_2_UX_FIXES.md`](PRE_PHASE_2_UX_FIXES.md). Four sequential PRs: 1.5.A → 1.5.D.
+   - ✅ **1.5.A — Per-slot cutoff** shipped 2026-05-08 (PR #110 → `main`). `cutoffOffsetMinutes` on `Slot` + `SlotTemplate`, Cutoff column in slot editor (with content-key memoization + flex-wrap row layout that survives narrow card widths), `isSlotCutoffPassed()` helper, slot loader filter. Verified live on `ordakgo-v3`.
+   - ⏳ **1.5.B — Blackout dates per Location** (next).
+   - ⏳ **1.5.C — Lead time per Location.**
+   - ⏳ **1.5.D — Drop `/app/rules`, replace cart-validation install row with theme-editor deep link, add `hide_express_buttons` setting to cart-scheduler-embed.**
+4. ⏳ **Phase 2 — App Store user-action assets.** Icon, screenshots, screencast, listing copy, demo store reviewer instructions, "Free" pricing. Starts after 1.5.D merges.
+5. ⏳ **Phase 3 — Reviewer-experience hardening.** Carrier-service uninstall/reinstall test on `ordakgo-v3`. Final pre-submission smoke.
+6. ⏳ **Phase 4 — Submit unlisted.**
+7. ⏳ **Phase 5 — Address review feedback** iteratively.
+8. ⏳ **Phase 6 — Post-approval install on Bannos and Flour Lane** via the unlisted listing's direct link. Replaces the existing `checkout-validation` app on Bannos.
 
 Bannos and Flour Lane are explicitly out of scope until Phase 6.
+
+## The proven pre-launch loop — push to Dev, verify in embedded admin (no merge required)
+
+Verified 2026-05-08 across the 17-commit Phase 1.5.A iteration. Until ordakGov2 has production installs, the embedded admin in `ordakgo-v3` loads the Remix app from the **Dev branch** Vercel deploy URL — not from `main`. This is the entire pre-launch development loop:
+
+1. Branch off `Dev`, or commit straight to `Dev` for small fixes (the `main`-edit-block hook in `~/.claude/settings.json` only blocks `main`).
+2. `npx tsc --noEmit && npm run build` locally.
+3. Push.
+4. Vercel auto-deploys the Dev branch URL `ordak-go-git-dev-bannos-and-flour-lane.vercel.app` in ~30–60s. Watch for `READY` state via `gh` or the Vercel API.
+5. Reload the Shopify admin → Apps → Ordak Go on `ordakgo-v3` → the new code is live.
+6. Verify visually (or via DOM snapshot through `chrome-devtools-mcp` if needed).
+7. Once the feature is solid, PR `Dev → main` to land it on the stable line.
+
+`shopify.app.ordak-go.toml` pins both `application_url` and `app_proxy.url` to the Dev branch URL while we're pre-launch:
+
+```
+application_url = "https://ordak-go-git-dev-bannos-and-flour-lane.vercel.app/"
+[auth] redirect_urls = ["https://ordak-go-git-dev-bannos-and-flour-lane.vercel.app/api/auth"]
+[app_proxy] url = "https://ordak-go-git-dev-bannos-and-flour-lane.vercel.app/apps/proxy"
+```
+
+**Flip these URLs back to `ordak-go.vercel.app` (production) only at App Store listing time**, when Bannos and Flour Lane install via the unlisted listing. Until then, Dev branch routing IS the canonical pre-launch surface.
+
+This addresses the long-standing "validated in dev → broken in prod" risk by making "dev" and "the embedded admin merchants would see" the same surface during pre-launch development. There's no separate prod environment to drift away from yet.

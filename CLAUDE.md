@@ -52,7 +52,7 @@ This pushes a "Development" preview of every extension (cart-block, delivery-rat
 
 ## What's next
 
-The current plan and phase ordering live in [`docs/PLAN.md`](docs/PLAN.md). High-level:
+The current plan and phase ordering live in [`docs/PLAN.md`](docs/PLAN.md) and [`docs/PRE_PHASE_2_UX_FIXES.md`](docs/PRE_PHASE_2_UX_FIXES.md). High-level:
 - ✅ **Phase A–C.5** (PRs #39–#42, merged 2026-05-02/03) — cart-block, Carrier Service, order pipeline, Delivery Customization Function. Tag `v0.5.0-pickup-checkout-locked` is the recoverable baseline.
 - ✅ **Phase D — 10 steps** (PRs #53–#65, merged 2026-05-04/05) — schema migration (D1), per-Location admin shell (D2), per-Zone delivery slot admin (D3 headline), Carrier Service rewrite (D4), Cart Validation Function + cart-block UX cleanup (D5), wizard pipes through (D6), settings restructure (D7), orders calendar (D8), webhook destinations (D9), admin reschedule finalized (D10).
 - ✅ **Per-location pickup hours admin** (PR #95, merged 2026-05-07) — closes the gap Phase D missed. New "Pickup hours" tab on `/app/locations/:id` with shared `SlotsEditor` component. Setup wizard auto-detours through pickup-hours when `supportsPickup` is checked. Page-level + dashboard misconfig warnings when pickup is enabled but has no hours. See `memory/pickup_admin_per_location.md` for the architecture reference.
@@ -60,9 +60,21 @@ The current plan and phase ordering live in [`docs/PLAN.md`](docs/PLAN.md). High
   - #1001 delivery — slot 2026-05-15 11:00, `slot.booked=1`, OrderLink + EventLog rows present.
   - #1002 pickup — slot 2026-05-07 09:00 at Bannos HQ, `slot.booked=1`, `order.linked` + `order.shopify_writes_attempted` (ok=true) events fired.
 - ✅ **`ordak-go-38`** released globally (cart-block + delivery-rate-filter + cart-validation), bundling the pickup-mode wording fix.
-- ⏳ **Phase 2 — App Store listing assets**: app icon 1200×1200, 3–6 screenshots @ 1600×900 from the new admin pages, demo screencast 60–90s, listing copy draft, "Free" pricing in Partners, reviewer instructions. **This is the immediate next action.**
+- ✅ **Phase 1.5.A — Per-slot cutoff** (PR #110, merged 2026-05-08). `cutoffOffsetMinutes` on `Slot` + `SlotTemplate`, Cutoff column in slot editor with the content-key memoization + flex-wrap row layout that survives narrow card widths, `isSlotCutoffPassed()` helper, slot loader filter. Verified live on `ordakgo-v3` admin.
+- ⏳ **Phase 1.5.B — Blackout dates per Location**. **This is the immediate next action.** See [`docs/PRE_PHASE_2_UX_FIXES.md`](docs/PRE_PHASE_2_UX_FIXES.md) for the full 1.5.B–D PR sequence.
+- ⏳ **Phase 1.5.C** — lead time per Location.
+- ⏳ **Phase 1.5.D** — drop `/app/rules` routes, replace cart-validation install dashboard row with theme-editor deep link, add `hide_express_buttons` setting to cart-scheduler-embed.
+- ⏳ **Phase 2 — App Store listing assets** (after 1.5.D): icon 1200×1200, 3–6 screenshots @ 1600×900, demo screencast 60–90s, listing copy, "Free" pricing, reviewer instructions.
 - ⏳ **Phase 3** — reviewer-experience hardening: carrier-service uninstall/reinstall test on `ordakgo-v3`, final pre-submission smoke.
 - ⏳ **Phase 4–6** — submit unlisted, address review feedback, install on Bannos + Flour Lane via the unlisted listing's direct link post-approval.
+
+## Pre-launch loop — push to Dev, verify in admin (no main merge required)
+
+While the app has zero production installs, `shopify.app.ordak-go.toml` pins `application_url` + `app_proxy.url` to the **Dev branch** Vercel deploy URL (`ordak-go-git-dev-bannos-and-flour-lane.vercel.app`). This means:
+
+> Push to `Dev` → Vercel auto-deploys in ~30–60s → reload the Shopify admin → Apps → Ordak Go on `ordakgo-v3` → the change is live.
+
+**No `Dev → main` merge is required to verify a change in the embedded admin.** Merge to `main` only when the feature is solid and you want it on the stable line. The Dev URL routing is the development surface; the prod URL (`ordak-go.vercel.app`) is the "stable" line we ship from at App Store listing time. Full ritual + when-to-flip in [`docs/WORKFLOW.md`](docs/WORKFLOW.md) § "The proven pre-launch loop."
 
 ## Key directories
 
