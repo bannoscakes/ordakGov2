@@ -53,6 +53,16 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     throw redirect(next.pathname + next.search);
   }
 
+  // Default landing for /app/zones/$id with no nested segment → /setup.
+  // We do this in the parent loader rather than via an _index child so
+  // the parent's action (delete) is reachable: a child _index would
+  // shadow the parent for actions targeted at the parent's URL, and
+  // `useSubmit({ action: "/app/zones/$id" })` would hit the index, not
+  // the parent action.
+  if (url.pathname === `/app/zones/${id}` || url.pathname === `/app/zones/${id}/`) {
+    throw redirect(`/app/zones/${id}/setup${url.search}`);
+  }
+
   const shop = await prisma.shop.findUnique({
     where: { shopifyDomain: session.shop },
     select: { id: true },
@@ -141,7 +151,11 @@ export default function ZoneAdminLayout() {
   const onDelete = () => {
     const fd = new FormData();
     fd.append("intent", "delete");
-    submit(fd, { method: "post" });
+    // Explicit action targets the parent route. Without it, useSubmit
+    // posts to the active leaf (setup/pricing/slots), whose action
+    // returns "Unknown intent" — the modal would close but the zone
+    // would never delete.
+    submit(fd, { method: "post", action: `/app/zones/${zone.id}` });
     setDeleteOpen(false);
   };
 
