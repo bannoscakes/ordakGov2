@@ -202,6 +202,12 @@ model Slot {
   // Defaults to 0; the cart-block only renders the badge when > 0.
   priceAdjustment     Decimal  @default(0) @db.Decimal(10, 2)
 
+  // Per-slot cutoff. NULL = no cutoff (slot bookable until start). Non-null =
+  // minutes before slot start at which the slot stops appearing in the
+  // storefront slot loader (and is rejected by the carrier-service callback
+  // as a defense-in-depth backstop).
+  cutoffOffsetMinutes Int?
+
   // Recommendation score (0.0 - 1.0)
   recommendationScore Float?
 
@@ -250,6 +256,10 @@ model SlotTemplate {
 
   capacity        Int      @default(10)
   priceAdjustment Decimal  @default(0) @db.Decimal(10, 2)
+
+  // Per-slot cutoff carried forward to materialized Slot rows. NULL = no
+  // cutoff. See Slot.cutoffOffsetMinutes for the runtime semantics.
+  cutoffOffsetMinutes Int?
 
   isActive        Boolean  @default(true)
 
