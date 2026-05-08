@@ -14,6 +14,7 @@ import { json } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { logger } from "../utils/logger.server";
+import { isSlotDateBlackedOut } from "../services/slot-blackout";
 import {
   writeEventLogTx,
   dispatchEventLog,
@@ -66,6 +67,20 @@ export async function action({ request }: ActionFunctionArgs) {
       return json<UpdateScheduleResponse>(
         { success: false, error: "Slot not found" },
         { status: 404 }
+      );
+    }
+
+    // Reject reschedule onto a blacked-out date. Same check the storefront
+    // and admin reschedule UI apply — a blackout means the location can't
+    // fulfill, so silently committing to the slot would undermine the
+    // merchant's stated availability.
+    if (isSlotDateBlackedOut(newSlot.date, newSlot.location.blackoutDates)) {
+      return json<UpdateScheduleResponse>(
+        {
+          success: false,
+          error: "That date is blocked at this location",
+        },
+        { status: 400 },
       );
     }
 

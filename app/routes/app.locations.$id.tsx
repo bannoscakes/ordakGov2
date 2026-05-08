@@ -25,8 +25,10 @@ import {
   Badge,
   DataTable,
   EmptyState,
+  DatePicker,
+  Tag,
 } from "@shopify/polaris";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { logger } from "../utils/logger.server";
@@ -36,6 +38,7 @@ import {
   replaceTemplatesAndMaterialize,
 } from "../services/slot-materializer.server";
 import { isValidIanaTimezone, parseCutoffOffsetMinutes } from "../services/slot-cutoff.server";
+import { formatDateKey, parseDateStrings } from "../services/slot-blackout";
 import { SlotsEditor } from "../components/SlotsEditor";
 
 type Section = "setup" | "fulfillment" | "pickup-hours" | "prep-time" | "block-dates" | "zones";
@@ -45,7 +48,7 @@ const BASE_SECTIONS: { id: Section; label: string }[] = [
   { id: "setup", label: "Location setup" },
   { id: "fulfillment", label: "Fulfillment type" },
   { id: "prep-time", label: "Prep time & availability" },
-  { id: "block-dates", label: "Block dates & times" },
+  { id: "block-dates", label: "Block dates" },
   { id: "zones", label: "Zones" },
 ];
 
@@ -118,6 +121,9 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     location: {
       ...location,
       basePrice: undefined, // Location has no basePrice; zones do
+      // Date[] → string[] for client. UI compares by key, server re-parses
+      // via parseDateStrings on save.
+      blackoutDates: location.blackoutDates.map((d) => formatDateKey(d)),
       zones: location.zones.map((z) => ({
         ...z,
         basePrice: z.basePrice.toString(), // Decimal → string for client
@@ -322,6 +328,31 @@ export async function action({ request, params }: ActionFunctionArgs) {
       return redirect(`/app/locations/${id}?section=pickup-hours&day=${fromRaw}&copied=${toDaysOfWeek.length}`);
     }
 
+    if (intent === "save-blackout-dates") {
+      // Form sends a comma-separated list of YYYY-MM-DD strings. Parse server-
+      // side via the same helper the slot loader uses so the stored DateTime[]
+      // is identical to the comparison side at filter time.
+      const raw = (formData.get("blackoutDates") as string | null) ?? "";
+      const tokens = raw.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
+      // Reject malformed entries up-front (parseDateStrings would silently
+      // skip them, but we'd rather surface the error so the merchant knows
+      // their input wasn't saved verbatim).
+      for (const t of tokens) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(t)) {
+          return json<ActionResult>(
+            { ok: false, error: `"${t}" is not a valid YYYY-MM-DD date` },
+            { status: 400 },
+          );
+        }
+      }
+      const blackoutDates = parseDateStrings(tokens);
+      await prisma.location.update({
+        where: { id },
+        data: { blackoutDates },
+      });
+      return redirect(`/app/locations/${id}?section=block-dates&saved=1`);
+    }
+
     return json<ActionResult>({ ok: false, error: "Unknown intent" }, { status: 400 });
   } catch (error) {
     logger.error("Per-location admin action failed", error, { locationId: id, intent: String(intent) });
@@ -456,7 +487,7 @@ export default function LocationAdmin() {
             </Banner>
           )}
           {section === "prep-time" && <PrepTimeSection />}
-          {section === "block-dates" && <BlockDatesSection />}
+          {section === "block-dates" && <BlockDatesSection location={location} />}
           {section === "zones" && <ZonesSection location={location} />}
         </Layout.Section>
       </Layout>
@@ -781,30 +812,122 @@ function PrepTimeSection() {
 
 // ---------- Section: Block dates ----------
 
-function BlockDatesSection() {
-  return (
-    <BlockStack gap="400">
-      <Card>
-        <BlockStack gap="300">
-          <Text as="h2" variant="headingMd">Block dates & times</Text>
-          <Text as="p" tone="subdued" variant="bodySm">
-            Calendar dates when this location can&apos;t fulfill orders (holidays, maintenance).
-          </Text>
-        </BlockStack>
-      </Card>
+function BlockDatesSection({ location }: { location: LocationData }) {
+  const navigation = useNavigation();
+  const isLoading = navigation.state === "submitting";
 
-      <Card>
-        <BlockStack gap="300">
-          <Banner tone="info" title="Coming in the next admin update">
-            <Text as="p">
-              Per-location blackout dates (calendar UI, click to toggle) will land here. Until
-              then, deactivate slots individually in the time-slot editor for one-off closures.
-            </Text>
-          </Banner>
-        </BlockStack>
-      </Card>
-    </BlockStack>
+  // Polaris DatePicker tracks the visible month via month/year. Initialize
+  // to today's month so the merchant lands on the current calendar.
+  const [{ month, year }, setMonth] = useState(() => {
+    const now = new Date();
+    return { month: now.getMonth(), year: now.getFullYear() };
+  });
+
+  // Local mutable copy of the location's blackout dates as YYYY-MM-DD
+  // strings. Strings (not Date objects) avoid timezone-drift bugs in
+  // client comparisons; the action re-parses to UTC midnight DateTimes
+  // server-side via parseDateStrings.
+  const [selectedDates, setSelectedDates] = useState<string[]>(location.blackoutDates);
+
+  // DatePicker's `disableSpecificDates` wants Date instances. We grey out
+  // already-blocked dates so they're visually distinct in the calendar
+  // and an accidental re-click doesn't double-add.
+  const disabledDates = useMemo(
+    () => selectedDates.map((s) => new Date(`${s}T00:00:00.000Z`)),
+    [selectedDates],
   );
+
+  const handleDateChange = ({ end }: { start: Date; end: Date }) => {
+    // allowRange={false} → start === end === the date the merchant clicked.
+    // Use UTC components to derive the YYYY-MM-DD key — DatePicker hands us
+    // a Date in the browser's local zone, so .toISOString() can drift back
+    // by a day if we read getDate() naively.
+    const key = formatDateKey(
+      new Date(Date.UTC(end.getFullYear(), end.getMonth(), end.getDate())),
+    );
+    setSelectedDates((prev) =>
+      prev.includes(key) ? prev : [...prev, key].sort(),
+    );
+  };
+
+  const removeDate = (key: string) => {
+    setSelectedDates((prev) => prev.filter((d) => d !== key));
+  };
+
+  const isDirty = !sameStringArray(selectedDates, location.blackoutDates);
+
+  return (
+    <Form method="post">
+      <input type="hidden" name="intent" value="save-blackout-dates" />
+      <input type="hidden" name="blackoutDates" value={selectedDates.join(",")} />
+
+      <BlockStack gap="400">
+        <Card>
+          <BlockStack gap="400">
+            <BlockStack gap="100">
+              <Text as="h2" variant="headingMd">Block dates</Text>
+              <Text as="p" tone="subdued" variant="bodySm">
+                Click a date in the calendar to block it. The cart-block hides slots on
+                blocked dates, and the carrier-service callback returns no rates for orders
+                that try to use them. Useful for holidays, maintenance, and one-off closures.
+              </Text>
+            </BlockStack>
+            <DatePicker
+              month={month}
+              year={year}
+              onMonthChange={(m, y) => setMonth({ month: m, year: y })}
+              onChange={handleDateChange}
+              disableSpecificDates={disabledDates}
+              multiMonth
+              allowRange={false}
+            />
+          </BlockStack>
+        </Card>
+
+        <Card>
+          <BlockStack gap="300">
+            <Text as="h3" variant="headingMd">
+              Currently blocked ({selectedDates.length})
+            </Text>
+            {selectedDates.length === 0 ? (
+              <Text as="p" tone="subdued" variant="bodySm">
+                No dates blocked yet. Click any date in the calendar above to block it.
+              </Text>
+            ) : (
+              <InlineStack gap="200" wrap>
+                {selectedDates.map((d) => (
+                  <Tag key={d} onRemove={() => removeDate(d)}>
+                    {d}
+                  </Tag>
+                ))}
+              </InlineStack>
+            )}
+          </BlockStack>
+        </Card>
+
+        <InlineStack align="end">
+          <Button
+            variant="primary"
+            submit
+            loading={isLoading}
+            disabled={!isDirty || isLoading}
+          >
+            Save
+          </Button>
+        </InlineStack>
+      </BlockStack>
+    </Form>
+  );
+}
+
+function sameStringArray(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const sa = [...a].sort();
+  const sb = [...b].sort();
+  for (let i = 0; i < sa.length; i++) {
+    if (sa[i] !== sb[i]) return false;
+  }
+  return true;
 }
 
 // ---------- Section: Zones ----------
