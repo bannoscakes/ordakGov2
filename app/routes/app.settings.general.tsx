@@ -43,10 +43,12 @@ export default function SettingsGeneral() {
           </Banner>
         </Layout.Section>
 
-        <Layout.Section>
+        <Layout.AnnotatedSection
+          title="Per-location timezones"
+          description="Each location uses its own timezone for slot scheduling and cutoff calculations."
+        >
           <Card>
             <BlockStack gap="300">
-              <Text as="h2" variant="headingMd">Per-location timezones</Text>
               {locations.length === 0 ? (
                 <Banner
                   tone="info"
@@ -66,19 +68,21 @@ export default function SettingsGeneral() {
               )}
             </BlockStack>
           </Card>
-        </Layout.Section>
+        </Layout.AnnotatedSection>
 
-        <Layout.Section>
+        <Layout.AnnotatedSection
+          title="Email notifications"
+          description="Shopify sends transactional emails for orders. Customize them in your Shopify admin."
+        >
           <Card>
             <BlockStack gap="300">
-              <Text as="h2" variant="headingMd">Email notifications</Text>
               <Text as="p" tone="subdued" variant="bodySm">
                 Order confirmation, shipping update, and pickup-ready emails are sent by Shopify
                 directly. Customize them in <strong>Shopify admin → Settings → Notifications</strong>.
               </Text>
             </BlockStack>
           </Card>
-        </Layout.Section>
+        </Layout.AnnotatedSection>
       </Layout>
     </Page>
   );

@@ -129,200 +129,206 @@ export default function NewLocation() {
           </Layout.Section>
         )}
 
-        <Layout.Section>
-          <Form method="post">
-            <FormLayout>
-              <Card>
-                <BlockStack gap="400">
-                  <TextField
-                    label="Location Name"
-                    name="name"
-                    value={name}
-                    onChange={setName}
-                    placeholder="e.g., Sydney Warehouse"
-                    autoComplete="off"
-                    requiredIndicator
-                  />
+        <Form method="post">
+          <Layout.AnnotatedSection
+            title="Address"
+            description="Where the location ships from or customers pick up from."
+          >
+            <Card>
+              <BlockStack gap="400">
+                <TextField
+                  label="Location name"
+                  name="name"
+                  value={name}
+                  onChange={setName}
+                  placeholder="e.g., Sydney Warehouse"
+                  autoComplete="off"
+                  requiredIndicator
+                />
 
-                  <TextField
-                    label="Address"
-                    name="address"
-                    value={address}
-                    onChange={setAddress}
-                    placeholder="123 Main Street"
-                    autoComplete="off"
-                    requiredIndicator
-                  />
+                <TextField
+                  label="Address"
+                  name="address"
+                  value={address}
+                  onChange={setAddress}
+                  placeholder="123 Main Street"
+                  autoComplete="off"
+                  requiredIndicator
+                />
 
-                  <InlineStack gap="400">
-                    <div style={{ flex: 1 }}>
-                      <TextField
-                        label="City"
-                        name="city"
-                        value={city}
-                        onChange={setCity}
-                        autoComplete="off"
-                      />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <TextField
-                        label="Province/State"
-                        name="province"
-                        value={province}
-                        onChange={setProvince}
-                        autoComplete="off"
-                      />
-                    </div>
-                  </InlineStack>
-
-                  <InlineStack gap="400">
-                    <div style={{ flex: 1 }}>
-                      <TextField
-                        label="Country"
-                        name="country"
-                        value={country}
-                        onChange={setCountry}
-                        autoComplete="off"
-                      />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <TextField
-                        label="Postal Code"
-                        name="postalCode"
-                        value={postalCode}
-                        onChange={setPostalCode}
-                        autoComplete="off"
-                      />
-                    </div>
-                  </InlineStack>
-                </BlockStack>
-              </Card>
-
-              <Card>
-                <BlockStack gap="400">
-                  <div>
-                    <h3 style={{ marginBottom: "8px" }}>Coordinates (Optional)</h3>
-                    <p style={{ color: "#6d7175", fontSize: "13px", marginBottom: "12px" }}>
-                      Used for distance calculations in recommendations. You can find
-                      coordinates using Google Maps.
-                    </p>
+                <InlineStack gap="400">
+                  <div style={{ flex: 1 }}>
+                    <TextField
+                      label="City"
+                      name="city"
+                      value={city}
+                      onChange={setCity}
+                      autoComplete="off"
+                    />
                   </div>
+                  <div style={{ flex: 1 }}>
+                    <TextField
+                      label="Province / state"
+                      name="province"
+                      value={province}
+                      onChange={setProvince}
+                      autoComplete="off"
+                    />
+                  </div>
+                </InlineStack>
 
-                  <InlineStack gap="400">
-                    <div style={{ flex: 1 }}>
-                      <TextField
-                        label="Latitude"
-                        name="latitude"
-                        value={latitude}
-                        onChange={setLatitude}
-                        placeholder="-33.8688"
-                        type="number"
-                        step={0.000001}
-                        autoComplete="off"
-                      />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <TextField
-                        label="Longitude"
-                        name="longitude"
-                        value={longitude}
-                        onChange={setLongitude}
-                        placeholder="151.2093"
-                        type="number"
-                        step={0.000001}
-                        autoComplete="off"
-                      />
-                    </div>
-                  </InlineStack>
-                </BlockStack>
-              </Card>
+                <InlineStack gap="400">
+                  <div style={{ flex: 1 }}>
+                    <TextField
+                      label="Country"
+                      name="country"
+                      value={country}
+                      onChange={setCountry}
+                      autoComplete="off"
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <TextField
+                      label="Postal code"
+                      name="postalCode"
+                      value={postalCode}
+                      onChange={setPostalCode}
+                      autoComplete="off"
+                    />
+                  </div>
+                </InlineStack>
+              </BlockStack>
+            </Card>
+          </Layout.AnnotatedSection>
 
-              <Card>
-                <BlockStack gap="400">
-                  <InlineStack gap="400">
-                    <div style={{ flex: 1 }}>
-                      <TextField
-                        label="Phone"
-                        name="phone"
-                        value={phone}
-                        onChange={setPhone}
-                        type="tel"
-                        autoComplete="off"
-                      />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <TextField
-                        label="Email"
-                        name="email"
-                        value={email}
-                        onChange={setEmail}
-                        type="email"
-                        autoComplete="off"
-                      />
-                    </div>
-                  </InlineStack>
-
+          <Layout.AnnotatedSection
+            title="Coordinates"
+            description="Optional. Required for radius-based delivery zones that calculate distance from this location."
+          >
+            <Card>
+              <InlineStack gap="400">
+                <div style={{ flex: 1 }}>
                   <TextField
-                    label="Timezone"
-                    name="timezone"
-                    value={timezone}
-                    onChange={setTimezone}
-                    placeholder="UTC"
-                    helpText="e.g., America/New_York, Australia/Sydney"
+                    label="Latitude"
+                    name="latitude"
+                    value={latitude}
+                    onChange={setLatitude}
+                    placeholder="-33.8688"
+                    type="number"
+                    step={0.000001}
                     autoComplete="off"
                   />
-                </BlockStack>
-              </Card>
-
-              <Card>
-                <BlockStack gap="400">
-                  <Checkbox
-                    label="Supports Delivery"
-                    checked={supportsDelivery}
-                    onChange={setSupportsDelivery}
-                    helpText="Enable if this location can dispatch deliveries"
+                </div>
+                <div style={{ flex: 1 }}>
+                  <TextField
+                    label="Longitude"
+                    name="longitude"
+                    value={longitude}
+                    onChange={setLongitude}
+                    placeholder="151.2093"
+                    type="number"
+                    step={0.000001}
+                    autoComplete="off"
                   />
-                  <input
-                    type="hidden"
-                    name="supportsDelivery"
-                    value={supportsDelivery.toString()}
-                  />
-
-                  <Checkbox
-                    label="Supports Pickup"
-                    checked={supportsPickup}
-                    onChange={setSupportsPickup}
-                    helpText="Enable if customers can pick up orders from this location"
-                  />
-                  <input
-                    type="hidden"
-                    name="supportsPickup"
-                    value={supportsPickup.toString()}
-                  />
-
-                  <Checkbox
-                    label="Active"
-                    checked={isActive}
-                    onChange={setIsActive}
-                    helpText="Only active locations are shown to customers"
-                  />
-                  <input
-                    type="hidden"
-                    name="isActive"
-                    value={isActive.toString()}
-                  />
-                </BlockStack>
-              </Card>
-
-              <InlineStack align="end" gap="200">
-                <Button onClick={() => navigate("/app/locations")}>Cancel</Button>
-                <Button variant="primary" submit loading={isLoading} disabled={isLoading}>
-                  Add Location
-                </Button>
+                </div>
               </InlineStack>
-            </FormLayout>
-          </Form>
-        </Layout.Section>
+            </Card>
+          </Layout.AnnotatedSection>
+
+          <Layout.AnnotatedSection
+            title="Contact &amp; timezone"
+            description="Phone and email shown to customers. Timezone drives slot scheduling and cutoff calculations."
+          >
+            <Card>
+              <BlockStack gap="400">
+                <InlineStack gap="400">
+                  <div style={{ flex: 1 }}>
+                    <TextField
+                      label="Phone"
+                      name="phone"
+                      value={phone}
+                      onChange={setPhone}
+                      type="tel"
+                      autoComplete="off"
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <TextField
+                      label="Email"
+                      name="email"
+                      value={email}
+                      onChange={setEmail}
+                      type="email"
+                      autoComplete="off"
+                    />
+                  </div>
+                </InlineStack>
+
+                <TextField
+                  label="Timezone"
+                  name="timezone"
+                  value={timezone}
+                  onChange={setTimezone}
+                  placeholder="UTC"
+                  helpText="IANA name like Australia/Sydney or America/New_York."
+                  autoComplete="off"
+                />
+              </BlockStack>
+            </Card>
+          </Layout.AnnotatedSection>
+
+          <Layout.AnnotatedSection
+            title="Fulfillment capabilities"
+            description="Pick what this location can do. Customers only see active locations in the cart-block."
+          >
+            <Card>
+              <BlockStack gap="400">
+                <Checkbox
+                  label="Supports delivery"
+                  checked={supportsDelivery}
+                  onChange={setSupportsDelivery}
+                  helpText="Enable if this location can dispatch deliveries."
+                />
+                <input
+                  type="hidden"
+                  name="supportsDelivery"
+                  value={supportsDelivery.toString()}
+                />
+
+                <Checkbox
+                  label="Supports pickup"
+                  checked={supportsPickup}
+                  onChange={setSupportsPickup}
+                  helpText="Enable if customers can pick up orders from this location."
+                />
+                <input
+                  type="hidden"
+                  name="supportsPickup"
+                  value={supportsPickup.toString()}
+                />
+
+                <Checkbox
+                  label="Active"
+                  checked={isActive}
+                  onChange={setIsActive}
+                  helpText="Only active locations are shown to customers."
+                />
+                <input
+                  type="hidden"
+                  name="isActive"
+                  value={isActive.toString()}
+                />
+
+                <InlineStack align="end" gap="200">
+                  <Button onClick={() => navigate("/app/locations")}>Cancel</Button>
+                  <Button variant="primary" submit loading={isLoading} disabled={isLoading}>
+                    Add location
+                  </Button>
+                </InlineStack>
+              </BlockStack>
+            </Card>
+          </Layout.AnnotatedSection>
+        </Form>
       </Layout>
     </Page>
   );
