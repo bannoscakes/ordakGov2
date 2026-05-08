@@ -25,6 +25,7 @@ import { useMemo, useState } from "react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { logger } from "../utils/logger.server";
+import { isSlotDateBlackedOut } from "../services/slot-blackout";
 import {
   writeEventLogTx,
   dispatchEventLog,
@@ -79,11 +80,23 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       isActive: true,
       date: { gte: today, lte: horizon },
     },
-    include: { location: { select: { id: true, name: true } }, zone: { select: { name: true } } },
+    include: {
+      location: { select: { id: true, name: true, blackoutDates: true } },
+      zone: { select: { name: true } },
+    },
     orderBy: [{ date: "asc" }, { timeStart: "asc" }],
   });
 
   const slots = candidateSlots
+    // Hide blacked-out dates from the reschedule picker. Keep the current
+    // slot visible even if its date got added to the blackout list after
+    // the order was placed — the merchant needs to see what they're
+    // moving away from.
+    .filter(
+      (s) =>
+        s.id === orderLink.slotId ||
+        !isSlotDateBlackedOut(s.date, s.location.blackoutDates),
+    )
     .filter((s) => s.id === orderLink.slotId || s.booked < s.capacity)
     .map((s) => ({
       id: s.id,
@@ -172,6 +185,12 @@ export async function action({ request, params }: ActionFunctionArgs) {
     }
     if (!newSlot.isActive) {
       return json<ActionResult>({ ok: false, error: "Slot is not active" }, { status: 400 });
+    }
+    if (isSlotDateBlackedOut(newSlot.date, newSlot.location.blackoutDates)) {
+      return json<ActionResult>(
+        { ok: false, error: "That date is blocked at this location. Pick a different date." },
+        { status: 400 },
+      );
     }
     if (newSlot.booked >= newSlot.capacity) {
       return json<ActionResult>({ ok: false, error: "Slot is fully booked" }, { status: 400 });
