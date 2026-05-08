@@ -90,17 +90,16 @@ export default function WidgetAppearance() {
           </Layout.Section>
         )}
 
-        <Layout.Section>
+        <Layout.AnnotatedSection
+          title="Slot tile badges"
+          description="Toggles for the labels that appear on time-slot tiles in the cart-block."
+        >
           <Form method="post">
             <input type="hidden" name="showRecommendedBadge" value={showRecommendedBadge.toString()} />
             <input type="hidden" name="showMostAvailableBadge" value={showMostAvailableBadge.toString()} />
             <FormLayout>
               <Card>
                 <BlockStack gap="400">
-                  <Text as="h2" variant="headingMd">Slot tile badges</Text>
-                  <Text as="p" tone="subdued" variant="bodySm">
-                    Toggles for the labels that appear on time-slot tiles in the cart-block.
-                  </Text>
                   <Checkbox
                     label="Show RECOMMENDED badge"
                     helpText="Highlights slots with the highest recommendation score (orange star + border). Off by default — customers often find the ranking unclear."
@@ -121,7 +120,7 @@ export default function WidgetAppearance() {
               </InlineStack>
             </FormLayout>
           </Form>
-        </Layout.Section>
+        </Layout.AnnotatedSection>
       </Layout>
     </Page>
   );

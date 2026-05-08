@@ -234,93 +234,99 @@ export default function EditWebhookDestination() {
           </Layout.Section>
         )}
 
-        <Layout.Section>
-          <Form method="post">
-            <input type="hidden" name="intent" value="save" />
-            <input type="hidden" name="enabled" value={enabled.toString()} />
-            <input type="hidden" name="eventTypes" value={selectedTypes.join(",")} />
-            <FormLayout>
-              <Card>
-                <BlockStack gap="400">
-                  <Text as="h2" variant="headingMd">Receiver</Text>
-                  <TextField
-                    label="URL"
-                    name="url"
-                    value={url}
-                    onChange={setUrl}
-                    autoComplete="off"
-                    requiredIndicator
-                  />
-                  <TextField
-                    label="Rotate HMAC secret"
-                    name="secret"
-                    value={secret}
-                    onChange={setSecret}
-                    placeholder="Leave blank to keep existing secret"
-                    helpText={`Existing secret is ${dest.secretLength} characters. Enter at least 16 characters to rotate; leave blank to keep the current value.`}
-                    autoComplete="off"
-                    type="password"
-                  />
-                </BlockStack>
-              </Card>
+        <Form method="post">
+          <input type="hidden" name="intent" value="save" />
+          <input type="hidden" name="enabled" value={enabled.toString()} />
+          <input type="hidden" name="eventTypes" value={selectedTypes.join(",")} />
 
-              <Card>
-                <BlockStack gap="300">
-                  <Text as="h2" variant="headingMd">Subscribed events</Text>
-                  <Text as="p" tone="subdued" variant="bodySm">
-                    Empty = subscribe to all events.
-                  </Text>
-                  <BlockStack gap="200">
-                    {KNOWN_EVENT_TYPES.map((t) => (
-                      <Checkbox
-                        key={t.value}
-                        label={t.label}
-                        helpText={t.value}
-                        checked={selectedTypes.includes(t.value)}
-                        onChange={() => toggleType(t.value)}
-                      />
-                    ))}
-                  </BlockStack>
-                </BlockStack>
-              </Card>
+          <Layout.AnnotatedSection
+            title="Receiver"
+            description="Where Ordak Go POSTs events. Rotate the HMAC secret to invalidate the old signing key."
+          >
+            <Card>
+              <BlockStack gap="400">
+                <TextField
+                  label="URL"
+                  name="url"
+                  value={url}
+                  onChange={setUrl}
+                  autoComplete="off"
+                  requiredIndicator
+                />
+                <TextField
+                  label="Rotate HMAC secret"
+                  name="secret"
+                  value={secret}
+                  onChange={setSecret}
+                  placeholder="Leave blank to keep existing secret"
+                  helpText={`Existing secret is ${dest.secretLength} characters. Enter at least 16 characters to rotate; leave blank to keep the current value.`}
+                  autoComplete="off"
+                  type="password"
+                />
+              </BlockStack>
+            </Card>
+          </Layout.AnnotatedSection>
 
-              <Card>
-                <BlockStack gap="300">
+          <Layout.AnnotatedSection
+            title="Subscribed events"
+            description="Empty list subscribes to every event the app emits."
+          >
+            <Card>
+              <BlockStack gap="200">
+                {KNOWN_EVENT_TYPES.map((t) => (
                   <Checkbox
-                    label="Enabled"
-                    helpText="Disabled destinations skip dispatch but stay in the list."
-                    checked={enabled}
-                    onChange={setEnabled}
+                    key={t.value}
+                    label={t.label}
+                    helpText={t.value}
+                    checked={selectedTypes.includes(t.value)}
+                    onChange={() => toggleType(t.value)}
                   />
-                </BlockStack>
-              </Card>
+                ))}
+              </BlockStack>
+            </Card>
+          </Layout.AnnotatedSection>
 
-              <Card>
-                <BlockStack gap="200">
-                  <Text as="h3" variant="headingMd">Health</Text>
-                  <InlineStack gap="200" wrap>
-                    <Badge tone={dest.consecutiveFailures === 0 ? "success" : dest.consecutiveFailures >= 3 ? "critical" : "warning"}>
-                      {`${dest.consecutiveFailures} consecutive failure${dest.consecutiveFailures === 1 ? "" : "s"}`}
-                    </Badge>
-                  </InlineStack>
-                  <Text as="p" tone="subdued" variant="bodySm">
-                    Last success: {dest.lastSuccessAt ? new Date(dest.lastSuccessAt).toLocaleString("en-AU") : "never"}
-                  </Text>
-                  <Text as="p" tone="subdued" variant="bodySm">
-                    Last failure: {dest.lastFailureAt ? new Date(dest.lastFailureAt).toLocaleString("en-AU") : "never"}
-                  </Text>
-                  <Text as="p" tone="subdued" variant="bodySm">
-                    Created: {new Date(dest.createdAt).toLocaleString("en-AU")}
-                  </Text>
-                </BlockStack>
-              </Card>
+          <Layout.AnnotatedSection
+            title="Activation"
+            description="Disabled destinations skip dispatch but stay in the list for re-enable."
+          >
+            <Card>
+              <Checkbox
+                label="Enabled"
+                helpText="Disabled destinations skip dispatch but stay in the list."
+                checked={enabled}
+                onChange={setEnabled}
+              />
+            </Card>
+          </Layout.AnnotatedSection>
 
-              <InlineStack align="end">
-                <Button variant="primary" submit loading={isLoading}>Save</Button>
-              </InlineStack>
-            </FormLayout>
-          </Form>
-        </Layout.Section>
+          <Layout.AnnotatedSection
+            title="Health"
+            description="Delivery success and failure timestamps. Failures surface here, not silently in your downstream pipeline."
+          >
+            <Card>
+              <BlockStack gap="200">
+                <InlineStack gap="200" wrap>
+                  <Badge tone={dest.consecutiveFailures === 0 ? "success" : dest.consecutiveFailures >= 3 ? "critical" : "warning"}>
+                    {`${dest.consecutiveFailures} consecutive failure${dest.consecutiveFailures === 1 ? "" : "s"}`}
+                  </Badge>
+                </InlineStack>
+                <Text as="p" tone="subdued" variant="bodySm">
+                  Last success: {dest.lastSuccessAt ? new Date(dest.lastSuccessAt).toLocaleString("en-AU") : "never"}
+                </Text>
+                <Text as="p" tone="subdued" variant="bodySm">
+                  Last failure: {dest.lastFailureAt ? new Date(dest.lastFailureAt).toLocaleString("en-AU") : "never"}
+                </Text>
+                <Text as="p" tone="subdued" variant="bodySm">
+                  Created: {new Date(dest.createdAt).toLocaleString("en-AU")}
+                </Text>
+                <InlineStack align="end">
+                  <Button variant="primary" submit loading={isLoading}>Save</Button>
+                </InlineStack>
+              </BlockStack>
+            </Card>
+          </Layout.AnnotatedSection>
+        </Form>
       </Layout>
 
       <Modal

@@ -267,173 +267,165 @@ export default function NewZone() {
           </Layout.Section>
         )}
 
-        <Layout.Section>
-          <Form method="post">
-            <FormLayout>
+        <Form method="post">
+          <Layout.AnnotatedSection
+            title="Zone basics"
+            description="Name, location, and how you want to define the service area."
+          >
+            <Card>
+              <BlockStack gap="400">
+                <TextField
+                  label="Zone name"
+                  name="name"
+                  value={name}
+                  onChange={setName}
+                  placeholder="e.g., Sydney Metro Area"
+                  autoComplete="off"
+                  requiredIndicator
+                />
+
+                <Select
+                  label="Location"
+                  name="locationId"
+                  options={locationOptions}
+                  value={locationId}
+                  onChange={setLocationId}
+                  helpText="Which location does this zone serve?"
+                  requiredIndicator
+                />
+
+                <Select
+                  label="Zone type"
+                  name="type"
+                  options={typeOptions}
+                  value={type}
+                  onChange={setType}
+                  helpText="Postcode list, postcode range, or radius around the location."
+                  requiredIndicator
+                />
+              </BlockStack>
+            </Card>
+          </Layout.AnnotatedSection>
+
+          {type === "postcode_list" && (
+            <Layout.AnnotatedSection
+              title="Postcode list"
+              description="Enter every postcode this zone covers, separated by commas."
+            >
+              <Card>
+                <TextField
+                  label="Postcodes"
+                  name="postcodes"
+                  value={postcodes}
+                  onChange={setPostcodes}
+                  placeholder="e.g., 2000, 2001, 2010, 2060"
+                  multiline={3}
+                  autoComplete="off"
+                  helpText="Separate postcodes with commas."
+                  requiredIndicator
+                />
+              </Card>
+            </Layout.AnnotatedSection>
+          )}
+
+          {type === "postcode_range" && (
+            <Layout.AnnotatedSection
+              title="Postcode range"
+              description="Inclusive range — every postcode between the start and end values."
+            >
+              <Card>
+                <InlineStack gap="400">
+                  <div style={{ flex: 1 }}>
+                    <TextField
+                      label="Start postcode"
+                      name="rangeStart"
+                      value={rangeStart}
+                      onChange={setRangeStart}
+                      placeholder="e.g., 2000"
+                      autoComplete="off"
+                      requiredIndicator
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <TextField
+                      label="End postcode"
+                      name="rangeEnd"
+                      value={rangeEnd}
+                      onChange={setRangeEnd}
+                      placeholder="e.g., 2100"
+                      autoComplete="off"
+                      requiredIndicator
+                    />
+                  </div>
+                </InlineStack>
+              </Card>
+            </Layout.AnnotatedSection>
+          )}
+
+          {type === "radius" && (
+            <Layout.AnnotatedSection
+              title="Radius zone"
+              description="Cover every address within a set distance of the location's coordinates."
+            >
               <Card>
                 <BlockStack gap="400">
+                  {showRadiusWarning && (
+                    <Banner tone="warning">
+                      The selected location doesn't have coordinates set. Edit the location and
+                      add latitude/longitude to use radius-based zones.
+                    </Banner>
+                  )}
+
                   <TextField
-                    label="Zone Name"
-                    name="name"
-                    value={name}
-                    onChange={setName}
-                    placeholder="e.g., Sydney Metro Area"
+                    label="Radius (km)"
+                    name="radiusKm"
+                    value={radiusKm}
+                    onChange={setRadiusKm}
+                    type="number"
+                    step={0.1}
+                    min={0}
+                    placeholder="e.g., 10"
                     autoComplete="off"
-                    requiredIndicator
-                  />
-
-                  <Select
-                    label="Location"
-                    name="locationId"
-                    options={locationOptions}
-                    value={locationId}
-                    onChange={setLocationId}
-                    helpText="Which location does this zone serve?"
-                    requiredIndicator
-                  />
-
-                  <Select
-                    label="Zone Type"
-                    name="type"
-                    options={typeOptions}
-                    value={type}
-                    onChange={setType}
-                    helpText="How do you want to define this service area?"
+                    helpText="Distance from the location in kilometers."
                     requiredIndicator
                   />
                 </BlockStack>
               </Card>
+            </Layout.AnnotatedSection>
+          )}
 
-              {/* Conditional fields based on zone type */}
-              {type === "postcode_list" && (
-                <Card>
-                  <BlockStack gap="400">
-                    <div>
-                      <Text as="h3" variant="headingMd">
-                        Postcode List
-                      </Text>
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        Enter specific postcodes separated by commas
-                      </Text>
-                    </div>
-                    <TextField
-                      label="Postcodes"
-                      name="postcodes"
-                      value={postcodes}
-                      onChange={setPostcodes}
-                      placeholder="e.g., 2000, 2001, 2010, 2060"
-                      multiline={3}
-                      autoComplete="off"
-                      helpText="Separate postcodes with commas"
-                      requiredIndicator
-                    />
-                  </BlockStack>
-                </Card>
-              )}
-
-              {type === "postcode_range" && (
-                <Card>
-                  <BlockStack gap="400">
-                    <div>
-                      <Text as="h3" variant="headingMd">
-                        Postcode Range
-                      </Text>
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        Define a range of postcodes (inclusive)
-                      </Text>
-                    </div>
-                    <InlineStack gap="400">
-                      <div style={{ flex: 1 }}>
-                        <TextField
-                          label="Start Postcode"
-                          name="rangeStart"
-                          value={rangeStart}
-                          onChange={setRangeStart}
-                          placeholder="e.g., 2000"
-                          autoComplete="off"
-                          requiredIndicator
-                        />
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <TextField
-                          label="End Postcode"
-                          name="rangeEnd"
-                          value={rangeEnd}
-                          onChange={setRangeEnd}
-                          placeholder="e.g., 2100"
-                          autoComplete="off"
-                          requiredIndicator
-                        />
-                      </div>
-                    </InlineStack>
-                  </BlockStack>
-                </Card>
-              )}
-
-              {type === "radius" && (
-                <Card>
-                  <BlockStack gap="400">
-                    <div>
-                      <Text as="h3" variant="headingMd">
-                        Radius Zone
-                      </Text>
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        Serve all addresses within a certain distance from the location
-                      </Text>
-                    </div>
-
-                    {showRadiusWarning && (
-                      <Banner tone="warning">
-                        The selected location doesn't have coordinates set. Please edit
-                        the location and add latitude/longitude to use radius-based zones.
-                      </Banner>
-                    )}
-
-                    <TextField
-                      label="Radius (km)"
-                      name="radiusKm"
-                      value={radiusKm}
-                      onChange={setRadiusKm}
-                      type="number"
-                      step={0.1}
-                      min={0}
-                      placeholder="e.g., 10"
-                      autoComplete="off"
-                      helpText="Distance from the location in kilometers"
-                      requiredIndicator
-                    />
-                  </BlockStack>
-                </Card>
-              )}
-
-              <Card>
+          <Layout.AnnotatedSection
+            title="Activation"
+            description="Only active zones appear in the cart-block for customers."
+          >
+            <Card>
+              <BlockStack gap="400">
                 <Checkbox
                   label="Active"
                   checked={isActive}
                   onChange={setIsActive}
-                  helpText="Only active zones are shown to customers"
+                  helpText="Only active zones are shown to customers."
                 />
                 <input
                   type="hidden"
                   name="isActive"
                   value={isActive.toString()}
                 />
-              </Card>
-
-              <InlineStack align="end" gap="200">
-                <Button onClick={() => navigate("/app/zones")}>Cancel</Button>
-                <Button
-                  variant="primary"
-                  submit
-                  loading={isLoading}
-                  disabled={isLoading || locations.length === 0}
-                >
-                  Create Zone
-                </Button>
-              </InlineStack>
-            </FormLayout>
-          </Form>
-        </Layout.Section>
+                <InlineStack align="end" gap="200">
+                  <Button onClick={() => navigate("/app/zones")}>Cancel</Button>
+                  <Button
+                    variant="primary"
+                    submit
+                    loading={isLoading}
+                    disabled={isLoading || locations.length === 0}
+                  >
+                    Create zone
+                  </Button>
+                </InlineStack>
+              </BlockStack>
+            </Card>
+          </Layout.AnnotatedSection>
+        </Form>
       </Layout>
     </Page>
   );

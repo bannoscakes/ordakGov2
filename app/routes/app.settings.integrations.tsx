@@ -42,15 +42,12 @@ export default function SettingsIntegrations() {
       backAction={{ content: "Settings", url: "/app/settings" }}
     >
       <Layout>
-        <Layout.Section>
+        <Layout.AnnotatedSection
+          title="Shopify Functions"
+          description="Three Functions enforce scheduling at Shopify's checkout layer. Each install route is idempotent."
+        >
           <Card>
             <BlockStack gap="400">
-              <Text as="h2" variant="headingMd">Shopify Functions</Text>
-              <Text as="p" tone="subdued" variant="bodySm">
-                Three Functions enforce scheduling at Shopify's checkout layer. Each install
-                route is idempotent — re-running it just confirms or re-enables the install.
-              </Text>
-
               <InstallRow
                 label="Carrier Service"
                 description="Returns the delivery rate at checkout (zone basePrice + slot priceAdjustment)."
@@ -75,13 +72,16 @@ export default function SettingsIntegrations() {
                   install row can come back. */}
             </BlockStack>
           </Card>
-        </Layout.Section>
+        </Layout.AnnotatedSection>
 
-        <Layout.Section>
+        <Layout.AnnotatedSection
+          title="Webhook destinations"
+          description="Push order events to external systems like delivery routing or ERP."
+        >
           <Card>
             <BlockStack gap="300">
               <InlineStack align="space-between" blockAlign="center">
-                <Text as="h2" variant="headingMd">Webhook destinations</Text>
+                <Text as="p" fontWeight="semibold">Configured destinations</Text>
                 <Badge tone={webhookDestinationCount > 0 ? "success" : undefined}>
                   {webhookDestinationCount > 0
                     ? `${webhookDestinationCount} configured`
@@ -89,10 +89,9 @@ export default function SettingsIntegrations() {
                 </Badge>
               </InlineStack>
               <Text as="p" tone="subdued" variant="bodySm">
-                Push order/scheduling events to external systems (your delivery routing platform,
-                ERP, manufacturing pipeline). Each destination receives signed POST requests for
-                matching events; failures are tracked per destination so a broken receiver
-                surfaces here, not in the merchant's downstream pipeline.
+                Each destination receives signed POST requests for matching events. Failures are
+                tracked per destination so a broken receiver surfaces here, not silently in your
+                downstream pipeline.
               </Text>
               <InlineStack gap="200">
                 <Button onClick={() => navigate("/app/settings/webhook-destinations")}>
@@ -101,22 +100,24 @@ export default function SettingsIntegrations() {
               </InlineStack>
             </BlockStack>
           </Card>
-        </Layout.Section>
+        </Layout.AnnotatedSection>
 
-        <Layout.Section>
+        <Layout.AnnotatedSection
+          title="Webhook subscriptions"
+          description="Re-register Shopify → Ordak Go webhooks if delivery stopped firing."
+        >
           <Card>
             <BlockStack gap="300">
-              <Text as="h2" variant="headingMd">Webhook subscriptions (Shopify → Ordak Go)</Text>
               <Text as="p" tone="subdued" variant="bodySm">
-                Re-register Shopify webhooks if you've added new event topics or the delivery
-                stopped firing. Idempotent.
+                Idempotent. Run this if you've added new event topics or webhook delivery has
+                stopped firing.
               </Text>
               <InlineStack>
                 <Button onClick={() => navigate("/app/install-webhooks")}>Re-register webhooks</Button>
               </InlineStack>
             </BlockStack>
           </Card>
-        </Layout.Section>
+        </Layout.AnnotatedSection>
       </Layout>
     </Page>
   );
