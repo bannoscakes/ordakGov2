@@ -235,7 +235,22 @@ export function SlotsEditor({ variant, templatesByDay, saveIntent, copyIntent }:
   const totalRows = rowsByDay.reduce((n, d) => n + d.length, 0);
 
   return (
-    <BlockStack gap="400">
+    <div className="ordak-slots-editor">
+      <BlockStack gap="400">
+      {/* Hide browser-native spinner arrows on number inputs inside the slot
+          editor. They eat ~20 px per column for no real value — typing is
+          faster than clicking the arrows, and we control min/max via Polaris.
+          Scoped with a class so it doesn't affect number inputs elsewhere. */}
+      <style>{`
+        .ordak-slots-editor input[type="number"]::-webkit-inner-spin-button,
+        .ordak-slots-editor input[type="number"]::-webkit-outer-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
+        .ordak-slots-editor input[type="number"] {
+          -moz-appearance: textfield;
+        }
+      `}</style>
       <Card>
         <BlockStack gap="300">
           <Text as="h2" variant="headingMd">{copy.header}</Text>
@@ -286,6 +301,7 @@ export function SlotsEditor({ variant, templatesByDay, saveIntent, copyIntent }:
         </BlockStack>
       </Card>
     </BlockStack>
+    </div>
   );
 }
 
