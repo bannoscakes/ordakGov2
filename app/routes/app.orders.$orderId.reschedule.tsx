@@ -26,6 +26,7 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { logger } from "../utils/logger.server";
 import { isSlotDateBlackedOut } from "../services/slot-blackout";
+import { isSlotWithinLeadTime } from "../services/slot-leadtime.server";
 import {
   writeEventLogTx,
   dispatchEventLog,
@@ -81,12 +82,22 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       date: { gte: today, lte: horizon },
     },
     include: {
-      location: { select: { id: true, name: true, blackoutDates: true } },
+      location: {
+        select: {
+          id: true,
+          name: true,
+          timezone: true,
+          blackoutDates: true,
+          leadTimeHours: true,
+          leadTimeDays: true,
+        },
+      },
       zone: { select: { name: true } },
     },
     orderBy: [{ date: "asc" }, { timeStart: "asc" }],
   });
 
+  const rescheduleNow = new Date();
   const slots = candidateSlots
     // Hide blacked-out dates from the reschedule picker. Keep the current
     // slot visible even if its date got added to the blackout list after
@@ -97,6 +108,28 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         s.id === orderLink.slotId ||
         !isSlotDateBlackedOut(s.date, s.location.blackoutDates),
     )
+    // Hide slots inside the location's prep-time lead window, with the
+    // same "current slot stays visible" carve-out. Fail open on bad tz
+    // (matches storefront and carrier-service policy).
+    .filter((s) => {
+      if (s.id === orderLink.slotId) return true;
+      try {
+        return !isSlotWithinLeadTime(
+          s,
+          rescheduleNow,
+          s.location.timezone,
+          s.location.leadTimeHours,
+          s.location.leadTimeDays,
+        );
+      } catch (err) {
+        logger.warn("Reschedule loader: lead-time check failed — keeping slot visible", {
+          slotId: s.id,
+          locationTimezone: s.location.timezone,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        return true;
+      }
+    })
     .filter((s) => s.id === orderLink.slotId || s.booked < s.capacity)
     .map((s) => ({
       id: s.id,
@@ -191,6 +224,33 @@ export async function action({ request, params }: ActionFunctionArgs) {
         { ok: false, error: "That date is blocked at this location. Pick a different date." },
         { status: 400 },
       );
+    }
+    try {
+      if (
+        isSlotWithinLeadTime(
+          newSlot,
+          new Date(),
+          newSlot.location.timezone,
+          newSlot.location.leadTimeHours,
+          newSlot.location.leadTimeDays,
+        )
+      ) {
+        return json<ActionResult>(
+          {
+            ok: false,
+            error: "That slot starts inside the location's prep-time lead window.",
+          },
+          { status: 400 },
+        );
+      }
+    } catch (err) {
+      // Bad tz — log and fall through (fail open). The carrier-service
+      // gate at checkout will catch the same condition if it matters.
+      logger.warn("Reschedule action: lead-time check failed — allowing reschedule", {
+        slotId: newSlot.id,
+        locationTimezone: newSlot.location.timezone,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
     if (newSlot.booked >= newSlot.capacity) {
       return json<ActionResult>({ ok: false, error: "Slot is fully booked" }, { status: 400 });

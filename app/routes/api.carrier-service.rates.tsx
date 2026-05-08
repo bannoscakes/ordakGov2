@@ -18,6 +18,7 @@ import { logger } from "../utils/logger.server";
 import { postcodeMatchesZone } from "../utils/postcode-match.server";
 import { isSlotCutoffPassed } from "../services/slot-cutoff.server";
 import { isSlotDateBlackedOut } from "../services/slot-blackout";
+import { isSlotWithinLeadTime } from "../services/slot-leadtime.server";
 
 interface RateRequestItem {
   name?: string;
@@ -143,12 +144,28 @@ export async function action({ request }: ActionFunctionArgs) {
     // _slot_id. Per-branch fulfillmentType + zone/location guards apply
     // below. Pull the location's timezone for the cutoff check.
     let selectedSlot:
-      | (Slot & { location: { timezone: string; blackoutDates: Date[] } })
+      | (Slot & {
+          location: {
+            timezone: string;
+            blackoutDates: Date[];
+            leadTimeHours: number | null;
+            leadTimeDays: number | null;
+          };
+        })
       | null = null;
     if (requestedSlotId) {
       selectedSlot = await prisma.slot.findFirst({
         where: { id: requestedSlotId, location: { shopId: shop.id } },
-        include: { location: { select: { timezone: true, blackoutDates: true } } },
+        include: {
+          location: {
+            select: {
+              timezone: true,
+              blackoutDates: true,
+              leadTimeHours: true,
+              leadTimeDays: true,
+            },
+          },
+        },
       });
       if (!selectedSlot) {
         logger.warn("Carrier service: requested slot not found in shop", {
@@ -172,6 +189,38 @@ export async function action({ request }: ActionFunctionArgs) {
         slotDate: selectedSlot.date.toISOString().slice(0, 10),
       });
       return json({ rates: [] });
+    }
+
+    // Defense-in-depth lead-time gate. Same fail-open policy as cutoff:
+    // bad tz throws, we warn and let the rate compute rather than block
+    // checkout for a tz typo.
+    if (selectedSlot) {
+      let withinLeadTime = false;
+      try {
+        withinLeadTime = isSlotWithinLeadTime(
+          selectedSlot,
+          new Date(),
+          selectedSlot.location.timezone,
+          selectedSlot.location.leadTimeHours,
+          selectedSlot.location.leadTimeDays,
+        );
+      } catch (err) {
+        logger.warn("Carrier service: lead-time check failed — allowing rate", {
+          shopifyDomain,
+          slotId: selectedSlot.id,
+          locationTimezone: selectedSlot.location.timezone,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+      if (withinLeadTime) {
+        logger.warn("Carrier service: requested slot inside prep-time lead window", {
+          shopifyDomain,
+          slotId: selectedSlot.id,
+          leadTimeHours: selectedSlot.location.leadTimeHours,
+          leadTimeDays: selectedSlot.location.leadTimeDays,
+        });
+        return json({ rates: [] });
+      }
     }
 
     // Defense-in-depth cutoff gate. The slot loader filters at cart-time, but

@@ -104,6 +104,14 @@ model Location {
   // Default empty so existing locations remain valid post-migration.
   blackoutDates     DateTime[] @default([])
 
+  // Per-location lead time. Effective lead time = (leadTimeDays ?? 0) * 24
+  // + (leadTimeHours ?? 0) hours. The slot loader filters out any slot
+  // whose start moment (date + timeStart, interpreted in the location's
+  // timezone) falls within `now + effectiveLeadTime`. Both nullable so
+  // existing locations remain valid post-migration; null is treated as 0.
+  leadTimeHours     Int?
+  leadTimeDays      Int?
+
   zones             Zone[]
   slots             Slot[]
   slotTemplates     SlotTemplate[]
