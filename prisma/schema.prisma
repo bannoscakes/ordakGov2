@@ -96,6 +96,14 @@ model Location {
   supportsDelivery  Boolean  @default(true)
   supportsPickup    Boolean  @default(true)
 
+  // Per-location blackout dates. Each entry is a UTC-midnight DateTime
+  // representing a single calendar date the location can't fulfill orders
+  // (holidays, maintenance, one-off closures). The slot loader filters
+  // out any slot whose `slot.date` matches a date in this array, so the
+  // merchant doesn't have to deactivate dozens of slots one by one.
+  // Default empty so existing locations remain valid post-migration.
+  blackoutDates     DateTime[] @default([])
+
   zones             Zone[]
   slots             Slot[]
   slotTemplates     SlotTemplate[]

@@ -17,6 +17,7 @@ import prisma from "../db.server";
 import { logger } from "../utils/logger.server";
 import { postcodeMatchesZone } from "../utils/postcode-match.server";
 import { isSlotCutoffPassed } from "../services/slot-cutoff.server";
+import { isSlotDateBlackedOut } from "../services/slot-blackout";
 
 interface RateRequestItem {
   name?: string;
@@ -142,12 +143,12 @@ export async function action({ request }: ActionFunctionArgs) {
     // _slot_id. Per-branch fulfillmentType + zone/location guards apply
     // below. Pull the location's timezone for the cutoff check.
     let selectedSlot:
-      | (Slot & { location: { timezone: string } })
+      | (Slot & { location: { timezone: string; blackoutDates: Date[] } })
       | null = null;
     if (requestedSlotId) {
       selectedSlot = await prisma.slot.findFirst({
         where: { id: requestedSlotId, location: { shopId: shop.id } },
-        include: { location: { select: { timezone: true } } },
+        include: { location: { select: { timezone: true, blackoutDates: true } } },
       });
       if (!selectedSlot) {
         logger.warn("Carrier service: requested slot not found in shop", {
@@ -157,6 +158,20 @@ export async function action({ request }: ActionFunctionArgs) {
       } else {
         selectedSlotForLog = selectedSlot;
       }
+    }
+
+    // Defense-in-depth blackout gate. The slot loader already drops
+    // blacked-out dates at cart-time, but the merchant might add a date
+    // to the blackout list while a customer's cart is open. Returning
+    // empty rates here collapses checkout the same way the loader's
+    // empty result does at cart-time.
+    if (selectedSlot && isSlotDateBlackedOut(selectedSlot.date, selectedSlot.location.blackoutDates)) {
+      logger.warn("Carrier service: requested slot falls on a blackout date", {
+        shopifyDomain,
+        slotId: selectedSlot.id,
+        slotDate: selectedSlot.date.toISOString().slice(0, 10),
+      });
+      return json({ rates: [] });
     }
 
     // Defense-in-depth cutoff gate. The slot loader filters at cart-time, but
