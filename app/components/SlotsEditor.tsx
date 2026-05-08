@@ -363,9 +363,9 @@ function SlotRowEditor({
   // width and gives number columns a floor + room to grow.
   //
   // Total minimum at narrow card widths:
-  //   115 + 115 + 80 + 100 + 80 + ~75 (badge) + ~80 (remove) + 12*6 (gaps) ≈ 717 px
-  // which fits inside the standard Polaris Page card width (~720-760 px in
-  // the embedded admin iframe). At wider widths the 1fr columns grow.
+  //   100 + 100 + 75 + 95 + 75 + ~70 (badge.small) + ~32 (icon-only remove) + 8*6 (gaps) ≈ 595 px
+  // Comfortably fits inside the standard Polaris Page card width in the
+  // embedded admin iframe. At wider widths the 1fr columns grow.
   return (
     <Card>
       <div
@@ -373,9 +373,9 @@ function SlotRowEditor({
           display: "grid",
           gridTemplateColumns:
             showPriceAdjustment
-              ? "115px 115px minmax(80px,1fr) minmax(100px,1fr) minmax(80px,1fr) auto auto"
-              : "115px 115px minmax(80px,1fr) minmax(80px,1fr) auto auto",
-          gap: "12px",
+              ? "100px 100px minmax(75px,1fr) minmax(95px,1fr) minmax(75px,1fr) auto auto"
+              : "100px 100px minmax(75px,1fr) minmax(75px,1fr) auto auto",
+          gap: "8px",
           alignItems: "end",
         }}
       >
@@ -430,9 +430,11 @@ function SlotRowEditor({
           selectTextOnFocus
         />
         <div style={{ paddingBottom: 4 }}>
-          <Badge tone={row.id ? "success" : undefined}>{row.id ? "Saved" : "New"}</Badge>
+          <Badge tone={row.id ? "success" : undefined} size="small">{row.id ? "Saved" : "New"}</Badge>
         </div>
-        <Button onClick={onRemove} tone="critical">Remove</Button>
+        <div style={{ paddingBottom: 4 }}>
+          <Button onClick={onRemove} tone="critical" size="slim" accessibilityLabel="Remove slot">✕</Button>
+        </div>
       </div>
     </Card>
   );
