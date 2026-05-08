@@ -378,12 +378,12 @@ function SlotRowEditor({
   // React state was correct. The grid below pins time columns to a fixed
   // width and gives number columns a floor + room to grow.
   //
-  // Total minimum at narrow card widths:
-  //   100 + 100 + 100 + 120 + 105 + ~70 (badge.small) + ~32 (icon-only remove) + 8*6 (gaps) ≈ 675 px
-  // Browser-native spinner arrows on type="number" inputs eat ~20 px of
-  // visible typing area, so 4-character values like "5.75" or "1000" need
-  // at least ~100 px of input width to render fully. Floors below give
-  // enough room for the worst-case typed value plus arrows.
+  // Total minimum at narrow card widths (with spinner arrows hidden via the
+  // .ordak-slots-editor scoped CSS in the parent component):
+  //   100 + 100 + 80 + 95 + 80 + ~70 (badge.small) + ~32 (icon-only remove) + 8*6 (gaps) ≈ 605 px
+  // Comfortable fit inside the standard Polaris Page card width even on
+  // narrower viewports. At wider widths the 1fr columns grow to use the
+  // available space.
   return (
     <Card>
       <div
@@ -391,8 +391,8 @@ function SlotRowEditor({
           display: "grid",
           gridTemplateColumns:
             showPriceAdjustment
-              ? "100px 100px minmax(100px,1fr) minmax(120px,1fr) minmax(105px,1fr) auto auto"
-              : "100px 100px minmax(100px,1fr) minmax(105px,1fr) auto auto",
+              ? "100px 100px minmax(80px,1fr) minmax(95px,1fr) minmax(80px,1fr) auto auto"
+              : "100px 100px minmax(80px,1fr) minmax(80px,1fr) auto auto",
           gap: "8px",
           alignItems: "end",
         }}
@@ -423,7 +423,7 @@ function SlotRowEditor({
         />
         {showPriceAdjustment && (
           <TextField
-            label="+ price (AUD)"
+            label="Price"
             value={String(row.priceAdjustment)}
             onChange={(v) => onChange({ priceAdjustment: parseFloat(v) || 0 })}
             type="number"
@@ -436,7 +436,7 @@ function SlotRowEditor({
           />
         )}
         <TextField
-          label="Cutoff (hrs)"
+          label="Cutoff"
           value={cutoffMinutesToHoursInput(row.cutoffOffsetMinutes)}
           onChange={(v) => onChange({ cutoffOffsetMinutes: hoursInputToCutoffMinutes(v) })}
           type="number"
