@@ -18,7 +18,7 @@ import {
   Text,
   Icon,
 } from "@shopify/polaris";
-import { PlusIcon, EditIcon, DeleteIcon } from "@shopify/polaris-icons";
+import { PlusIcon, EditIcon, DeleteIcon, DeliveryIcon, StoreIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { useState } from "react";
@@ -62,8 +62,12 @@ export default function LocationsIndex() {
     location.city || "-",
     location.postalCode || "-",
     <InlineStack gap="200" key={location.id}>
-      {location.supportsDelivery && <Badge tone="info">Delivery</Badge>}
-      {location.supportsPickup && <Badge tone="success">Pickup</Badge>}
+      {location.supportsDelivery && (
+        <Badge tone="info" icon={DeliveryIcon}>Delivery</Badge>
+      )}
+      {location.supportsPickup && (
+        <Badge tone="success" icon={StoreIcon}>Pickup</Badge>
+      )}
     </InlineStack>,
     <Badge tone={location.isActive ? "success" : "critical"} key={location.id}>
       {location.isActive ? "Active" : "Inactive"}
@@ -179,7 +183,7 @@ export default function LocationsIndex() {
         <Layout.Section variant="oneThird">
           <Card>
             <Text as="h2" variant="headingMd">
-              Quick Stats
+              Quick stats
             </Text>
             <div style={{ marginTop: "12px" }}>
               <Text as="p">
