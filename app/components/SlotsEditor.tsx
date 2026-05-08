@@ -23,6 +23,9 @@ export type SlotTemplateRow = {
   timeEnd: string;
   capacity: number;
   priceAdjustment: number;
+  // Storage is minutes (NULL = no cutoff). The editor input is in hours
+  // (decimal, so 0.5 = 30 min) but the row state mirrors the storage shape.
+  cutoffOffsetMinutes: number | null;
   isActive: boolean;
 };
 
@@ -32,6 +35,7 @@ export type SlotsEditorTemplate = {
   timeEnd: string;
   capacity: number;
   priceAdjustment: string;
+  cutoffOffsetMinutes: number | null;
   isActive: boolean;
 };
 
@@ -60,7 +64,7 @@ const COPY: Record<SlotsEditorVariant, {
     emptyAllText:
       "No slots configured yet. Pick a day below and add time windows. Slots " +
       "materialize automatically for the next 14 days when you save.",
-    defaultRow: () => ({ timeStart: "09:00", timeEnd: "11:00", capacity: 10, priceAdjustment: 0 }),
+    defaultRow: () => ({ timeStart: "09:00", timeEnd: "11:00", capacity: 10, priceAdjustment: 0, cutoffOffsetMinutes: null }),
     showPriceAdjustment: true,
   },
   pickup: {
@@ -74,7 +78,7 @@ const COPY: Record<SlotsEditorVariant, {
       "No pickup hours configured yet. Pick a day below and add a window — " +
       "most stores use one full-day window like 09:00–17:00. Slots materialize " +
       "automatically for the next 14 days when you save.",
-    defaultRow: () => ({ timeStart: "09:00", timeEnd: "17:00", capacity: 20, priceAdjustment: 0 }),
+    defaultRow: () => ({ timeStart: "09:00", timeEnd: "17:00", capacity: 20, priceAdjustment: 0, cutoffOffsetMinutes: null }),
     showPriceAdjustment: false,
   },
 };
@@ -100,6 +104,7 @@ export function SlotsEditor({ variant, templatesByDay, saveIntent, copyIntent }:
         timeEnd: t.timeEnd,
         capacity: t.capacity,
         priceAdjustment: parseFloat(t.priceAdjustment),
+        cutoffOffsetMinutes: t.cutoffOffsetMinutes,
         isActive: t.isActive,
       })),
     ),
@@ -114,6 +119,7 @@ export function SlotsEditor({ variant, templatesByDay, saveIntent, copyIntent }:
           timeEnd: t.timeEnd,
           capacity: t.capacity,
           priceAdjustment: parseFloat(t.priceAdjustment),
+          cutoffOffsetMinutes: t.cutoffOffsetMinutes,
           isActive: t.isActive,
         })),
       ),
@@ -147,6 +153,7 @@ export function SlotsEditor({ variant, templatesByDay, saveIntent, copyIntent }:
         timeEnd,
         capacity: preset.capacity,
         priceAdjustment: preset.priceAdjustment,
+        cutoffOffsetMinutes: preset.cutoffOffsetMinutes,
         isActive: true,
       });
       return next;
@@ -181,6 +188,7 @@ export function SlotsEditor({ variant, templatesByDay, saveIntent, copyIntent }:
           timeEnd: r.timeEnd,
           capacity: r.capacity,
           priceAdjustment: r.priceAdjustment,
+          cutoffOffsetMinutes: r.cutoffOffsetMinutes,
           isActive: r.isActive,
         })),
       ),
@@ -364,6 +372,20 @@ function SlotRowEditor({
             />
           </div>
         )}
+        <div style={{ flex: 1 }}>
+          <TextField
+            label="Cutoff (hours)"
+            helpText="Hide N hours before start. 0.5 = 30 min. Blank = no cutoff."
+            value={cutoffMinutesToHoursInput(row.cutoffOffsetMinutes)}
+            onChange={(v) => onChange({ cutoffOffsetMinutes: hoursInputToCutoffMinutes(v) })}
+            type="number"
+            step={0.25}
+            min={0}
+            max={24}
+            placeholder="—"
+            autoComplete="off"
+          />
+        </div>
         <div style={{ paddingBottom: 4 }}>
           <Badge tone={row.id ? "success" : undefined}>{row.id ? "Saved" : "New"}</Badge>
         </div>
@@ -445,4 +467,23 @@ function addHours(time: string, hours: number): string {
   const newH = Math.min(23, Math.floor(total / 60));
   const newM = total % 60;
   return `${String(newH).padStart(2, "0")}:${String(newM).padStart(2, "0")}`;
+}
+
+// Storage is minutes; the input is hours-with-decimals so merchants type
+// "4" for 4h instead of "240" for 240 min. Round-tripping through hours
+// also keeps trailing zeros out of the rendered value.
+function cutoffMinutesToHoursInput(minutes: number | null): string {
+  if (minutes == null) return "";
+  return (minutes / 60).toString();
+}
+
+function hoursInputToCutoffMinutes(input: string): number | null {
+  const trimmed = input.trim();
+  if (trimmed === "") return null;
+  const hours = parseFloat(trimmed);
+  if (!Number.isFinite(hours) || hours < 0) return null;
+  // Cap at 24h (1440 min). Anything longer is almost certainly a typo —
+  // the merchant probably meant "0.X hours" or hit an extra digit.
+  const minutes = Math.min(1440, Math.round(hours * 60));
+  return minutes;
 }

@@ -9,6 +9,7 @@ import prisma from "../db.server";
 import { logger } from "../utils/logger.server";
 import { scoreSlots } from "../services";
 import { postcodeMatchesZone } from "../utils/postcode-match.server";
+import { isSlotCutoffPassed } from "../services/slot-cutoff.server";
 import type {
   SlotRecommendationInput,
   CustomerContext,
@@ -56,6 +57,7 @@ export async function action({ request }: ActionFunctionArgs) {
     const shop = await prisma.shop.findUnique({
       where: { shopifyDomain: session?.shop || "" },
     });
+
 
     if (!shop) {
       return json({ error: "Shop not found" }, { status: 404 });
@@ -105,7 +107,7 @@ export async function action({ request }: ActionFunctionArgs) {
       }
     }
 
-    const slots = await prisma.slot.findMany({
+    const candidateSlots = await prisma.slot.findMany({
       where: {
         date: { gte: startDate, lte: endDate },
         fulfillmentType: body.fulfillmentType,
@@ -116,26 +118,50 @@ export async function action({ request }: ActionFunctionArgs) {
       },
       include: {
         location: {
-          select: { id: true, name: true, latitude: true, longitude: true },
+          select: { id: true, name: true, latitude: true, longitude: true, timezone: true },
         },
       },
       orderBy: { date: "asc" },
     });
 
+    // Cutoff filter — drop slots whose per-slot cutoff has passed in the
+    // location's local clock. Done in JS post-query because date+timeStart+tz
+    // arithmetic is awkward in pure Prisma `where`. N is small (date-bounded
+    // result set). Per-location timezone is used (not shop-level) because
+    // multi-location merchants can ship from stores in different time zones.
+    const now = new Date();
+    const slots = candidateSlots.filter(
+      (s) => !isSlotCutoffPassed(s, now, s.location.timezone),
+    );
+    const cutoffSuppressedCount = candidateSlots.length - slots.length;
+
     if (slots.length === 0) {
       // Distinct from "no zone matches" — here a zone DID match but no live
-      // Slot rows exist in the requested date range. Most likely cause:
-      // merchant configured the zone but hasn't run the slot generator
-      // (D3 Time slots & limits) for any day yet. Logging at info so the
-      // merchant can audit "service available but nothing bookable" cases.
-      logger.info("Slots API: zone matched but no available slots", {
-        shopDomain: session?.shop,
-        postcode: body.postcode,
-        zoneIdFilter,
-        fulfillmentType: body.fulfillmentType,
-        startDate: startDate.toISOString().slice(0, 10),
-        endDate: endDate.toISOString().slice(0, 10),
-      });
+      // Slot rows exist in the requested date range. Two sub-cases:
+      //  - Nothing was even materialized for the range (merchant hasn't
+      //    configured templates yet).
+      //  - Slots existed but every one had its per-slot cutoff pass.
+      // Log them separately so the merchant can audit each cause.
+      if (cutoffSuppressedCount > 0 && candidateSlots.length === cutoffSuppressedCount) {
+        logger.info("Slots API: all slots in range past cutoff", {
+          shopDomain: session?.shop,
+          postcode: body.postcode,
+          zoneIdFilter,
+          fulfillmentType: body.fulfillmentType,
+          startDate: startDate.toISOString().slice(0, 10),
+          endDate: endDate.toISOString().slice(0, 10),
+          cutoffSuppressedCount,
+        });
+      } else {
+        logger.info("Slots API: zone matched but no available slots", {
+          shopDomain: session?.shop,
+          postcode: body.postcode,
+          zoneIdFilter,
+          fulfillmentType: body.fulfillmentType,
+          startDate: startDate.toISOString().slice(0, 10),
+          endDate: endDate.toISOString().slice(0, 10),
+        });
+      }
       return json({
         slots: [],
         message: "No available slots found in the specified date range",
