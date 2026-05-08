@@ -363,9 +363,11 @@ function SlotRowEditor({
   // width and gives number columns a floor + room to grow.
   //
   // Total minimum at narrow card widths:
-  //   100 + 100 + 75 + 95 + 75 + ~70 (badge.small) + ~32 (icon-only remove) + 8*6 (gaps) ≈ 595 px
-  // Comfortably fits inside the standard Polaris Page card width in the
-  // embedded admin iframe. At wider widths the 1fr columns grow.
+  //   100 + 100 + 100 + 120 + 105 + ~70 (badge.small) + ~32 (icon-only remove) + 8*6 (gaps) ≈ 675 px
+  // Browser-native spinner arrows on type="number" inputs eat ~20 px of
+  // visible typing area, so 4-character values like "5.75" or "1000" need
+  // at least ~100 px of input width to render fully. Floors below give
+  // enough room for the worst-case typed value plus arrows.
   return (
     <Card>
       <div
@@ -373,8 +375,8 @@ function SlotRowEditor({
           display: "grid",
           gridTemplateColumns:
             showPriceAdjustment
-              ? "100px 100px minmax(75px,1fr) minmax(95px,1fr) minmax(75px,1fr) auto auto"
-              : "100px 100px minmax(75px,1fr) minmax(75px,1fr) auto auto",
+              ? "100px 100px minmax(100px,1fr) minmax(120px,1fr) minmax(105px,1fr) auto auto"
+              : "100px 100px minmax(100px,1fr) minmax(105px,1fr) auto auto",
           gap: "8px",
           alignItems: "end",
         }}
