@@ -4,6 +4,29 @@ This is the discipline framework for the ordakGov2 codebase. It exists because t
 
 Read this top-to-bottom once per session. Reference as needed.
 
+## Project status — **pre-production**
+
+**Read this first.** The gates below describe what we'll need *once Bannos and Flour Lane install Ordak Go via the unlisted App Store listing*. We are nowhere near that today. Until that install exists:
+
+- `ordakgo-v3` and `ordak-go-dev` are both **dev stores**. Bannos and Flour Lane do **not** have Ordak Go installed (verified 2026-05-06 from Partners screenshots).
+- "Production" in this repo means the Vercel deploy at `ordak-go.vercel.app` — used only by `ordakgo-v3` (a dev store).
+- **No merchants depend on uptime.** A regression on `main` affects exactly one dev store that the developer owns.
+
+So while we are pre-production, the practical workflow collapses to the same shape as any early-stage Vercel + Supabase + GitHub project:
+
+1. Branch off `Dev`.
+2. Push the branch. Vercel auto-deploys a preview (Pipeline A) and/or `npx shopify app deploy + release` pushes a draft to the dev store (Pipeline B).
+3. Look at the result on the dev store. Fix and re-push if it's broken.
+4. Open a PR when you're happy.
+5. Merge to `Dev`. Periodically promote `Dev → main`.
+6. If something breaks post-merge, revert (one click).
+
+**No pre-merge admin-form ceremony, no `shopify app dev` tunnel setup, no five-step verification audits unless the change is genuinely risky.** Unit tests + smoke scripts + diff review + a quick post-merge click-through is the gate. That's the same gate every other healthy pre-production project uses.
+
+The detailed Pipeline A/B rules below kick in **only** once the App Store unlisted listing is approved and Bannos / Flour Lane install via the listing — at that point real merchants depend on uptime, and the gates ratchet up.
+
+Reviewer note for future sessions: if you find yourself proposing a multi-step pre-merge verification harness for a small change in the current pre-production state, you're over-engineering. Default to merge-then-verify-on-prod with revert-as-undo.
+
 ## Two deploy pipelines
 
 The repo has two completely separate deploy paths. The workflow has to handle both, or "validated in dev → broken in prod" repeats.
