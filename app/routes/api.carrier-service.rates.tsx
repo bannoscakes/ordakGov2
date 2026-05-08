@@ -163,16 +163,36 @@ export async function action({ request }: ActionFunctionArgs) {
     // a customer can hold the cart open across the cutoff. Empty rates here
     // collapses checkout the same way a no-zone-match does. Per-location
     // timezone is used (matches the loader filter).
-    if (
-      selectedSlot &&
-      isSlotCutoffPassed(selectedSlot, new Date(), selectedSlot.location.timezone)
-    ) {
-      logger.warn("Carrier service: requested slot past cutoff", {
-        shopifyDomain,
-        slotId: selectedSlot.id,
-        cutoffOffsetMinutes: selectedSlot.cutoffOffsetMinutes,
-      });
-      return json({ rates: [] });
+    //
+    // If the location's tz is misconfigured the helper throws — log the
+    // error and skip the gate (allowing the rate to compute) rather than
+    // hard-blocking checkout for a tz typo. Failing-open here matches the
+    // loader's failing-open behavior and keeps tz misconfig observable in
+    // logs without nuking checkout.
+    if (selectedSlot) {
+      let cutoffPassed = false;
+      try {
+        cutoffPassed = isSlotCutoffPassed(
+          selectedSlot,
+          new Date(),
+          selectedSlot.location.timezone,
+        );
+      } catch (err) {
+        logger.warn("Carrier service: cutoff check failed — allowing rate", {
+          shopifyDomain,
+          slotId: selectedSlot.id,
+          locationTimezone: selectedSlot.location.timezone,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+      if (cutoffPassed) {
+        logger.warn("Carrier service: requested slot past cutoff", {
+          shopifyDomain,
+          slotId: selectedSlot.id,
+          cutoffOffsetMinutes: selectedSlot.cutoffOffsetMinutes,
+        });
+        return json({ rates: [] });
+      }
     }
 
     if (deliveryMethod === "pickup") {

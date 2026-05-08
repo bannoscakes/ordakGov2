@@ -129,10 +129,26 @@ export async function action({ request }: ActionFunctionArgs) {
     // arithmetic is awkward in pure Prisma `where`. N is small (date-bounded
     // result set). Per-location timezone is used (not shop-level) because
     // multi-location merchants can ship from stores in different time zones.
+    //
+    // If a Location has a misconfigured timezone (empty/invalid IANA),
+    // `isSlotCutoffPassed` throws — keep the slot visible and warn-log
+    // rather than silently emptying the storefront grid. One slot slipping
+    // its cutoff is a smaller harm than a customer seeing "no slots
+    // available" because the merchant typo'd their tz.
     const now = new Date();
-    const slots = candidateSlots.filter(
-      (s) => !isSlotCutoffPassed(s, now, s.location.timezone),
-    );
+    const slots = candidateSlots.filter((s) => {
+      try {
+        return !isSlotCutoffPassed(s, now, s.location.timezone);
+      } catch (err) {
+        logger.warn("Slots API: cutoff check failed for slot — keeping it visible", {
+          shopDomain: session?.shop,
+          slotId: s.id,
+          locationTimezone: s.location.timezone,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        return true;
+      }
+    });
     const cutoffSuppressedCount = candidateSlots.length - slots.length;
 
     if (slots.length === 0) {
