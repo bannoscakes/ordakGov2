@@ -23,8 +23,10 @@ interface RequestBody {
 }
 
 export async function action({ request }: ActionFunctionArgs) {
-  // Authenticate the request
-  await authenticate.public.appProxy(request);
+  // Authenticate the request — session.shop is the only trusted source of
+  // shop identity in here. body.shopifyDomain is replayed from session.shop
+  // by the proxy wrapper, but a direct caller could otherwise spoof it.
+  const { session } = await authenticate.public.appProxy(request);
 
   if (request.method !== "POST") {
     return json({ error: "Method not allowed" }, { status: 405 });
@@ -32,6 +34,16 @@ export async function action({ request }: ActionFunctionArgs) {
 
   try {
     const body: RequestBody = await request.json();
+
+    // Resolve shop row once so updateCustomerPreferences can scope writes
+    // by shopId (F6 fix). Without this, a redact for one shop could delete
+    // preferences belonging to another shop sharing the same customer email.
+    const shopRecord = session
+      ? await prisma.shop.findUnique({
+          where: { shopifyDomain: session.shop },
+          select: { id: true },
+        })
+      : null;
 
     // Validate required fields
     if (
@@ -112,12 +124,15 @@ export async function action({ request }: ActionFunctionArgs) {
       },
     });
 
-    // Update customer preferences if we have customer identifier
-    if (body.customerId || body.customerEmail) {
+    // Update customer preferences if we have customer identifier. Skip if
+    // we couldn't resolve the shop row — preferences are per-shop now and
+    // there's no safe shop to attribute the write to.
+    if ((body.customerId || body.customerEmail) && shopRecord) {
       const selectedDateTime = await getSelectedSlotDateTime(body.selected.id, body.selected.type);
 
       if (selectedDateTime) {
         await updateCustomerPreferences(
+          shopRecord.id,
           body.customerId,
           body.customerEmail,
           selectedDateTime,
@@ -175,9 +190,12 @@ async function getSelectedSlotDateTime(
 }
 
 /**
- * Update customer preferences based on selection
+ * Update customer preferences based on selection. Scoped by shopId so a
+ * customer who orders from multiple Ordak Go shops gets a separate
+ * preference profile per shop (F6 fix).
  */
 async function updateCustomerPreferences(
+  shopId: string,
   customerId: string | undefined,
   customerEmail: string | undefined,
   selectedDateTime: { day: string; time: string; locationId?: string },
@@ -186,9 +204,10 @@ async function updateCustomerPreferences(
 ): Promise<void> {
   if (!customerId && !customerEmail) return;
 
-  // Find or create customer preferences
+  // Find or create customer preferences scoped to this shop.
   let preferences = await prisma.customerPreferences.findFirst({
     where: {
+      shopId,
       OR: [
         { customerId: customerId },
         { customerEmail: customerEmail },
@@ -200,6 +219,7 @@ async function updateCustomerPreferences(
     // Create new preferences
     preferences = await prisma.customerPreferences.create({
       data: {
+        shopId,
         customerId,
         customerEmail,
         preferredDays: selectedDateTime.day ? [selectedDateTime.day] : [],
