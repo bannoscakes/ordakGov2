@@ -1,5 +1,7 @@
 # Ordak Postcode Eligibility Checker - Installation Guide
 
+> **Deprecated (2026-05-09).** This standalone widget targeted `/api/eligibility/check` directly, which is no longer publicly accessible — direct callers receive **HTTP 401** since the security audit fix that landed with this notice (audit finding F3). Use the **cart-block app embed** (the default storefront integration) instead. The cart-block performs the same eligibility check via `/apps/ordak-go/eligibility/check`, which authenticates via Shopify's app proxy. Existing installs of this standalone widget will stop receiving eligibility responses; replace them with the cart-block app embed in your theme editor.
+
 The Postcode Eligibility Checker allows customers to quickly check if their postcode is eligible for delivery and/or pickup services.
 
 ## Features

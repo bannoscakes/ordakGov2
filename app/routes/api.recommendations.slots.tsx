@@ -281,10 +281,13 @@ export async function action({ request }: ActionFunctionArgs) {
           }
         : undefined;
 
-    // Fetch customer preferences if we have an identifier
+    // Fetch customer preferences if we have an identifier. Scoped by shopId
+    // so preferences from another tenant can't influence this shop's
+    // recommendation scoring (F6 fix).
     if (customerContext && (body.customerId || body.customerEmail)) {
       const preferences = await prisma.customerPreferences.findFirst({
         where: {
+          shopId: shop.id,
           OR: [
             { customerId: body.customerId },
             { customerEmail: body.customerEmail },

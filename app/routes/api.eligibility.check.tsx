@@ -14,6 +14,7 @@
 
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
+import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { logger } from "../utils/logger.server";
 import { postcodeMatchesZone } from "../utils/postcode-match.server";
@@ -56,7 +57,25 @@ export async function action({ request }: ActionFunctionArgs) {
   // is built.
   let attemptedPostcode: string | undefined;
   let attemptedShopDomain: string | undefined;
-  // This is a public endpoint (app proxy), no authentication required
+
+  // F3 fix: this inner action is reachable directly at /api/eligibility/check
+  // because Remix exposes every file in app/routes/. Without the proxy
+  // auth gate here, anonymous callers could enumerate zone names, base
+  // prices, and location addresses across every installed shop. The
+  // proxy wrapper at apps.proxy.eligibility.check authenticates first;
+  // re-authenticate here so direct hits to the bare URL fail.
+  const { session } = await authenticate.public.appProxy(request);
+  if (!session) {
+    return json<EligibilityResponse>(
+      {
+        eligible: false,
+        locations: [],
+        services: { delivery: false, pickup: false },
+        message: "Unauthorized",
+      },
+      { status: 401, headers: getCorsHeaders(request) },
+    );
+  }
 
   try {
     // Validate request body with Zod
@@ -65,7 +84,12 @@ export async function action({ request }: ActionFunctionArgs) {
       return validation.error;
     }
 
-    const { postcode, fulfillmentType, shopDomain } = validation.data;
+    // shopDomain is pinned to session.shop — the body's value is replayed
+    // by appProxyAction from session.shop and ignored here so a direct
+    // caller can't impersonate another shop even if they somehow got a
+    // valid signature for shop A and supplied shopDomain=shop-B in body.
+    const { postcode, fulfillmentType } = validation.data;
+    const shopDomain = session.shop;
     attemptedPostcode = postcode;
     attemptedShopDomain = shopDomain;
 

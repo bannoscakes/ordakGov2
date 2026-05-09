@@ -143,7 +143,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
     // and the merchant has no standing to disclose preferences.
     const customerHasShopHistory = orderLinks.length > 0 || recommendationLogs.length > 0;
     const preferences = customerHasShopHistory
-      ? await prisma.customerPreferences.findMany({ where: { OR: emailOrId } })
+      ? await prisma.customerPreferences.findMany({
+          where: { shopId: shop.id, OR: emailOrId },
+        })
       : [];
 
     const result: ExportPayload = {

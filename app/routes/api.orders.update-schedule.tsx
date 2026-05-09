@@ -137,9 +137,17 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
 
-    // Find existing order link
-    const existingLink = await prisma.orderLink.findUnique({
-      where: { shopifyOrderId: orderId },
+    // Find existing order link, shop-scoped via slot.location.shopId.
+    // F5 fix: previously this was findUnique against the globally-unique
+    // shopifyOrderId, letting an admin of shop A pass shop B's order id
+    // and rewrite shop B's OrderLink (corrupting shop B's slot.booked,
+    // dispatching shop A's webhooks for shop B's order). Mirrors the
+    // gold-standard pattern at app.orders.$orderId.reschedule.tsx:191.
+    const existingLink = await prisma.orderLink.findFirst({
+      where: {
+        shopifyOrderId: orderId,
+        slot: { location: { shopId: shop.id } },
+      },
       include: {
         slot: true,
       },

@@ -1,6 +1,6 @@
 # PLAN — what's next for Ordak Go
 
-Last updated: 2026-05-07 (late session) — Phase 1 verification gate CLOSED with real test orders #1001 (delivery) + #1002 (pickup) on `ordakgo-v3`. Per-location pickup hours admin shipped in PR #95 (closes the slot-management gap the original Phase D missed — pickup is per-Location, not per-Zone). `ordak-go-38` released globally with the pickup-mode wording fix. Next gate is App Store listing assets (Phase 2 in `memory/next_steps_plan.md`).
+Last updated: 2026-05-09 — Phase 2 prep code-side complete (PRs #128 brand alignment + #129 ToS/rate-limit/listing copy/reviewer instructions). `ordak-go-44` released. Partners app icon (1200×1200) uploaded. Remaining gates are all manual: 3-6 screenshots @ 1600×900, 60-90s demo screencast, Partners "Free" pricing, carrier-service uninstall/reinstall smoke on `ordakgo-v3`.
 
 ## Where we are
 
@@ -212,7 +212,7 @@ The active plan supersedes Phase E below. See **`/Users/panospanayi/.claude/plan
 
 Locked decision: distribution mode is **public, unlisted**. Custom distribution does not span both stores on non-Plus plans. Functions activate automatically once App-Store-distributed.
 
-### Phase F status (2026-05-07)
+### Phase F status (2026-05-09)
 
 ✅ **Code-side App Store gates landed and held in production:**
 - Privacy policy at `/policies/privacy` with `panos@bannos.com.au` contact (PR #80)
@@ -229,17 +229,22 @@ Locked decision: distribution mode is **public, unlisted**. Custom distribution 
 - Cart-block drawer placement fixed for Horizon (PR #90, `ordak-go-37`) — scope-aware `findHostTarget` + 5 unit tests
 - Per-location pickup hours admin (PR #95, `ordak-go-38`) — closes the slot-management gap; new "Pickup hours" tab on `/app/locations/:id`, shared `SlotsEditor` component, smart wizard detour. See `memory/pickup_admin_per_location.md`.
 - Phase 1 verification gate CLOSED — real test orders #1001 + #1002 on `ordakgo-v3` (see `memory/next_steps_plan.md` for the evidence)
+- **Brand alignment (PR #128, `ordak-go-44`)** — cart-block default accent → Ordak orange (`#EB5E14`); dashboard welcome card shows the orange tile icon; Partners app icon (1200×1200) uploaded.
+- **Phase 2 prep (PR #129)** — public Terms of Service at `/policies/terms`; per shop+IP rate limiting on all 6 storefront `apps.proxy.*` routes (default 60 req/min, configurable via `RATE_LIMIT_MAX_PER_MINUTE`, returns 429 + Retry-After); `PRIVACY_POLICY.md` placeholder emails replaced; listing copy drafted at `docs/APP_STORE_LISTING.md`; reviewer instructions drafted at `docs/APP_STORE_REVIEWER_INSTRUCTIONS.md`.
+- **`npm audit` analysed** — 31-36 advisories all blocked by `@vercel/remix@2.16.7`'s strict peer dep on Remix 2.16.7. The critical advisory targets `createFileSessionStorage` which is dead code under our `PrismaSessionStorage`. Other advisories are build-time tooling. Full analysis in `SHOPIFY_APP_STORE_CHECKLIST.md` § "npm audit findings (2026-05-09 — analyzed)".
 
 ❌ **User-action items still outstanding for App Store submission (Phase 2):**
-- 5.3 App icon 1200×1200 PNG
 - 5.4 Screenshots (3–6 @ 1600×900) — capture from the new admin pages on `ordakgo-v3`
 - 5.4b Demo screencast (60–90s, English narration)
-- 5.5 Demo store reviewer instructions (use `ordakgo-v3.myshopify.com`, password `theuld`)
-- 5.6 Listing copy (intro/details/features) — Claude can draft, user approves
 - 5.6b Set listing pricing as "Free" in Partners
 - 5.8d Carrier-service re-registration test (uninstall+reinstall on `ordakgo-v3`) — destructive
 - 5.9 Stack-rot deferred items (Renovate config, quarterly cron) — mostly post-approval
 - 5.10 Final pre-submission smoke test on `ordakgo-v3`
+
+✅ **No-longer-blocking items (now drafted in repo):**
+- 5.3 App icon 1200×1200 PNG — uploaded to Partners by user 2026-05-09
+- 5.5 Demo store reviewer instructions — `docs/APP_STORE_REVIEWER_INSTRUCTIONS.md`
+- 5.6 Listing copy — `docs/APP_STORE_LISTING.md`
 
 ## Phase E · App Store readiness (legacy — superseded by Phase F)
 

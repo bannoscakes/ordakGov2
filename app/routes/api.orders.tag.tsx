@@ -12,7 +12,7 @@
  * }
  */
 
-import type { ActionFunctionArgs } from "@remix-run/node";
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
@@ -44,8 +44,15 @@ interface OrderTagResponse {
 
 export async function action({ request }: ActionFunctionArgs) {
   try {
-    // Authenticate the request (app proxy or admin)
+    // Authenticate the request (app proxy). 401 on direct hits to the
+    // bare /api/orders/tag URL.
     const { session } = await authenticate.public.appProxy(request);
+    if (!session) {
+      return json<OrderTagResponse>(
+        { success: false, error: "Unauthorized" },
+        { status: 401 },
+      );
+    }
 
     const body = await request.json();
     const {
@@ -69,9 +76,29 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
 
-    // Find the slot
-    const slot = await prisma.slot.findUnique({
-      where: { id: slotId },
+    // Resolve shop row up front so slot + orderLink lookups can be
+    // shop-scoped (F4a fix). Without this, an authenticated customer of
+    // shop A could pass slotId of shop B and create a cross-tenant
+    // booking — incrementing shop B's slot.booked, dispatching shop B's
+    // webhook destinations with shop A's order data, etc.
+    const shopRecord = await prisma.shop.findUnique({
+      where: { shopifyDomain: session.shop },
+      select: { id: true },
+    });
+    if (!shopRecord) {
+      return json<OrderTagResponse>(
+        { success: false, error: "Shop not found" },
+        { status: 404 },
+      );
+    }
+
+    // Find the slot — shop-scoped via location.shopId. findFirst returns
+    // null for slots that belong to another tenant.
+    const slot = await prisma.slot.findFirst({
+      where: {
+        id: slotId,
+        location: { shopId: shopRecord.id },
+      },
       include: {
         location: {
           select: {
@@ -95,9 +122,14 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
 
-    // Check if order already linked
-    const existingLink = await prisma.orderLink.findUnique({
-      where: { shopifyOrderId: orderId },
+    // Check if order already linked — shop-scoped so an order id that
+    // exists at another shop doesn't trigger a false "already linked"
+    // failure here.
+    const existingLink = await prisma.orderLink.findFirst({
+      where: {
+        shopifyOrderId: orderId,
+        slot: { location: { shopId: shopRecord.id } },
+      },
     });
 
     if (existingLink) {
@@ -177,8 +209,15 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 }
 
-// GET endpoint to retrieve order scheduling info
-export async function loader({ request }: ActionFunctionArgs) {
+// GET endpoint to retrieve order scheduling info. F4b fix: previously
+// this loader had zero authentication and trusted orderId from the
+// query string, returning the customer's pickup/delivery address and
+// scheduled time for any order across any shop. Now requires admin
+// session and shop-scopes the OrderLink lookup so admins can only see
+// their own shop's orders.
+export async function loader({ request }: LoaderFunctionArgs) {
+  const { session } = await authenticate.admin(request);
+
   try {
     const url = new URL(request.url);
     const orderId = url.searchParams.get("orderId");
@@ -190,8 +229,19 @@ export async function loader({ request }: ActionFunctionArgs) {
       );
     }
 
-    const orderLink = await prisma.orderLink.findUnique({
-      where: { shopifyOrderId: orderId },
+    const shop = await prisma.shop.findUnique({
+      where: { shopifyDomain: session.shop },
+      select: { id: true },
+    });
+    if (!shop) {
+      return json({ error: "Shop not found" }, { status: 404 });
+    }
+
+    const orderLink = await prisma.orderLink.findFirst({
+      where: {
+        shopifyOrderId: orderId,
+        slot: { location: { shopId: shop.id } },
+      },
       include: {
         slot: {
           include: {
@@ -228,7 +278,7 @@ export async function loader({ request }: ActionFunctionArgs) {
       createdAt: orderLink.createdAt,
     });
   } catch (error) {
-    console.error("Order lookup error:", error);
+    logger.error("Order lookup error", error);
     return json(
       { error: "Failed to retrieve order information" },
       { status: 500 }
