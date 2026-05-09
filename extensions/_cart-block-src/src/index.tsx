@@ -58,14 +58,27 @@ function readConfig(host: Element): BlockConfig | null {
 // Legacy accent some early installs grandfathered before PR #128 swapped the
 // brand color to orange. Liquid renders block.settings.accent_color verbatim,
 // so a stored `#1a73e8` keeps shipping even though the schema default is
-// now `#EB5E14`. Normalize to lowercase before comparing.
+// now `#EB5E14`.
+//
+// `getComputedStyle().getPropertyValue('--ordak-accent')` returns the raw
+// declared value of the custom property — that's `#1A73E8` when the value
+// was declared as a hex literal, but it may be `rgb(26, 115, 232)` if the
+// merchant's theme cascades the variable through another rule that
+// resolves to a `<color>` token. Both shapes are accepted here so the
+// substitution doesn't silently miss for those installs.
 const LEGACY_ACCENT = "#1a73e8";
 const BRAND_ACCENT = "#EB5E14";
+const LEGACY_ACCENT_FORMS = new Set([
+  LEGACY_ACCENT,
+  "rgb(26, 115, 232)",
+  "rgb(26,115,232)",
+]);
 
 function maybeOverrideLegacyAccent(host: Element) {
   if (!(host instanceof HTMLElement)) return;
-  const current = getComputedStyle(host).getPropertyValue("--ordak-accent").trim().toLowerCase();
-  if (current === LEGACY_ACCENT) {
+  const raw = getComputedStyle(host).getPropertyValue("--ordak-accent");
+  const current = raw.trim().toLowerCase();
+  if (LEGACY_ACCENT_FORMS.has(current)) {
     host.style.setProperty("--ordak-accent", BRAND_ACCENT);
   }
 }
@@ -242,7 +255,18 @@ function observeDrawer(host: Element, initialDrawer: Element) {
   ["cart:updated", "cart:refresh", "cart-updated"].forEach((evt) => {
     document.addEventListener(evt, reinsert);
   });
-  const mo = new MutationObserver(reinsert);
+  // Filter our own Preact-internal mutations (postcode keystrokes, slot
+  // hover toggles, etc.) so they don't waste a frame re-running placeHost.
+  // Mutations targeted INSIDE the host are ours; only mutations elsewhere
+  // are interesting (theme cart re-renders, drawer swaps).
+  const mo = new MutationObserver((mutations) => {
+    for (const m of mutations) {
+      if (!host.contains(m.target)) {
+        reinsert();
+        return;
+      }
+    }
+  });
   mo.observe(document.body, { childList: true, subtree: true });
 }
 
@@ -250,8 +274,7 @@ function init() {
   // Cart-page surface: mount eagerly. The widget IS the page on /cart, and
   // the host renders at 32×32 with no children of intrinsic height, which
   // lets IntersectionObserver mis-fire on some themes (Horizon's cart page
-  // never crossed the 200px-rootMargin threshold). lazyMount still has a
-  // setTimeout safety net for any other surface that opts into it.
+  // never crossed the 200px-rootMargin threshold).
   document.querySelectorAll(`[${APP_BLOCK_ATTR}]`).forEach((el) => mountInto(el));
   document.querySelectorAll(`[${EMBED_ATTR}]`).forEach((el) => bootstrapEmbed(el));
 }
