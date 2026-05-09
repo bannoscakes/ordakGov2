@@ -15,6 +15,7 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
+import { authenticateProxyOrInternal } from "../utils/app-proxy.server";
 import prisma from "../db.server";
 import { logger } from "../utils/logger.server";
 import { recordEvent } from "../services/event-log.server";
@@ -44,9 +45,10 @@ interface OrderTagResponse {
 
 export async function action({ request }: ActionFunctionArgs) {
   try {
-    // Authenticate the request (app proxy). 401 on direct hits to the
-    // bare /api/orders/tag URL.
-    const { session } = await authenticate.public.appProxy(request);
+    // Authenticate the request — accepts upstream-validated calls from
+    // appProxyAction and direct hits with a valid Shopify proxy signature.
+    // 401 on bare /api/orders/tag hits without a signature.
+    const session = await authenticateProxyOrInternal(request);
     if (!session) {
       return json<OrderTagResponse>(
         { success: false, error: "Unauthorized" },

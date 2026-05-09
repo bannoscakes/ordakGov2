@@ -1,5 +1,5 @@
 import { json, type ActionFunctionArgs } from "@remix-run/node";
-import { authenticate } from "../shopify.server";
+import { authenticateProxyOrInternal } from "../utils/app-proxy.server";
 import prisma from "../db.server";
 import { logger } from "../utils/logger.server";
 import { writeEventLogTx, dispatchEventLog, type DispatchableEventLog } from "../services/event-log.server";
@@ -21,7 +21,9 @@ import { writeEventLogTx, dispatchEventLog, type DispatchableEventLog } from "..
  * tenant write that motivated this rewrite).
  */
 export async function action({ request }: ActionFunctionArgs) {
-  const { session } = await authenticate.public.appProxy(request);
+  // Authenticate the request — accepts upstream-validated calls from
+  // appProxyAction and direct hits with a valid Shopify proxy signature.
+  const session = await authenticateProxyOrInternal(request);
   if (!session) {
     return json({ success: false, error: "Unauthorized" }, { status: 401 });
   }

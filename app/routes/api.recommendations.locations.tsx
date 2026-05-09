@@ -4,7 +4,7 @@
  */
 
 import { json, type ActionFunctionArgs } from "@remix-run/node";
-import { authenticate } from "../shopify.server";
+import { authenticateProxyOrInternal } from "../utils/app-proxy.server";
 import prisma from "../db.server";
 import { logger } from "../utils/logger.server";
 import { scoreLocations } from "../services";
@@ -28,8 +28,12 @@ interface RequestBody {
 }
 
 export async function action({ request }: ActionFunctionArgs) {
-  // Authenticate the request
-  const { session } = await authenticate.public.appProxy(request);
+  // Authenticate the request — accepts upstream-validated calls from
+  // appProxyAction and direct hits with a valid Shopify proxy signature.
+  const session = await authenticateProxyOrInternal(request);
+  if (!session) {
+    return json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   if (request.method !== "POST") {
     return json({ error: "Method not allowed" }, { status: 405 });
