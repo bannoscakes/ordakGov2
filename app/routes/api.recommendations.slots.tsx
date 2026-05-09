@@ -301,7 +301,9 @@ export async function action({ request }: ActionFunctionArgs) {
       }
     }
 
-    // Fetch other scheduled deliveries for route efficiency (if delivery type)
+    // Fetch other scheduled deliveries for route efficiency (if delivery type).
+    // Shop-scoped via slot.location.shopId so route-efficiency scoring can't
+    // leak Shop A's order geography into Shop B's storefront recommendations.
     let otherDeliveries: OtherDelivery[] = [];
     if (body.fulfillmentType === "delivery") {
       const scheduledOrders = await prisma.orderLink.findMany({
@@ -313,6 +315,7 @@ export async function action({ request }: ActionFunctionArgs) {
               gte: startDate,
               lte: endDate,
             },
+            location: { shopId: shop.id },
           },
         },
         include: {
