@@ -28,13 +28,17 @@
  */
 
 import { json, type ActionFunctionArgs } from "@remix-run/node";
+import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { logger } from "../utils/logger.server";
 
 type Surface = "cart-drawer" | "cart-page";
 
 interface RequestBody {
-  shopifyDomain: string;
+  // Kept for backward compat with appProxyAction's body replay (it injects
+  // shopifyDomain from session.shop) — but ignored. The trusted shop
+  // identity comes from `session.shop` resolved below.
+  shopifyDomain?: string;
   expressButtonsVisible?: boolean;
   surface?: Surface;
 }
@@ -44,11 +48,19 @@ export async function action({ request }: ActionFunctionArgs) {
     return json({ error: "Method not allowed" }, { status: 405 });
   }
 
-  const body = (await request.json()) as RequestBody;
-
-  if (!body.shopifyDomain) {
-    return json({ error: "shopifyDomain required" }, { status: 400 });
+  // F2 fix: this inner action is reachable directly at /api/storefront/diagnostics
+  // because Remix exposes every file in app/routes/. Without the proxy
+  // auth gate here, an attacker could POST {"shopifyDomain":"<victim>",
+  // "expressButtonsVisible":true} and silence the merchant-facing
+  // misconfig warning on a competitor shop. Re-authenticate so direct
+  // hits 401, regardless of what the proxy wrapper did upstream.
+  const { session } = await authenticate.public.appProxy(request);
+  if (!session) {
+    return json({ error: "Unauthorized" }, { status: 401 });
   }
+  const shopDomain = session.shop;
+
+  const body = (await request.json().catch(() => ({}))) as Partial<RequestBody>;
 
   // Build the partial update. Each signal updates its own column. Reports
   // that include neither signal are accepted (and no-op) — preserves the
@@ -75,7 +87,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
   try {
     const updated = await prisma.shop.update({
-      where: { shopifyDomain: body.shopifyDomain },
+      where: { shopifyDomain: shopDomain },
       data: updateData,
       select: {
         diagnosticsExpressButtonsVisible: true,
@@ -90,9 +102,7 @@ export async function action({ request }: ActionFunctionArgs) {
       cartPageSeenAt: updated.diagnosticsCartPageSeenAt?.toISOString() ?? null,
     });
   } catch (error) {
-    logger.error("storefront.diagnostics update failed", error, {
-      shop: body.shopifyDomain,
-    });
+    logger.error("storefront.diagnostics update failed", error, { shop: shopDomain });
     return json({ error: "Internal server error" }, { status: 500 });
   }
 }
