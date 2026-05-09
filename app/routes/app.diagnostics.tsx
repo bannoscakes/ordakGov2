@@ -323,16 +323,16 @@ export default function Diagnostics() {
 
   return (
     <Page
-      title="Slot diagnostics"
+      title="Slot Diagnostics"
       subtitle="Troubleshoot why customers might not see available slots"
-      backAction={{ content: "Settings", url: "/app/settings" }}
+      backAction={{ content: "Dashboard", url: "/app" }}
     >
       <Layout>
         <Layout.Section>
           <Card>
             <BlockStack gap="400">
               <Text as="h2" variant="headingMd">
-                Run diagnostics
+                Run Diagnostics
               </Text>
               <Text as="p" tone="subdued">
                 This tool helps you understand why slots might not be appearing for customers.
@@ -341,16 +341,16 @@ export default function Diagnostics() {
 
               <FormLayout>
                 <TextField
-                  label="Customer postcode (optional)"
+                  label="Customer Postcode (Optional)"
                   value={postcode}
                   onChange={setPostcode}
-                  placeholder="2200"
+                  placeholder="SW1A 1AA"
                   helpText="Check if this postcode is covered by your zones"
                   autoComplete="off"
                 />
 
                 <Select
-                  label="Fulfillment type"
+                  label="Fulfillment Type"
                   options={[
                     { label: "Delivery", value: "delivery" },
                     { label: "Pickup", value: "pickup" },
@@ -361,14 +361,14 @@ export default function Diagnostics() {
 
                 <InlineStack gap="400">
                   <TextField
-                    label="Date from"
+                    label="Date From"
                     type="date"
                     value={dateFrom}
                     onChange={setDateFrom}
                     autoComplete="off"
                   />
                   <TextField
-                    label="Date to"
+                    label="Date To"
                     type="date"
                     value={dateTo}
                     onChange={setDateTo}
@@ -377,7 +377,7 @@ export default function Diagnostics() {
                 </InlineStack>
 
                 <Button variant="primary" onClick={handleRunDiagnostics}>
-                  Run diagnostics
+                  Run Diagnostics
                 </Button>
               </FormLayout>
             </BlockStack>
@@ -391,7 +391,7 @@ export default function Diagnostics() {
                 <BlockStack gap="400">
                   <InlineStack align="space-between" blockAlign="center">
                     <Text as="h2" variant="headingMd">
-                      Diagnostic results
+                      Diagnostic Results
                     </Text>
                     <Text as="p" variant="bodySm" tone="subdued">
                       {new Date(diagnosticReport.timestamp).toLocaleString()}
@@ -414,7 +414,7 @@ export default function Diagnostics() {
                   <Divider />
 
                   <Text as="h3" variant="headingSm">
-                    Quick summary
+                    Quick Summary
                   </Text>
                   <InlineStack gap="400">
                     <Badge tone="info">{`${diagnosticReport.summary.totalSlots} Total Slots`}</Badge>
@@ -438,7 +438,7 @@ export default function Diagnostics() {
               <Card>
                 <BlockStack gap="400">
                   <Text as="h2" variant="headingMd">
-                    Diagnostic checks
+                    Diagnostic Checks
                   </Text>
 
                   {/* Check: Slots Exist */}
@@ -622,7 +622,7 @@ export default function Diagnostics() {
               <Card>
                 <BlockStack gap="400">
                   <Text as="h2" variant="headingMd">
-                    Troubleshooting guide
+                    Troubleshooting Guide
                   </Text>
                   <BlockStack gap="300">
                     <BlockStack gap="100">

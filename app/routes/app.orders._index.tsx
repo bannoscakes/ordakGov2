@@ -327,24 +327,8 @@ function formatMonthParam(year: number, monthIndex: number): string {
 }
 
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-// Polaris tokens with hex fallbacks. Using semantic tones (info/success)
-// so the calendar adapts to light/dark themes — App Store reviewers run
-// Polaris dark-mode checks. Keep the fallback hex matching the prior
-// values so behaviour is identical when tokens are unavailable.
-const DELIVERY_COLOR = "var(--p-color-bg-fill-info, #3b82f6)";
-const PICKUP_COLOR = "var(--p-color-bg-fill-success, #1a8917)";
-const DELIVERY_TEXT = "var(--p-color-text-info, #2563eb)";
-const PICKUP_TEXT = "var(--p-color-text-success, #047857)";
-const TEXT_SUBDUED = "var(--p-color-text-subdued, #6d7175)";
-const TEXT_DEFAULT = "var(--p-color-text, #1a1a1a)";
-const SURFACE_BG = "var(--p-color-bg-surface, #fff)";
-const SURFACE_SECONDARY = "var(--p-color-bg-surface-secondary, #f6f6f7)";
-const BORDER_DEFAULT = "var(--p-color-border, #e3e3e3)";
-const BORDER_SUBDUED = "var(--p-color-border-subdued, #d4d4d8)";
-const SURFACE_INFO_ACTIVE = "var(--p-color-bg-surface-info-active, #dbeafe)";
-const SURFACE_INFO_HOVER = "var(--p-color-bg-surface-info-hover, #f1f5f9)";
-const TEXT_CRITICAL = "var(--p-color-text-critical, #dc2626)";
-const TEXT_WARNING = "var(--p-color-text-warning, #b45309)";
+const DELIVERY_COLOR = "#3b82f6";
+const PICKUP_COLOR = "#1a8917";
 
 type DayOrder = {
   id: string;
@@ -565,7 +549,7 @@ function WeekColumns({
           <div
             key={day}
             style={{
-              borderRight: idx < days.length - 1 ? `1px solid ${BORDER_DEFAULT}` : "none",
+              borderRight: idx < days.length - 1 ? "1px solid #e3e3e3" : "none",
               padding: "12px 12px 24px",
               minWidth: 0,
             }}
@@ -576,7 +560,7 @@ function WeekColumns({
                   fontSize: 11,
                   fontWeight: 700,
                   letterSpacing: "0.08em",
-                  color: DELIVERY_TEXT,
+                  color: DELIVERY_COLOR,
                   textTransform: "uppercase",
                 }}
               >
@@ -586,7 +570,7 @@ function WeekColumns({
                 style={{
                   fontSize: 32,
                   fontWeight: 600,
-                  color: DELIVERY_TEXT,
+                  color: DELIVERY_COLOR,
                   margin: "4px 0",
                   fontVariantNumeric: "tabular-nums",
                   textDecoration: isToday ? "underline" : "none",
@@ -599,8 +583,8 @@ function WeekColumns({
                 style={{
                   display: "inline-block",
                   padding: "2px 12px",
-                  background: isToday ? SURFACE_INFO_ACTIVE : SURFACE_INFO_HOVER,
-                  color: isToday ? DELIVERY_TEXT : TEXT_SUBDUED,
+                  background: isToday ? "#dbeafe" : "#f1f5f9",
+                  color: isToday ? DELIVERY_COLOR : "#475569",
                   borderRadius: 12,
                   fontSize: 12,
                   fontWeight: 600,
@@ -624,24 +608,21 @@ function WeekColumns({
 
 function OrderPill({ order, onClick }: { order: DayOrder; onClick: () => void }) {
   const dotColor = order.fulfillmentType === "pickup" ? PICKUP_COLOR : DELIVERY_COLOR;
-  const orderLabel = order.shopifyOrderNumber || order.shopifyOrderId.slice(-6);
-  const typeLabel = order.fulfillmentType === "pickup" ? "Pickup" : "Delivery";
   return (
     <button
       type="button"
       onClick={onClick}
       title={`${order.timeStart}–${order.timeEnd} · ${order.locationName} · ${order.status}`}
-      aria-label={`Order #${orderLabel}, ${typeLabel}, ${order.timeStart}–${order.timeEnd}, ${order.locationName}, ${order.status}`}
       style={{
         display: "flex",
         alignItems: "center",
         gap: 8,
         padding: "5px 12px",
-        border: `1px solid ${BORDER_SUBDUED}`,
+        border: "1px solid #d4d4d8",
         borderRadius: 16,
-        background: SURFACE_BG,
+        background: "#fff",
         fontSize: 13,
-        color: DELIVERY_TEXT,
+        color: DELIVERY_COLOR,
         cursor: "pointer",
         width: "100%",
         textAlign: "left",
@@ -659,7 +640,7 @@ function OrderPill({ order, onClick }: { order: DayOrder; onClick: () => void })
         }}
       />
       <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        #{orderLabel}
+        #{order.shopifyOrderNumber || order.shopifyOrderId.slice(-6)}
       </span>
     </button>
   );
@@ -698,7 +679,7 @@ function MonthGrid({
             fontSize: 12,
             fontWeight: 600,
             textTransform: "uppercase",
-            color: TEXT_SUBDUED,
+            color: "var(--p-color-text-subdued, #6d7175)",
             textAlign: "center",
           }}
         >
@@ -711,22 +692,16 @@ function MonthGrid({
         const orders = ordersByDate[day] ?? [];
         const cap = capacityByDate[day];
         const dayNum = parseInt(day.slice(8, 10), 10);
-        const dateLabel = new Date(day + "T00:00:00").toLocaleDateString("en-AU", {
-          weekday: "long",
-          month: "long",
-          day: "numeric",
-        });
         return (
           <button
             key={day}
             type="button"
             onClick={() => onDayClick(day)}
-            aria-label={`${dateLabel}${isToday ? " (today)" : ""}, ${orders.length} ${orders.length === 1 ? "order" : "orders"}`}
             style={{
               minHeight: 100,
               padding: 6,
-              background: inMonth ? SURFACE_BG : SURFACE_SECONDARY,
-              border: isToday ? `2px solid ${TEXT_DEFAULT}` : `1px solid ${BORDER_DEFAULT}`,
+              background: inMonth ? "#fff" : "#f6f6f7",
+              border: isToday ? "2px solid #1a1a1a" : "1px solid #e3e3e3",
               borderRadius: 6,
               textAlign: "left",
               cursor: "pointer",
@@ -755,7 +730,7 @@ function MonthGrid({
                     fontSize: 11,
                     padding: "2px 6px",
                     borderRadius: 10,
-                    color: "var(--p-color-text-on-bg-fill, #fff)",
+                    color: "#fff",
                     background: o.fulfillmentType === "pickup" ? PICKUP_COLOR : DELIVERY_COLOR,
                   }}
                   title={`${o.timeStart}–${o.timeEnd} · ${o.locationName}`}
@@ -764,7 +739,7 @@ function MonthGrid({
                 </span>
               ))}
               {orders.length > MAX_DAY_TILES_VISIBLE.month ? (
-                <span style={{ fontSize: 11, color: TEXT_SUBDUED }}>
+                <span style={{ fontSize: 11, color: "var(--p-color-text-subdued, #6d7175)" }}>
                   +{orders.length - MAX_DAY_TILES_VISIBLE.month} more
                 </span>
               ) : null}
@@ -797,7 +772,7 @@ function CapacityPill({
   label: string;
 }) {
   const ratio = capacity > 0 ? booked / capacity : 0;
-  const tone = ratio >= 1 ? TEXT_CRITICAL : ratio >= 0.8 ? TEXT_WARNING : TEXT_SUBDUED;
+  const tone = ratio >= 1 ? "#dc2626" : ratio >= 0.8 ? "#b45309" : "var(--p-color-text-subdued, #6d7175)";
   return (
     <span
       title={`${label}: ${booked} of ${capacity} booked`}

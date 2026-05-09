@@ -84,7 +84,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 export default function InstallWebhooks() {
   const status = useLoaderData<typeof loader>();
   return (
-    <Page title="Re-register webhooks" backAction={{ content: "Settings", url: "/app/settings" }}>
+    <Page title="Re-register webhooks">
       <Layout>
         <Layout.Section>
           <Card>

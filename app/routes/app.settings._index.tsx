@@ -23,11 +23,6 @@ import {
   SettingsIcon,
   CheckCircleIcon,
   ChevronRightIcon,
-  WrenchIcon,
-  RefreshIcon,
-  DataPresentationIcon,
-  PersonIcon,
-  ResetIcon,
 } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
@@ -167,102 +162,12 @@ export default function SettingsIndex() {
             </Card>
           </BlockStack>
         </Layout.Section>
-
-        <Layout.Section>
-          <BlockStack gap="300">
-            <Text as="h2" variant="headingMd">Diagnostics and maintenance</Text>
-            <Text as="p" tone="subdued" variant="bodySm">
-              Tools for verifying the app is wired up correctly and resolving
-              data-handling requests. Routine merchants don't need these.
-            </Text>
-            <Card padding="0">
-              <BlockStack gap="0">
-                <ActionRow
-                  icon={WrenchIcon}
-                  title="Slot diagnostics"
-                  description="Trace why a particular date or postcode is or isn't returning slots."
-                  onClick={() => navigate("/app/diagnostics")}
-                />
-                <Divider />
-                <ActionRow
-                  icon={DataPresentationIcon}
-                  title="Carrier-calculated shipping check"
-                  description="Verify the carrier service is registered and the shop is on a CCS-eligible plan."
-                  onClick={() => navigate("/app/check-ccs")}
-                />
-                <Divider />
-                <ActionRow
-                  icon={RefreshIcon}
-                  title="Backfill orders"
-                  description="Re-import the last 10 orders that don't yet have an Ordak Go schedule link."
-                  onClick={() => navigate("/app/backfill-orders")}
-                />
-                <Divider />
-                <ActionRow
-                  icon={ResetIcon}
-                  title="Clean up shipping zones"
-                  description="Remove duplicate Ordak Go shipping rates left behind by previous installs."
-                  onClick={() => navigate("/app/cleanup-shipping-zones")}
-                />
-                <Divider />
-                <ActionRow
-                  icon={PersonIcon}
-                  title="Customer data export (GDPR)"
-                  description="Export a customer's stored data in response to a customers/data_request webhook."
-                  onClick={() => navigate("/app/data-requests")}
-                />
-              </BlockStack>
-            </Card>
-          </BlockStack>
-        </Layout.Section>
       </Layout>
     </Page>
   );
 }
 
 type BadgeTone = "success" | "info" | "warning" | "critical" | "attention" | undefined;
-
-// Native <button> wrapper that strips browser default styling so the visual
-// design is fully delegated to the inner Polaris components. Using a real
-// <button> rather than <div role="button"> gives us focus-ring, keyboard
-// activation (Enter and Space), and correct screen-reader semantics for
-// free — Polaris's accessibility audit flags the div pattern in App Store
-// review.
-function PressableShell({
-  onClick,
-  ariaLabel,
-  fullFlex,
-  children,
-}: {
-  onClick: () => void;
-  ariaLabel: string;
-  fullFlex?: boolean;
-  children: any;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={ariaLabel}
-      style={{
-        appearance: "none",
-        background: "transparent",
-        border: "none",
-        padding: 0,
-        margin: 0,
-        font: "inherit",
-        color: "inherit",
-        textAlign: "inherit",
-        width: "100%",
-        cursor: "pointer",
-        borderRadius: "var(--p-border-radius-300, 12px)",
-        ...(fullFlex ? { flex: "1 1 240px", minWidth: 240 } : {}),
-      }}
-    >
-      {children}
-    </button>
-  );
-}
 
 function FeatureCard({
   icon,
@@ -278,7 +183,23 @@ function FeatureCard({
   onClick: () => void;
 }) {
   return (
-    <PressableShell onClick={onClick} ariaLabel={`${title}: ${description}`} fullFlex>
+    <div
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      style={{
+        flex: "1 1 240px",
+        minWidth: 240,
+        cursor: "pointer",
+        borderRadius: "var(--p-border-radius-300, 12px)",
+      }}
+    >
       <Card>
         <BlockStack gap="300">
           <InlineStack gap="300" blockAlign="center" wrap={false} align="space-between">
@@ -295,7 +216,7 @@ function FeatureCard({
           </Text>
         </BlockStack>
       </Card>
-    </PressableShell>
+    </div>
   );
 }
 
@@ -304,6 +225,7 @@ function ActionRow({
   title,
   description,
   badge,
+  external,
   onClick,
 }: {
   icon: any;
@@ -314,7 +236,18 @@ function ActionRow({
   onClick: () => void;
 }) {
   return (
-    <PressableShell onClick={onClick} ariaLabel={`${title}: ${description}`}>
+    <div
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      style={{ cursor: "pointer" }}
+    >
       <Box padding="400">
         <InlineStack gap="400" blockAlign="center" wrap={false} align="space-between">
           <InlineStack gap="400" blockAlign="center" wrap={false}>
@@ -336,6 +269,6 @@ function ActionRow({
           </Box>
         </InlineStack>
       </Box>
-    </PressableShell>
+    </div>
   );
 }

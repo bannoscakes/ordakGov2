@@ -114,72 +114,100 @@ export default function LocationsIndex() {
                 image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
               >
                 <p>
-                  Locations are physical places where customers pick up orders
-                  or where deliveries dispatch from. Each location can have its
-                  own delivery zones, time slots, and scheduling rules.
+                  Locations are pickup points or delivery hubs where customers can
+                  collect orders or where deliveries are dispatched from.
                 </p>
               </EmptyState>
             </Card>
           </Layout.Section>
         ) : (
-          <>
-            <Layout.Section>
-              <Card padding="0">
-                <DataTable
-                  columnContentTypes={[
-                    "text",
-                    "text",
-                    "text",
-                    "text",
-                    "text",
-                    "text",
-                    "text",
-                  ]}
-                  headings={[
-                    "Name",
-                    "City",
-                    "Postal code",
-                    "Services",
-                    "Status",
-                    "Usage",
-                    "Actions",
-                  ]}
-                  rows={rows}
-                  hoverable
-                />
-              </Card>
-            </Layout.Section>
-
-            <Layout.Section variant="oneThird">
-              <Card>
-                <Text as="h2" variant="headingMd">
-                  Quick stats
-                </Text>
-                <div style={{ marginTop: "12px" }}>
-                  <Text as="p">
-                    <strong>{locations.length}</strong> total locations
-                  </Text>
-                  <Text as="p">
-                    <strong>{locations.filter((l) => l.isActive).length}</strong>{" "}
-                    active
-                  </Text>
-                  <Text as="p">
-                    <strong>
-                      {locations.reduce((sum, l) => sum + l._count.zones, 0)}
-                    </strong>{" "}
-                    delivery zones
-                  </Text>
-                  <Text as="p">
-                    <strong>
-                      {locations.reduce((sum, l) => sum + l._count.slots, 0)}
-                    </strong>{" "}
-                    time slots
-                  </Text>
-                </div>
-              </Card>
-            </Layout.Section>
-          </>
+          <Layout.Section>
+            <Card padding="0">
+              <DataTable
+                columnContentTypes={[
+                  "text",
+                  "text",
+                  "text",
+                  "text",
+                  "text",
+                  "text",
+                  "text",
+                ]}
+                headings={[
+                  "Name",
+                  "City",
+                  "Postal Code",
+                  "Services",
+                  "Status",
+                  "Usage",
+                  "Actions",
+                ]}
+                rows={rows}
+                hoverable
+              />
+            </Card>
+          </Layout.Section>
         )}
+
+        <Layout.Section variant="oneThird">
+          <Card>
+            <Text as="h2" variant="headingMd">
+              About Locations
+            </Text>
+            <div style={{ marginTop: "12px" }}>
+              <Text as="p" tone="subdued">
+                Locations are physical places where:
+              </Text>
+              <ul style={{ marginTop: "8px", paddingLeft: "20px" }}>
+                <li>
+                  <Text as="span" tone="subdued">
+                    Customers can pick up orders
+                  </Text>
+                </li>
+                <li>
+                  <Text as="span" tone="subdued">
+                    Deliveries are dispatched from
+                  </Text>
+                </li>
+              </ul>
+              <div style={{ marginTop: "12px" }}>
+                <Text as="p" tone="subdued">
+                  Each location can have its own delivery zones, time slots, and
+                  scheduling rules.
+                </Text>
+              </div>
+            </div>
+          </Card>
+        </Layout.Section>
+
+        <Layout.Section variant="oneThird">
+          <Card>
+            <Text as="h2" variant="headingMd">
+              Quick stats
+            </Text>
+            <div style={{ marginTop: "12px" }}>
+              <Text as="p">
+                <strong>{locations.length}</strong> total locations
+              </Text>
+              <Text as="p">
+                <strong>{locations.filter((l) => l.isActive).length}</strong>{" "}
+                active
+              </Text>
+              <Text as="p">
+                <strong>
+                  {locations.reduce((sum, l) => sum + l._count.zones, 0)}
+                </strong>{" "}
+                delivery zones
+              </Text>
+              <Text as="p">
+                <strong>
+                  {locations.reduce((sum, l) => sum + l._count.slots, 0)}
+                </strong>{" "}
+                time slots
+              </Text>
+            </div>
+          </Card>
+        </Layout.Section>
       </Layout>
     </Page>
   );

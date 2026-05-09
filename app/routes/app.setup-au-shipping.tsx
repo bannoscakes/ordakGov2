@@ -409,7 +409,7 @@ export default function SetupAuShipping() {
     state.hasProfile && state.hasAuLocation && state.hasAuZone && state.hasPickupRate;
 
   return (
-    <Page title="Setup AU shipping (dev convenience)" backAction={{ content: "Settings", url: "/app/settings" }}>
+    <Page title="Setup AU shipping (dev convenience)">
       <Layout>
         <Layout.Section>
           <Card>

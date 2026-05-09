@@ -247,7 +247,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 export default function BackfillOrders() {
   const status = useLoaderData<typeof loader>();
   return (
-    <Page title="Backfill orders into Ordak Go" backAction={{ content: "Settings", url: "/app/settings" }}>
+    <Page title="Backfill orders into Ordak Go">
       <Layout>
         <Layout.Section>
           <Card>

@@ -62,7 +62,7 @@ export default function CheckCcs() {
   const ccsLikelyEnabled = r.carrierServices.length > 0 || r.plan.shopifyPlus === true;
 
   return (
-    <Page title="Carrier-calculated shipping diagnostic" backAction={{ content: "Settings", url: "/app/settings" }}>
+    <Page title="Carrier-Calculated Shipping diagnostic">
       <Layout>
         <Layout.Section>
           <Banner tone={ccsLikelyEnabled ? "success" : "warning"}>

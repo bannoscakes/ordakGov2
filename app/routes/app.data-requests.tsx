@@ -248,7 +248,7 @@ export default function DataRequests() {
   }
 
   return (
-    <Page title="GDPR data export" backAction={{ content: "Settings", url: "/app/settings" }}>
+    <Page title="GDPR data export">
       <Layout>
         <Layout.Section>
           <Card>
