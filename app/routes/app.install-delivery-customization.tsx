@@ -188,7 +188,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 export default function InstallDeliveryCustomization() {
   const status = useLoaderData<typeof loader>();
   return (
-    <Page title="Install delivery customization">
+    <Page title="Install delivery customization" backAction={{ content: "Settings", url: "/app/settings" }}>
       <Layout>
         <Layout.Section>
           <Card>

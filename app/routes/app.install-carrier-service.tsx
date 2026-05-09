@@ -136,7 +136,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 export default function InstallCarrierService() {
   const status = useLoaderData<typeof loader>();
   return (
-    <Page title="Install carrier service">
+    <Page title="Install carrier service" backAction={{ content: "Settings", url: "/app/settings" }}>
       <Layout>
         <Layout.Section>
           <Card>

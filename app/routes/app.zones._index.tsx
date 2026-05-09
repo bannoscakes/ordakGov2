@@ -145,7 +145,7 @@ export default function ZonesList() {
 
   return (
     <Page
-      title="Service Zones"
+      title="Service zones"
       primaryAction={{
         content: "Add zone",
         onAction: () => navigate("/app/zones/new"),
@@ -158,7 +158,7 @@ export default function ZonesList() {
             <Card>
               <BlockStack gap="200">
                 <Text as="h3" variant="headingMd">
-                  Total Zones
+                  Total zones
                 </Text>
                 <Text as="p" variant="heading2xl">
                   {stats.total}
@@ -172,25 +172,25 @@ export default function ZonesList() {
             <Card>
               <BlockStack gap="200">
                 <Text as="h3" variant="headingMd">
-                  By Type
+                  By type
                 </Text>
                 <BlockStack gap="100">
                   <InlineStack gap="200" blockAlign="center">
                     <Icon source={NoteIcon} tone="base" />
                     <Text as="p" variant="bodyMd">
-                      Postcode Lists: {stats.byType.postcode_list}
+                      Postcode lists: {stats.byType.postcode_list}
                     </Text>
                   </InlineStack>
                   <InlineStack gap="200" blockAlign="center">
                     <Icon source={ChartVerticalIcon} tone="base" />
                     <Text as="p" variant="bodyMd">
-                      Postcode Ranges: {stats.byType.postcode_range}
+                      Postcode ranges: {stats.byType.postcode_range}
                     </Text>
                   </InlineStack>
                   <InlineStack gap="200" blockAlign="center">
                     <Icon source={TargetIcon} tone="base" />
                     <Text as="p" variant="bodyMd">
-                      Radius Zones: {stats.byType.radius}
+                      Radius zones: {stats.byType.radius}
                     </Text>
                   </InlineStack>
                 </BlockStack>
@@ -212,7 +212,7 @@ export default function ZonesList() {
                 "text",
               ]}
               headings={[
-                "Zone Name",
+                "Zone name",
                 "Location",
                 "Type",
                 "Coverage",
@@ -229,7 +229,7 @@ export default function ZonesList() {
           <Card>
             <BlockStack gap="200">
               <Text as="h3" variant="headingMd">
-                About Service Zones
+                About service zones
               </Text>
               <Text as="p" variant="bodyMd">
                 Service zones define where you offer delivery and pickup services.
