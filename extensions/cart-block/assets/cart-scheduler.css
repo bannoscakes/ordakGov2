@@ -2,8 +2,13 @@
 .ordak-cart-scheduler-embed {
   --ordak-accent: #EB5E14;
   --ordak-accent-soft: #FFE7D6;
+  /* Darker shade for body-text accents — #EB5E14 on white is 3.7:1 (WCAG AA
+     borderline for normal text). Use --ordak-accent-strong for ≤14px text. */
+  --ordak-accent-strong: #C44A0E;
   --ordak-text: #111;
   --ordak-muted: #6b7280;
+  --ordak-disabled-bg: #e5e7eb;
+  --ordak-disabled-text: #9ca3af;
   --ordak-border: #e5e7eb;
   --ordak-bg: #fff;
   --ordak-error: #b91c1c;
@@ -24,6 +29,11 @@
   border: 1px solid var(--ordak-border);
   border-radius: 8px;
   padding: 16px;
+  /* Breathing room above the widget — Horizon's cart drawer renders the
+     "Estimated total" line directly above us, and without this margin the
+     widget visually fuses with the totals row, which was confusing on the
+     first-open of the cart drawer. */
+  margin-top: 24px;
   display: grid;
   gap: 16px;
 }
@@ -86,6 +96,11 @@
 .ordak-postcode__msg--error {
   color: var(--ordak-error);
 }
+.ordak-postcode__help {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ordak-muted);
+}
 
 .ordak-btn {
   appearance: none;
@@ -99,9 +114,12 @@
   background: var(--ordak-accent);
   color: #fff;
 }
-.ordak-btn:disabled {
-  opacity: 0.6;
+.ordak-btn:disabled,
+.ordak-btn--primary:disabled {
+  background: var(--ordak-disabled-bg);
+  color: var(--ordak-disabled-text);
   cursor: not-allowed;
+  border-color: transparent;
 }
 
 .ordak-datepicker {
@@ -192,7 +210,7 @@
 .ordak-slot__reason,
 .ordak-location__reason {
   font-size: 12px;
-  color: var(--ordak-accent);
+  color: var(--ordak-accent-strong);
 }
 .ordak-slot__price {
   display: inline-block;
@@ -265,6 +283,30 @@
 .ordak-loading,
 .ordak-empty {
   color: var(--ordak-muted);
+}
+
+.ordak-error-block {
+  display: grid;
+  gap: 8px;
+}
+.ordak-error-fallback {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--ordak-accent);
+  color: var(--ordak-accent-strong);
+  padding: 8px 12px;
+  border-radius: 6px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  width: fit-content;
+}
+.ordak-error-fallback:hover {
+  background: var(--ordak-accent-soft);
+}
+.ordak-error-fallback:focus-visible {
+  outline: 2px solid var(--ordak-accent);
+  outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -55,38 +55,34 @@ function readConfig(host: Element): BlockConfig | null {
   }
 }
 
+// Legacy accent some early installs grandfathered before PR #128 swapped the
+// brand color to orange. Liquid renders block.settings.accent_color verbatim,
+// so a stored `#1a73e8` keeps shipping even though the schema default is
+// now `#EB5E14`. Normalize to lowercase before comparing.
+const LEGACY_ACCENT = "#1a73e8";
+const BRAND_ACCENT = "#EB5E14";
+
+function maybeOverrideLegacyAccent(host: Element) {
+  if (!(host instanceof HTMLElement)) return;
+  const current = getComputedStyle(host).getPropertyValue("--ordak-accent").trim().toLowerCase();
+  if (current === LEGACY_ACCENT) {
+    host.style.setProperty("--ordak-accent", BRAND_ACCENT);
+  }
+}
+
 function mountInto(host: Element) {
   if (host.hasAttribute(MOUNTED_FLAG)) return;
   const config = readConfig(host);
   if (!config) return;
   host.setAttribute(MOUNTED_FLAG, "1");
   if (host.hasAttribute("hidden")) host.removeAttribute("hidden");
+  maybeOverrideLegacyAccent(host);
   render(<CartScheduler config={config} rootEl={host} />, host);
   // Fire diagnostics once we have a config to address the proxy with.
   // Defer slightly so the theme has a chance to render express buttons
   // before we measure their visibility — themes lazy-load the dynamic
   // checkout buttons after first paint.
   setTimeout(() => reportDiagnosticsOnce(config), 1500);
-}
-
-function lazyMount(host: Element) {
-  if ("IntersectionObserver" in window) {
-    const io = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            io.disconnect();
-            mountInto(host);
-            return;
-          }
-        }
-      },
-      { rootMargin: "200px" }
-    );
-    io.observe(host);
-  } else {
-    mountInto(host);
-  }
 }
 
 function findEmbedDrawer(host: Element): Element | null {
@@ -232,7 +228,12 @@ function observeDrawer(host: Element, drawer: Element) {
 }
 
 function init() {
-  document.querySelectorAll(`[${APP_BLOCK_ATTR}]`).forEach((el) => lazyMount(el));
+  // Cart-page surface: mount eagerly. The widget IS the page on /cart, and
+  // the host renders at 32×32 with no children of intrinsic height, which
+  // lets IntersectionObserver mis-fire on some themes (Horizon's cart page
+  // never crossed the 200px-rootMargin threshold). lazyMount still has a
+  // setTimeout safety net for any other surface that opts into it.
+  document.querySelectorAll(`[${APP_BLOCK_ATTR}]`).forEach((el) => mountInto(el));
   document.querySelectorAll(`[${EMBED_ATTR}]`).forEach((el) => bootstrapEmbed(el));
 }
 
