@@ -77,6 +77,18 @@ function mountInto(host: Element) {
   host.setAttribute(MOUNTED_FLAG, "1");
   if (host.hasAttribute("hidden")) host.removeAttribute("hidden");
   maybeOverrideLegacyAccent(host);
+  // Liquid renders <script type="application/json"> + <noscript> as
+  // children of the host. Preact's render(jsx, parent) preserves any
+  // existing children that don't appear in the JSX tree — those leftover
+  // nodes confuse Preact's diff bookkeeping enough that the resulting
+  // buttons get `.l[clickfalse]` set on the DOM expando but the
+  // `addEventListener('click', eventProxy)` registration is skipped. The
+  // visible symptom is buttons that look right but never respond to real
+  // clicks. Stripping the host clean before render avoids the trap.
+  // Config was already extracted above so the script tag is no longer
+  // needed; the noscript is a graceful-degradation hint that's redundant
+  // once JS has confirmed mount.
+  while (host.firstChild) host.removeChild(host.firstChild);
   render(<CartScheduler config={config} rootEl={host} />, host);
   // Fire diagnostics once we have a config to address the proxy with.
   // Defer slightly so the theme has a chance to render express buttons
@@ -178,7 +190,19 @@ function placeHost(host: Element, drawer: Element) {
   }
 }
 
-function observeDrawer(host: Element, drawer: Element) {
+function observeDrawer(host: Element, initialDrawer: Element) {
+  // The drawer reference can become stale: Horizon's cart-drawer-component
+  // may be re-rendered (or even replaced) when a customer adds the first
+  // item to cart. Re-resolve every time we touch placement so we never
+  // operate against a detached element.
+  let drawer: Element = initialDrawer;
+  function resolveDrawer(): Element | null {
+    if (drawer.isConnected) return drawer;
+    const fresh = findEmbedDrawer(host);
+    if (fresh) drawer = fresh;
+    return drawer.isConnected ? drawer : null;
+  }
+
   placeHost(host, drawer);
 
   // Mount eagerly. Most themes' cart drawers are `position: fixed` and
@@ -189,22 +213,15 @@ function observeDrawer(host: Element, drawer: Element) {
   // we mount once and let the theme's own toggle show/hide the container.
   mountInto(host);
 
-  // First-open race fix (2026-05-09): we used to only call placeHost when
-  // `!drawer.contains(host)`. That misses the common Horizon path where
-  //   1. On script load, the drawer's checkout button hasn't been
-  //      materialized yet (drawer body is just a <template>). findHostTarget
-  //      falls through to its last-resort `{parent: drawer, before: null}`
-  //      and the host is appended to the drawer root.
-  //   2. User clicks the cart icon. Horizon renders the cart UI by ADDING
-  //      siblings around our host (it doesn't innerHTML-replace on first
-  //      render). Our host is still a direct child of drawer, just at the
-  //      wrong slot.
-  //   3. drawer.contains(host) is still true — old reinsert no-op'd.
-  //   4. Widget stays at drawer root, hidden / off-position.
-  // Calling placeHost unconditionally fixes this: placeHost is idempotent
-  // (lines 174 + 177 short-circuit when the host is already at the correct
-  // slot), so re-running on every drawer mutation only does work when the
-  // ideal slot has shifted.
+  // First-open race + cart-refresh race: Horizon refreshes the cart
+  // drawer's contents by replacing children of `.cart-drawer__inner` (and
+  // sometimes the entire cart-drawer-component). When that happens our
+  // host gets removed from DOM. We re-attach by:
+  //   (a) running placeHost on every cart event Horizon fires
+  //   (b) running placeHost on every relevant DOM mutation
+  // Observing document.body (instead of just the drawer) means we still
+  // catch mutations even after the drawer reference goes stale — the body
+  // observer survives a drawer swap.
   //
   // Debounce via rAF because subtree:true catches mutations from the
   // cart-block's OWN Preact renders inside the host (postcode keystrokes,
@@ -217,14 +234,16 @@ function observeDrawer(host: Element, drawer: Element) {
     scheduled = true;
     requestAnimationFrame(() => {
       scheduled = false;
-      placeHost(host, drawer);
+      const d = resolveDrawer();
+      if (!d) return;
+      placeHost(host, d);
     });
   };
   ["cart:updated", "cart:refresh", "cart-updated"].forEach((evt) => {
     document.addEventListener(evt, reinsert);
   });
   const mo = new MutationObserver(reinsert);
-  mo.observe(drawer, { childList: true, subtree: true });
+  mo.observe(document.body, { childList: true, subtree: true });
 }
 
 function init() {
