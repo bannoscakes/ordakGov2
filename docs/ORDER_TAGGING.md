@@ -145,6 +145,12 @@ Slot ID: slot_abc123
 When a customer selects a slot, call the tagging API:
 
 **Endpoint:** `POST /api/orders/tag`
+**Auth:** Shopify App Proxy signature. Storefront callers reach this
+through `/apps/ordak-go/orders/tag` (Shopify forwards via App Proxy
+with an HMAC-signed query string). Direct hits to the bare URL return
+**HTTP 401**. Slot ID and existing-link checks are scoped to the
+authenticated session's shop — passing another shop's slotId returns
+404 "Slot not found".
 
 **Request:**
 ```json
@@ -177,6 +183,10 @@ When a customer selects a slot, call the tagging API:
 ### Get Order Scheduling Info
 
 **Endpoint:** `GET /api/orders/tag?orderId=5678901234`
+**Auth:** Shopify admin session (embedded admin). Direct hits without
+a valid admin session return **HTTP 401**. The OrderLink lookup is
+scoped via `slot.location.shopId === session.shop.id`, so admins only
+see orders that belong to their own shop.
 
 **Response:**
 ```json
@@ -204,6 +214,10 @@ When a customer selects a slot, call the tagging API:
 ### Update Order Schedule
 
 **Endpoint:** `POST /api/orders/update-schedule`
+**Auth:** Shopify admin session. Direct hits without a valid admin
+session return **HTTP 401**. The existing OrderLink lookup is scoped
+via `slot.location.shopId === session.shop.id`, mirroring the admin
+reschedule UI at `/app/orders/<orderId>/reschedule`.
 
 **Request:**
 ```json
