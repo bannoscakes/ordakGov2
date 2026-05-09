@@ -574,8 +574,8 @@ function StatusDot({ done, manual }: { done: boolean; manual: boolean }) {
           width: 22,
           height: 22,
           borderRadius: 11,
-          background: "#1a8917",
-          color: "#fff",
+          background: "var(--p-color-bg-fill-success, #1a8917)",
+          color: "var(--p-color-text-on-bg-fill, #fff)",
           fontSize: 12,
           fontWeight: 700,
         }}

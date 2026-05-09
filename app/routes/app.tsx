@@ -25,8 +25,7 @@ export default function App() {
         <Link to="/app/orders">Orders</Link>
         <Link to="/app/locations">Locations</Link>
         <Link to="/app/zones">Zones</Link>
-        <Link to="/app/diagnostics">Diagnostics</Link>
-        <Link to="/app/settings/recommendations">Settings</Link>
+        <Link to="/app/settings">Settings</Link>
       </NavMenu>
       <Outlet />
     </AppProvider>

@@ -23,6 +23,7 @@ import {
   ProgressBar,
   Text,
   Badge,
+  Link,
 } from "@shopify/polaris";
 import { useState } from "react";
 import { authenticate } from "../shopify.server";
@@ -399,7 +400,15 @@ function LocationStep({ existingCount, onSkip }: { existingCount: number; onSkip
             <BlockStack gap="400">
               <Text as="h3" variant="headingMd">Coordinates (optional)</Text>
               <Text as="p" tone="subdued" variant="bodySm">
-                Used for distance-based recommendations and radius zones. Find them on Google Maps.
+                Used for distance-based recommendations and radius zones. Right-click the address pin in Google Maps and copy the coordinates.{" "}
+                {address || city ? (
+                  <Link
+                    url={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([address, city, province, country].filter(Boolean).join(", "))}`}
+                    external
+                  >
+                    Open this address in Google Maps
+                  </Link>
+                ) : null}
               </Text>
               <InlineStack gap="400">
                 <div style={{ flex: 1 }}>

@@ -14,12 +14,27 @@ export function useToastFeedback(): {
   const showToast = useCallback(
     (message: string, opts?: { error?: boolean; duration?: number }) => {
       if (typeof window === "undefined") return;
-      const sb = (globalThis as { shopify?: { toast?: { show: (msg: string, o?: unknown) => unknown } } }).shopify;
-      if (!sb?.toast?.show) return;
-      sb.toast.show(message, {
-        isError: opts?.error ?? false,
-        duration: opts?.duration ?? 3000,
-      });
+      const tryShow = (attempt: number) => {
+        const sb = (globalThis as { shopify?: { toast?: { show: (msg: string, o?: unknown) => unknown } } }).shopify;
+        if (sb?.toast?.show) {
+          sb.toast.show(message, {
+            isError: opts?.error ?? false,
+            duration: opts?.duration ?? 3000,
+          });
+          return;
+        }
+        // App Bridge global hasn't hydrated yet — retry once on the next
+        // animation frame. After that, log so debug builds surface the
+        // missed feedback instead of silently no-op'ing.
+        if (attempt === 0) {
+          requestAnimationFrame(() => tryShow(1));
+          return;
+        }
+        if (process.env.NODE_ENV !== "production") {
+          console.warn("[ordak] toast skipped: shopify.toast not ready", { message });
+        }
+      };
+      tryShow(0);
     },
     [],
   );

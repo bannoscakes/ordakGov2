@@ -242,7 +242,7 @@ export default function CleanupShippingZones() {
   const alreadyClean = state.hasAuZone && !hasManualToRemove;
 
   return (
-    <Page title="Cleanup shipping zones">
+    <Page title="Cleanup shipping zones" backAction={{ content: "Settings", url: "/app/settings" }}>
       <Layout>
         <Layout.Section>
           <Card>
