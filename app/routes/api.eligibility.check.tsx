@@ -14,7 +14,7 @@
 
 import type { ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { authenticate } from "../shopify.server";
+import { authenticateProxyOrInternal } from "../utils/app-proxy.server";
 import prisma from "../db.server";
 import { logger } from "../utils/logger.server";
 import { postcodeMatchesZone } from "../utils/postcode-match.server";
@@ -59,12 +59,13 @@ export async function action({ request }: ActionFunctionArgs) {
   let attemptedShopDomain: string | undefined;
 
   // F3 fix: this inner action is reachable directly at /api/eligibility/check
-  // because Remix exposes every file in app/routes/. Without the proxy
-  // auth gate here, anonymous callers could enumerate zone names, base
-  // prices, and location addresses across every installed shop. The
-  // proxy wrapper at apps.proxy.eligibility.check authenticates first;
-  // re-authenticate here so direct hits to the bare URL fail.
-  const { session } = await authenticate.public.appProxy(request);
+  // because Remix exposes every file in app/routes/. Without the auth
+  // gate here, anonymous callers could enumerate zone names, base
+  // prices, and location addresses across every installed shop.
+  // authenticateProxyOrInternal short-circuits when called via
+  // appProxyAction (already validated); a direct external hit still
+  // runs Shopify's HMAC check and 401s on no signature.
+  const session = await authenticateProxyOrInternal(request);
   if (!session) {
     return json<EligibilityResponse>(
       {

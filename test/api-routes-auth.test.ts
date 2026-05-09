@@ -16,6 +16,9 @@
  *   - authenticate.public.appProxy(...)   // Shopify App Proxy signature
  *   - authenticate.webhook(...)           // Shopify webhook HMAC
  *   - appProxyAction(...)                 // shorthand wrapper around appProxy
+ *   - authenticateProxyOrInternal(...)    // accepts upstream-validated calls
+ *                                         // from appProxyAction OR runs the
+ *                                         // real proxy auth on direct hits
  *
  * If a new file fails this check, fix the route — don't add it to
  * EXEMPT_FILES unless you have a written reason.
@@ -32,6 +35,7 @@ const AUTH_PATTERNS: RegExp[] = [
   /authenticate\.public\.appProxy\s*\(/,
   /authenticate\.webhook\s*\(/,
   /appProxyAction\s*\(/,
+  /authenticateProxyOrInternal\s*\(/,
 ];
 
 // Deliberate exemptions. ADD A COMMENT explaining why each entry is here.

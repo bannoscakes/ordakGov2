@@ -28,7 +28,7 @@
  */
 
 import { json, type ActionFunctionArgs } from "@remix-run/node";
-import { authenticate } from "../shopify.server";
+import { authenticateProxyOrInternal } from "../utils/app-proxy.server";
 import prisma from "../db.server";
 import { logger } from "../utils/logger.server";
 
@@ -49,12 +49,13 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   // F2 fix: this inner action is reachable directly at /api/storefront/diagnostics
-  // because Remix exposes every file in app/routes/. Without the proxy
-  // auth gate here, an attacker could POST {"shopifyDomain":"<victim>",
+  // because Remix exposes every file in app/routes/. Without the auth
+  // gate here, an attacker could POST {"shopifyDomain":"<victim>",
   // "expressButtonsVisible":true} and silence the merchant-facing
-  // misconfig warning on a competitor shop. Re-authenticate so direct
-  // hits 401, regardless of what the proxy wrapper did upstream.
-  const { session } = await authenticate.public.appProxy(request);
+  // misconfig warning on a competitor shop. authenticateProxyOrInternal
+  // accepts upstream-validated calls from appProxyAction; a direct
+  // external hit still runs Shopify's HMAC check and 401s.
+  const session = await authenticateProxyOrInternal(request);
   if (!session) {
     return json({ error: "Unauthorized" }, { status: 401 });
   }
