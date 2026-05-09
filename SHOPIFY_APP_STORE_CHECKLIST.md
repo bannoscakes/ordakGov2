@@ -115,12 +115,12 @@ Use this checklist before submitting via Shopify Partners. Items are grouped by 
 ### Privacy Policy & Legal
 
 - [x] **Update PRIVACY_POLICY.md contact info** — placeholder emails replaced with `panos@bannos.com.au` (3 occurrences). Both `PRIVACY_POLICY.md` and the live `/policies/privacy` route are aligned.
-- [ ] **Terms of Service** — `TERMS_OF_SERVICE.md` does not exist. Draft user agreement, SLAs, liability, termination.
+- [x] **Terms of Service** — public page at `/policies/terms` (`app/routes/policies.terms.tsx`). NSW/AU jurisdiction, A$100 liability cap, free-now language, links the privacy policy and Shopify API terms. Shipped in PR #129.
 - [ ] **Support contact infrastructure** — confirm `panos@bannos.com.au` is monitored. Optional: support FAQ at `/support` route.
 
 ### App Listing Assets
 
-- [ ] **App icon** — 1200×1200 PNG/JPEG. No Shopify branding. Must match app name + purpose. Guidelines: https://shopify.dev/docs/apps/launch/app-store-listing/app-icon
+- [x] **App icon** — 1200×1200 PNG generated from `~/Desktop/ordak-go-assets ` SVG and uploaded to Partners Dashboard 2026-05-09. Replaces the gray placeholder in admin chrome (top bar + side nav).
 - [ ] **Screenshots** — 3–6 high-quality PNGs at 1600×900 (Shopify's current preferred size; 1280×800 also accepted). Captures of:
   1. Dashboard with the new compact Setup guide
   2. Settings hub (3-card grid + Advanced list — showcases Polaris alignment)
@@ -128,8 +128,9 @@ Use this checklist before submitting via Shopify Partners. Items are grouped by 
   4. Locations/$id/block-dates with calendar + Tag chips
   5. Locations/$id/prep-time with live "effective lead time" preview
   6. Cart-block on `ordakgo-v3` storefront with slots rendered
-- [ ] **App description** — 80-char tagline + long-form. Highlight: per-location scheduling, blackout dates, lead time, AU-zone shipping, Pickup/Delivery cart-stage gating
+- [x] **App description** — full draft at `docs/APP_STORE_LISTING.md`: name, tagline (3 options), introduction, long description, key benefits, feature highlights, SEO keywords, categories, pricing, demo store URL, support contacts. Paste-ready into every Partners listing field. Shipped in PR #129.
 - [ ] **Demo screencast** — 60–90s. Walk: install → setup wizard → create location → create zone → configure slots → place test order. Upload to YouTube/Vimeo (unlisted is fine for unlisted-app submission)
+- [x] **Reviewer instructions** — full draft at `docs/APP_STORE_REVIEWER_INSTRUCTIONS.md`: 5-min happy-path walkthrough (install → wizard → cart → checkout → verify order tag), GDPR webhook check, diagnostics surface, Functions/Plus disclaimer, npm-audit exposure analysis pre-baked. Shipped in PR #129.
 
 ### Performance — Built-for-Shopify badge
 
@@ -159,8 +160,8 @@ Use this checklist before submitting via Shopify Partners. Items are grouped by 
 
 ### Rate Limiting on Public Endpoints
 
-- [ ] **Rate-limit storefront APIs** — `/api/eligibility/check`, `/api/recommendations/locations`, `/api/recommendations/slots`, `/apps/ordak-go/diagnostics`. Vercel offers `@vercel/edge` rate limiting OR a simple in-memory limiter is enough for v1 (the cart-block is the primary caller). Without limits, a malicious customer could DOS the slot endpoints.
-- [ ] **Rate-limit carrier-service callback** — Shopify itself doesn't abuse this, but it's public; same pattern.
+- [x] **Rate-limit storefront APIs** — `app/utils/rate-limit.server.ts` sliding-window limiter wired into `appProxyAction()` so all 6 `apps.proxy.*` routes inherit it. Default 60 req/min per shop+IP, configurable via `RATE_LIMIT_MAX_PER_MINUTE`. Returns HTTP 429 + `Retry-After`. 7 unit tests in `test/rate-limit.test.ts`. Shipped in PR #129.
+- [ ] **Rate-limit carrier-service callback** — Shopify itself doesn't abuse this, but it's public; same pattern. (Out of scope for v1: the carrier service is HMAC-verified by Shopify upstream and is not directly addressable from the storefront.)
 
 ### Manual Testing Matrix
 
@@ -195,24 +196,16 @@ Use this checklist before submitting via Shopify Partners. Items are grouped by 
 
 ### Pre-Flight (run all)
 
-- [ ] `npx tsc --noEmit` — 0 errors (last verified during PR #121 merge)
-- [ ] `npm run build` — clean (last verified during PR #121 merge)
-- [ ] `npm audit` — **CURRENT STATE (2026-05-09 audit): 36 vulnerabilities (5 critical, 23 high, 8 moderate)**. Direct prod-affecting packages:
-  - `@remix-run/node` critical → upgrade to ≥ 2.17.2
-  - `@remix-run/react` high → upgrade to ≥ 2.17.3
-  - `@remix-run/serve` critical → upgrade to ≥ 2.17.1
-  - `@vercel/remix` critical → review breaking changes
-  - `@shopify/shopify_function` high → most are transitive `@graphql-codegen/*` (dev-only build tooling, but nested under prod chain)
-  - `vite` moderate → upgrade to ≥ 6.4.2
-  - `@remix-run/dev` critical → dev-only, low real risk
-
-  Run `npm audit fix` (most are non-breaking patch bumps) before submission. Target: 0 critical, 0 high.
+- [x] `npx tsc --noEmit` — 0 errors (verified PR #129 merge, 2026-05-09)
+- [x] `npm run build` — clean (verified PR #129 merge, 2026-05-09)
+- [x] `npm audit` — **analysed and documented 2026-05-09**. 31-36 advisories chained through `@vercel/remix@2.16.7`'s strict peer dep on Remix 2.16.7. The critical advisory targets `createFileSessionStorage` which is dead code under our Prisma session storage; remaining advisories are build-time tooling. Upgrade tested → ERESOLVE → rolled back. Will revisit when `@vercel/remix@2.17.x` ships. Full analysis in § "npm audit findings (2026-05-09 — analyzed)" below.
+- [x] `npx vitest run` — 55/55 tests pass (verified PR #129 merge, 2026-05-09)
 - [ ] Lighthouse pages above ≥ 90 score on Performance, Accessibility, Best Practices, SEO
-- [ ] Privacy policy live + linked from app listing
-- [ ] Terms of service live + linked from app listing
-- [ ] App icon live in Partner Dashboard
+- [x] Privacy policy live + linked from app listing — `https://ordak-go.vercel.app/policies/privacy`
+- [x] Terms of service live + linked from app listing — `https://ordak-go.vercel.app/policies/terms`
+- [x] App icon live in Partner Dashboard — uploaded 2026-05-09
 - [ ] Screenshots live in Partner Dashboard (3+)
-- [ ] Reviewer instructions text live in Partner Dashboard
+- [ ] Reviewer instructions text live in Partner Dashboard — paste from `docs/APP_STORE_REVIEWER_INSTRUCTIONS.md`
 - [ ] Test the full install → setup → first-order flow on a fresh dev store
 
 ### Submission Day
