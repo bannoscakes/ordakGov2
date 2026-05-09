@@ -94,6 +94,20 @@ Use this checklist before submitting via Shopify Partners. Items are grouped by 
 - [x] **PR 6b — locations.$id nested routes** (PR #121). Single 1115-line file → parent layout + 6 children (setup/fulfillment/pickup-hours/prep-time/block-dates/zones)
 - [x] **Spec §10 "no inline saves" — FULL PASS** across the admin (single-form pages use SaveBar; SlotsEditor keeps per-day Save buttons by design)
 
+### Cart-block + dashboard fixes (2026-05-09)
+
+- [x] **Cart-block first-open race fix** (PR #123). Widget was invisible on first cart drawer open due to a `MutationObserver` early-exit; reinsert now calls `placeHost` unconditionally + rAF debouncing. **Verified live** on `ordakgo-v3` after `ordak-go-43` deploy. See `memory/cart_block_first_open_race.md`.
+- [x] **Cart-block surface auto-detection** (PR #124). `Shop.diagnosticsCartDrawerSeenAt` + `diagnosticsCartPageSeenAt` columns; cart-block POSTs which surface it's on; dashboard adapts setup task copy + CTA. **Verified live**: `ordakgo-v3.diagnosticsCartDrawerSeenAt` populated within ~1.5s of cart drawer first open.
+- [x] **Dashboard upNext skip-manual fix** (PR #126). "Resume setup" CTA was permanently pinned to "Hide express checkout buttons" (a manual item that's permanently `done: false`); fixed by scoping `upNext` to auto-tracked items only.
+- [x] **`ordak-go-43` cart-block bundle released globally** (Shopify CDN, 2026-05-09). Carries the first-open race fix + surface diagnostic POST extension. Older `ordak-go-42` bundles continue to work — backwards-compat preserved end-to-end.
+
+### App Store audit (2026-05-09)
+
+- [x] **GDPR redact retry storm fixed** (PR #122). `CUSTOMERS_REDACT` and `SHOP_REDACT` handlers no longer rethrow on DB errors; they log + return 200 (matches `CUSTOMERS_DATA_REQUEST` fail-open pattern), preventing 48-hour Shopify retry spam.
+- [x] **Cross-shop OrderLink leak closed** (PR #122). `recommendations.slots.tsx` route-efficiency query now scoped via `slot.location.shopId`.
+- [x] **Lighthouse + perf-trace verification** — LCP 432ms (16× under BFS 2.5s target), CLS 0.00. Storefront cart-block passes BFS performance criteria with massive margin.
+- [x] **Dev → main sync** (PR #125, merge commit `3fd789f`, 2026-05-09). 14 commits rolled to main. Two pre-merge reviews (cumulative + prod-readiness) cleared. Vercel prod auto-deploy completed.
+
 ---
 
 ## ⚠️ TO DO — Submission Blockers
@@ -244,7 +258,9 @@ Use this checklist before submitting via Shopify Partners. Items are grouped by 
 
 **Completion: ~85%**
 
-**v1 codebase: COMPLETE.** All Phase 1, 1.5.A–D, Polaris-alignment refactor, PR 6a + 6b shipped to Dev. Spec §10 "no inline saves" full-pass across the admin. GDPR webhooks fully implemented. Multi-tenant scoping audited.
+**v1 codebase: COMPLETE on `main` as of 2026-05-09 EOD.** All Phase 1, 1.5.A–D, Polaris-alignment refactor, PR 6a + 6b, App Store audit fixes, cart-block fixes (first-open race + surface auto-detection), and Dev → main sync (PR #125, merge commit `3fd789f`) shipped. `ordak-go-43` cart-block bundle released globally on Shopify CDN. All 3 v1.5 Supabase migrations applied + verified.
+
+Spec §10 "no inline saves" full-pass across the admin. GDPR webhooks fully implemented + retry-storm fixed. Multi-tenant scoping audited. Cart-block first-open verified live.
 
 ### Pre-submission compliance audit (2026-05-09)
 
