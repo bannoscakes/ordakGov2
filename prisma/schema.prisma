@@ -64,6 +64,22 @@ model Shop {
   // hide-express-buttons toggle on the cart-scheduler-embed app embed.
   diagnosticsExpressButtonsVisible Boolean @default(false)
 
+  // Surface auto-detection. The cart-block POSTs to /apps/ordak-go/diagnostics
+  // each time it mounts, sending which surface it's running on (cart-drawer
+  // app embed vs cart-page app block). The two timestamp columns let the
+  // dashboard answer "is the cart-block actually rendered on this store, and
+  // on which surface(s)?" without requiring the merchant to declare anything
+  // in our admin — Shopify's theme editor is the source of truth, we observe
+  // and reflect.
+  //
+  // Both columns null = no signal yet (fresh install, theme misconfig, or
+  // cart-block error). One non-null = single surface active. Both non-null =
+  // merchant uses BOTH (e.g., drawer on mobile, cart page on desktop). If a
+  // timestamp is older than ~7 days the dashboard surfaces a stale-detection
+  // warning so the merchant knows their setup may have regressed.
+  diagnosticsCartDrawerSeenAt DateTime?
+  diagnosticsCartPageSeenAt   DateTime?
+
   locations             Location[]
   zones                 Zone[]
   webhookDestinations   WebhookDestination[]

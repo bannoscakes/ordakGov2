@@ -36,7 +36,10 @@ function reportDiagnosticsOnce(config: BlockConfig) {
   diagnosticsReported = true;
   try {
     const api = new OrdakApi(config);
-    api.reportExpressButtonsVisible(detectVisibleExpressButtons());
+    api.reportDiagnostics({
+      expressButtonsVisible: detectVisibleExpressButtons(),
+      surface: config.surface,
+    });
   } catch {
     // Diagnostics are passive — never block mount on a telemetry failure.
   }
