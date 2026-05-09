@@ -212,24 +212,48 @@ export default function Index() {
   const cartBlockActive = cartBlockSurface.drawerActive || cartBlockSurface.pageActive;
   const cartBlockBoth = cartBlockSurface.drawerActive && cartBlockSurface.pageActive;
   const cartBlockStaleAny = cartBlockSurface.drawerStale || cartBlockSurface.pageStale;
+  // Partial-stale: one surface active, the other previously seen but now
+  // stale. Most likely cause is the merchant disabling one of the two
+  // blocks. We append a note so the merchant who configured BOTH but lost
+  // one notices, instead of seeing only the still-active surface confirmed.
+  const partialStaleNote = (() => {
+    if (cartBlockSurface.drawerActive && cartBlockSurface.pageStale) {
+      return " The cart page surface (App Block) went silent — re-enable it in the cart template if you still want it.";
+    }
+    if (cartBlockSurface.pageActive && cartBlockSurface.drawerStale) {
+      return " The cart drawer surface (App Embed) went silent — re-enable it in App embeds if you still want it.";
+    }
+    return "";
+  })();
   const cartBlockDescription = (() => {
     if (cartBlockBoth) {
       return "Both surfaces active. Customers see the scheduler in both the cart drawer and on the /cart page.";
     }
     if (cartBlockSurface.drawerActive) {
-      return "Cart drawer active. Customers see the scheduler when they open the cart drawer. To also enable the /cart page, edit the cart template and add the Ordak Cart Scheduler block.";
+      return (
+        "Cart drawer active. Customers see the scheduler when they open the cart drawer. To also enable the /cart page, edit the cart template and add the Ordak Cart Scheduler block." +
+        partialStaleNote
+      );
     }
     if (cartBlockSurface.pageActive) {
-      return "Cart page active. Customers see the scheduler on the /cart page. To also enable the cart drawer, open theme editor → App embeds → Cart Scheduler Drawer.";
+      return (
+        "Cart page active. Customers see the scheduler on the /cart page. To also enable the cart drawer, open theme editor → App embeds → Cart Scheduler Drawer." +
+        partialStaleNote
+      );
     }
     if (cartBlockStaleAny) {
       return "The cart-block hasn't been seen on your storefront recently. It may have been removed from the theme. Re-enable it in the theme editor.";
     }
     return "Choose where customers see the scheduling widget. Cart drawer (App Embed, recommended) shows it in the slide-out cart panel. Cart page (App Block) shows it on the /cart page. Pick one or use both.";
   })();
-  const cartBlockCta = cartBlockSurface.pageActive && !cartBlockSurface.drawerActive
-    ? { label: "Open cart template", to: themeEditorUrl, external: true }
-    : { label: "Open App embeds", to: cartSchedulerEmbedUrl, external: true };
+  // CTA selection covers four states explicitly. Without the both-active
+  // branch, an already-complete task pointed at App Embeds — confusing for
+  // merchants whose drawer + page are both running healthy.
+  const cartBlockCta = cartBlockBoth
+    ? { label: "Open theme editor", to: themeEditorUrl, external: true }
+    : cartBlockSurface.pageActive
+      ? { label: "Open cart template", to: themeEditorUrl, external: true }
+      : { label: "Open App embeds", to: cartSchedulerEmbedUrl, external: true };
 
   const items: ChecklistItem[] = [
     {
