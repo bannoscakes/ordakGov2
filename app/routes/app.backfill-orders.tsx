@@ -86,8 +86,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
     for (const order of orders) {
       const orderIdNum = order.id.split("/").pop()!;
-      const existing = await prisma.orderLink.findUnique({
-        where: { shopifyOrderId: orderIdNum },
+      // F5b fix: scope by shop so a coincidentally-matching order id at
+      // another shop doesn't make us skip backfill for THIS shop's order.
+      // Same root cause as F5 — findUnique against a globally-unique key
+      // ignores shop boundaries.
+      const existing = await prisma.orderLink.findFirst({
+        where: {
+          shopifyOrderId: orderIdNum,
+          slot: { location: { shopId: shop.id } },
+        },
       });
       if (existing) {
         results.push({
