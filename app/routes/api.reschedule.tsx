@@ -5,50 +5,58 @@ import { logger } from "../utils/logger.server";
 import { writeEventLogTx, dispatchEventLog, type DispatchableEventLog } from "../services/event-log.server";
 
 /**
- * API endpoint for customers to reschedule their orders
- * This can be called from the storefront widget
+ * POST /api/reschedule
+ *
+ * Storefront-customer reschedule endpoint. Reachable via
+ *   POST /apps/ordak-go/reschedule  (Shopify App Proxy → apps.proxy.reschedule)
+ *
+ * Direct hits to /api/reschedule fail proxy signature validation and
+ * return 401. The proxy wrapper at apps.proxy.reschedule.tsx pins the
+ * shop to session.shop before delegating, and this action also
+ * authenticates so the bare URL can't be hit out-of-band.
+ *
+ * Shop identity is derived from session.shop only — never from the
+ * request body. The new slot lookup is shop-scoped so a customer of
+ * shop A cannot rebook their order onto shop B's slot (the F1 cross-
+ * tenant write that motivated this rewrite).
  */
 export async function action({ request }: ActionFunctionArgs) {
-  // For storefront requests, use appProxy authentication
-  // For now, we'll use a simple approach that could be called from the admin or a custom app
-  try {
-    const formData = await request.formData();
-    const shopDomain = formData.get("shop") as string;
-    const orderId = formData.get("orderId") as string;
-    const newSlotId = formData.get("newSlotId") as string;
-    const reason = formData.get("reason") as string;
+  const { session } = await authenticate.public.appProxy(request);
+  if (!session) {
+    return json({ success: false, error: "Unauthorized" }, { status: 401 });
+  }
 
-    if (!shopDomain || !orderId || !newSlotId) {
+  try {
+    const body = (await request.json().catch(() => ({}))) as {
+      orderId?: string;
+      newSlotId?: string;
+      reason?: string;
+    };
+    const { orderId, newSlotId, reason } = body;
+
+    if (!orderId || !newSlotId) {
       return json(
-        {
-          success: false,
-          error: "Missing required parameters: shop, orderId, newSlotId",
-        },
-        { status: 400 }
+        { success: false, error: "Missing required parameters: orderId, newSlotId" },
+        { status: 400 },
       );
     }
 
-    // Find the shop
     const shop = await prisma.shop.findUnique({
-      where: { shopifyDomain: shopDomain },
+      where: { shopifyDomain: session.shop },
+      select: { id: true },
     });
-
     if (!shop) {
       return json({ success: false, error: "Shop not found" }, { status: 404 });
     }
 
-    // Find the current booking
+    // Find the current booking — already shop-scoped via slot.location.shopId.
     const orderLink = await prisma.orderLink.findFirst({
       where: {
         shopifyOrderId: orderId,
         slot: { location: { shopId: shop.id } },
-        status: {
-          in: ["scheduled", "updated"],
-        },
+        status: { in: ["scheduled", "updated"] },
       },
-      include: {
-        slot: true,
-      },
+      include: { slot: true },
     });
 
     if (!orderLink) {
@@ -57,24 +65,30 @@ export async function action({ request }: ActionFunctionArgs) {
           success: false,
           error: "Order booking not found or already completed/canceled",
         },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
-    // Verify the new slot exists and has capacity
-    const newSlot = await prisma.slot.findUnique({
-      where: { id: newSlotId },
+    // Verify the new slot exists, belongs to this shop, and has capacity.
+    // findFirst with the shop-scoped where closes the F1 cross-tenant
+    // booking — without the location.shopId filter, a global slot id
+    // resolves regardless of which shop owns it.
+    const newSlot = await prisma.slot.findFirst({
+      where: { id: newSlotId, location: { shopId: shop.id } },
       include: { location: true },
     });
 
     if (!newSlot) {
-      return json({ success: false, error: "New slot not found" }, { status: 404 });
+      return json(
+        { success: false, error: "New slot not found" },
+        { status: 404 },
+      );
     }
 
     if (newSlot.booked >= newSlot.capacity) {
       return json(
         { success: false, error: "Selected slot is fully booked" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -83,78 +97,65 @@ export async function action({ request }: ActionFunctionArgs) {
     let capacityRace = false;
 
     try {
-      // Perform the reschedule in a transaction
       await prisma.$transaction(async (tx) => {
-      // Decrement old slot's booked count
-      await tx.slot.update({
-        where: { id: oldSlotId },
-        data: {
-          booked: {
-            decrement: 1,
+        await tx.slot.update({
+          where: { id: oldSlotId },
+          data: { booked: { decrement: 1 } },
+        });
+
+        // Atomic capacity-check + increment. The pre-tx read can race
+        // against another commit; do the comparison in SQL so the
+        // increment only lands if there's still room. Throwing rolls
+        // back the decrement above.
+        const incrementResult = await tx.$executeRaw`
+          UPDATE "Slot"
+          SET booked = booked + 1
+          WHERE id = ${newSlotId} AND booked < capacity
+        `;
+        if (incrementResult === 0) {
+          capacityRace = true;
+          throw new Error("CAPACITY_RACE");
+        }
+
+        await tx.orderLink.update({
+          where: { id: orderLink.id },
+          data: { slotId: newSlotId, status: "updated" },
+        });
+
+        pendingEvent = await writeEventLogTx({
+          tx,
+          data: {
+            orderLinkId: orderLink.id,
+            eventType: "order.schedule_updated",
+            timestamp: new Date(),
+            payload: JSON.stringify({
+              orderId,
+              oldSlotId,
+              newSlotId,
+              oldSlot: {
+                date: orderLink.slot.date,
+                timeStart: orderLink.slot.timeStart,
+                timeEnd: orderLink.slot.timeEnd,
+              },
+              newSlot: {
+                date: newSlot.date,
+                timeStart: newSlot.timeStart,
+                timeEnd: newSlot.timeEnd,
+                locationName: newSlot.location.name,
+                locationAddress: newSlot.location.address,
+              },
+              reason: reason || "Customer requested reschedule",
+              rescheduledBy: "customer",
+              rescheduledAt: new Date().toISOString(),
+            }),
           },
-        },
-      });
-
-      // Atomic capacity-check + increment. The pre-tx read at line 74 can
-      // race against another commit; do the comparison in SQL so we only
-      // land the increment if there's still room. Throwing rolls back the
-      // decrement above.
-      const incrementResult = await tx.$executeRaw`
-        UPDATE "Slot"
-        SET booked = booked + 1
-        WHERE id = ${newSlotId} AND booked < capacity
-      `;
-      if (incrementResult === 0) {
-        capacityRace = true;
-        throw new Error("CAPACITY_RACE");
-      }
-
-      // Update the order link
-      await tx.orderLink.update({
-        where: { id: orderLink.id },
-        data: {
-          slotId: newSlotId,
-          status: "updated",
-        },
-      });
-
-      // Write the event row inside the transaction so a rolled-back
-      // reschedule never logs a phantom event. Dispatch happens after the
-      // transaction commits — webhook receivers shouldn't hold DB locks.
-      pendingEvent = await writeEventLogTx({
-        tx,
-        data: {
-          orderLinkId: orderLink.id,
-          eventType: "order.schedule_updated",
-          timestamp: new Date(),
-          payload: JSON.stringify({
-            orderId,
-            oldSlotId,
-            newSlotId,
-            oldSlot: {
-              date: orderLink.slot.date,
-              timeStart: orderLink.slot.timeStart,
-              timeEnd: orderLink.slot.timeEnd,
-            },
-            newSlot: {
-              date: newSlot.date,
-              timeStart: newSlot.timeStart,
-              timeEnd: newSlot.timeEnd,
-              locationName: newSlot.location.name,
-              locationAddress: newSlot.location.address,
-            },
-            reason: reason || "Customer requested reschedule",
-            rescheduledBy: "customer",
-            rescheduledAt: new Date().toISOString(),
-          }),
-        },
-      });
+        });
       });
     } catch (txErr) {
       if (capacityRace) {
         return json(
           { success: false, error: "Selected slot just filled — pick another" },
-          { status: 409 }
+          { status: 409 },
         );
       }
       throw txErr;
@@ -188,7 +189,7 @@ export async function action({ request }: ActionFunctionArgs) {
         success: false,
         error: error instanceof Error ? error.message : "An error occurred",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
