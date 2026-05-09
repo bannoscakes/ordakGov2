@@ -60,11 +60,15 @@ The current plan and phase ordering live in [`docs/PLAN.md`](docs/PLAN.md) and [
   - #1001 delivery — slot 2026-05-15 11:00, `slot.booked=1`, OrderLink + EventLog rows present.
   - #1002 pickup — slot 2026-05-07 09:00 at Bannos HQ, `slot.booked=1`, `order.linked` + `order.shopify_writes_attempted` (ok=true) events fired.
 - ✅ **`ordak-go-38`** released globally (cart-block + delivery-rate-filter + cart-validation), bundling the pickup-mode wording fix.
-- ✅ **Phase 1.5.A — Per-slot cutoff** (PR #110, merged 2026-05-08). `cutoffOffsetMinutes` on `Slot` + `SlotTemplate`, Cutoff column in slot editor with the content-key memoization + flex-wrap row layout that survives narrow card widths, `isSlotCutoffPassed()` helper, slot loader filter. Verified live on `ordakgo-v3` admin.
-- ⏳ **Phase 1.5.B — Blackout dates per Location**. **This is the immediate next action.** See [`docs/PRE_PHASE_2_UX_FIXES.md`](docs/PRE_PHASE_2_UX_FIXES.md) for the full 1.5.B–D PR sequence.
-- ⏳ **Phase 1.5.C** — lead time per Location.
-- ⏳ **Phase 1.5.D** — drop `/app/rules` routes, replace cart-validation install dashboard row with theme-editor deep link, add `hide_express_buttons` setting to cart-scheduler-embed.
-- ⏳ **Phase 2 — App Store listing assets** (after 1.5.D): icon 1200×1200, 3–6 screenshots @ 1600×900, demo screencast 60–90s, listing copy, "Free" pricing, reviewer instructions.
+- ✅ **Phase 1.5.A — Per-slot cutoff** (PR #110, main 2026-05-08). `cutoffOffsetMinutes` on `Slot` + `SlotTemplate`, Cutoff column in slot editor.
+- ✅ **Phase 1.5.D — Drop `/app/rules` + theme-editor deep link** (PR #112, main 2026-05-08). Cart-validation install row replaced; new `hide_express_buttons` toggle on cart-scheduler-embed (default ON). `ordak-go-42` released.
+- ✅ **Phase 1.5.B — Per-Location blackout dates** (PR #118, main 2026-05-09). `Location.blackoutDates DateTime[]` migration; calendar editor; filter wired into 4 sites (storefront recs, carrier-service, admin reschedule loader+action, update-schedule action).
+- ✅ **Phase 1.5.C — Per-Location lead time** (PR #119, main 2026-05-09). `Location.leadTimeHours` + `leadTimeDays` migration; prep-time form with live preview; same 4-site filter wiring.
+- ✅ **Polaris-alignment refactor** (PRs #113-#117 + #120-#121, main 2026-05-09). Settings hub + AnnotatedSection + SaveBar + App Bridge toast + microcopy + nested routes for `zones.$id` and `locations.$id`. Spec §10 "no inline saves" FULL PASS.
+- ✅ **App Store audit fixes** (PR #122, main 2026-05-09). GDPR redact retry storm closed; cross-shop OrderLink leak in recommendations.slots scoped.
+- ✅ **Cart-block fixes** (PRs #123-#124, `ordak-go-43` released 2026-05-09). First-open race fix (widget renders on first cart drawer open) + surface auto-detection (cart drawer vs cart page diagnostics drive the dashboard).
+- ✅ **Dev → main sync** (PR #125, merge commit `3fd789f`, 2026-05-09). v1 codebase complete on main. Vercel prod auto-deployed.
+- ⏳ **Phase 2 — App Store listing assets** (immediate next action). Icon 1200×1200, 3–6 screenshots @ 1600×900, demo screencast 60–90s, listing copy, terms of service, privacy policy contact update (`panos@bannos.com.au`), `npm audit fix`, rate limiting on storefront APIs, "Free" pricing, reviewer instructions. See `SHOPIFY_APP_STORE_CHECKLIST.md`.
 - ⏳ **Phase 3** — reviewer-experience hardening: carrier-service uninstall/reinstall test on `ordakgo-v3`, final pre-submission smoke.
 - ⏳ **Phase 4–6** — submit unlisted, address review feedback, install on Bannos + Flour Lane via the unlisted listing's direct link post-approval.
 
