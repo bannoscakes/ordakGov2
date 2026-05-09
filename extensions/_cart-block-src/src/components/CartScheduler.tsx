@@ -244,7 +244,7 @@ export function CartScheduler({ config, rootEl }: Props) {
         console.error("[ordak] checkout interceptor failed", err);
         event.preventDefault();
         event.stopPropagation();
-        state.error.value = "Something went wrong saving your time slot. Please try again — your cart is safe.";
+        state.error.value = "Couldn't verify your cart. Please refresh the page.";
       }
     }
     document.addEventListener("click", handler, true);
@@ -323,8 +323,7 @@ export function CartScheduler({ config, rootEl }: Props) {
         }
       }
     } catch (err) {
-      console.warn("[ordak] eligibility check failed", err);
-      state.error.value = "We couldn't load your delivery options. Please try again in a moment.";
+      state.error.value = (err as Error).message ?? "Eligibility check failed";
     } finally {
       state.loading.value = { ...state.loading.value, eligibility: false };
     }
@@ -366,8 +365,7 @@ export function CartScheduler({ config, rootEl }: Props) {
         );
       }
     } catch (err) {
-      console.warn("[ordak] slot load failed", err);
-      state.error.value = "We couldn't load available times. Please try again in a moment.";
+      state.error.value = (err as Error).message ?? "Could not load slots";
     } finally {
       state.loading.value = { ...state.loading.value, slots: false };
     }
@@ -389,8 +387,7 @@ export function CartScheduler({ config, rootEl }: Props) {
         await loadSlots(top.locationId);
       }
     } catch (err) {
-      console.warn("[ordak] location load failed", err);
-      state.error.value = "We couldn't load pickup locations. Please try again in a moment.";
+      state.error.value = (err as Error).message ?? "Could not load locations";
     } finally {
       state.loading.value = { ...state.loading.value, locations: false };
     }
@@ -531,21 +528,7 @@ export function CartScheduler({ config, rootEl }: Props) {
       ) : null}
 
       {state.error.value ? (
-        <div class="ordak-error-block" role="alert">
-          <p class="ordak-error">{state.error.value}</p>
-          {!isPickup ? (
-            <button
-              type="button"
-              class="ordak-error-fallback"
-              onClick={() => {
-                state.fulfillment.value = "pickup";
-                state.error.value = null;
-              }}
-            >
-              Try Pickup instead
-            </button>
-          ) : null}
-        </div>
+        <p class="ordak-error" role="alert">{state.error.value}</p>
       ) : null}
     </section>
   );

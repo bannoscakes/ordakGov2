@@ -25,7 +25,7 @@ The fastest end-to-end check (~5 minutes).
 
 1. From the Dashboard → click **Setup wizard**.
 2. Step 1 — store info: confirm the timezone (`Australia/Sydney`).
-3. Step 2 — locations: ensure at least one location is active. The dev store has **Bannoscakes HQ** and **Flour Lane HQ** seeded.
+3. Step 2 — locations: ensure at least one location is active. The dev store has **Bannos HQ** and **Flour Lane HQ** seeded.
 4. Step 3 — zones: at least one delivery zone. The dev store has **Sydney Metro** seeded with a base price of $10.
 5. Step 4 — slot templates: confirm a delivery weekly template exists with at least one active slot.
 6. Step 5 — pickup hours: confirm at least one pickup template exists for a pickup-capable location.
@@ -37,7 +37,7 @@ The wizard also configures the AU shipping zone with the two flat rates Ordak Go
 
 1. Visit the storefront at `https://ordakgo-v3.myshopify.com` (password `theuld`).
 2. Add any product to the cart.
-3. Open the cart drawer — the Ordak Go scheduler renders inline. Choose **Delivery**, enter a Sydney metro postcode (any of `2000`, `2200`, `2204`), pick a date, and pick a time slot. (The seeded **Sydney Metro** zone covers these — if you enter a postcode outside the zone, the widget shows "No service available" with a one-click **Try Pickup instead** fallback.)
+3. Open the cart drawer — the Ordak Go scheduler renders inline. Choose **Delivery**, enter a Sydney postcode (e.g., `2000`), pick a date, and pick a time slot.
 4. Click **Checkout**.
 5. At checkout, observe that only the **Local Delivery** rate is offered (the Pickup rate is filtered out by the Delivery Customization Function — this is the cart-stage lock). Express checkout buttons are hidden by the Cart Validation Function (this is intentional — they would skip the cart and bypass scheduling).
 6. Complete the order using Shopify's test card.
@@ -81,7 +81,7 @@ Reviewers can use this surface to confirm the app is wired up end-to-end without
 
 ## Self-install convenience routes
 
-If any `afterAuth` step is missed (it shouldn't be for a fresh install, but they exist as belt-and-braces for token-exchange refresh paths), reviewers can self-heal by visiting them via **Settings → Diagnostics & maintenance** in the embedded admin, or directly:
+If any `afterAuth` step is missed (it shouldn't be for a fresh install, but they exist as belt-and-braces for token-exchange refresh paths), reviewers can self-heal by visiting:
 
 - `/app/install-carrier-service`
 - `/app/install-delivery-customization`
@@ -89,10 +89,6 @@ If any `afterAuth` step is missed (it shouldn't be for a fresh install, but they
 - `/app/setup-au-shipping`
 
 Each route reports a one-line status and is safe to call repeatedly.
-
-## Brand colour note
-
-The cart-block ships with an orange accent (`#EB5E14`). Earlier installs that pre-date the brand-alignment update may show a legacy blue accent in the theme editor's stored block setting; the runtime substitutes the orange automatically. If you want to verify the orange in the theme editor, open Theme → Customize → cart drawer → cart-scheduler block and reset the **Accent colour** to its default.
 
 ## Known platform constraint — Functions on custom apps
 

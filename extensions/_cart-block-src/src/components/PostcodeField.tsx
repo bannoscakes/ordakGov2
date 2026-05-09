@@ -31,13 +31,11 @@ export function PostcodeField({ initial, onSubmit, loading, message, eligible }:
           type="text"
           inputMode="numeric"
           autoComplete="postal-code"
-          pattern="\d{4}"
-          maxLength={4}
-          placeholder="e.g. 2200"
+          placeholder="Enter your postcode"
           value={value}
           onInput={(e) => setValue((e.currentTarget as HTMLInputElement).value)}
           aria-invalid={eligible === false}
-          aria-describedby={message ? "ordak-postcode-msg" : "ordak-postcode-help"}
+          aria-describedby={message ? "ordak-postcode-msg" : undefined}
         />
         <button
           type="submit"
@@ -56,11 +54,7 @@ export function PostcodeField({ initial, onSubmit, loading, message, eligible }:
         >
           {message}
         </p>
-      ) : (
-        <p id="ordak-postcode-help" class="ordak-postcode__help">
-          Australian postcodes only.
-        </p>
-      )}
+      ) : null}
     </form>
   );
 }

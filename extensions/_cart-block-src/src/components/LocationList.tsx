@@ -40,7 +40,7 @@ export function LocationList({ locations, selectedId, onSelect }: Props) {
               onClick={() => !full && onSelect(loc)}
             >
               {loc.recommended ? (
-                <span class="ordak-badge">Recommended</span>
+                <span class="ordak-badge">★ Recommended</span>
               ) : null}
               <span class="ordak-location__name">{loc.name}</span>
               <span class="ordak-location__address">{loc.address}</span>

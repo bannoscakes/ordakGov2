@@ -67,7 +67,7 @@ export function SlotGrid({
             >
               {showRec ? (
                 <span class="ordak-badge" aria-label="Recommended slot">
-                  Recommended
+                  ★ Recommended
                 </span>
               ) : null}
               <span class="ordak-slot__time">{formatRange(slot.timeStart, slot.timeEnd)}</span>
