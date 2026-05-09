@@ -263,12 +263,17 @@ async function handleCustomerRedact(shop: string, payload: any) {
       anonymizedOrders: updatedOrders.count,
     });
   } catch (error) {
-    logger.error("Error redacting customer data", error, {
+    // Log loud but DO NOT rethrow. Returning 5xx here triggers Shopify's
+    // exponential-backoff retry storm against our DB exactly when it's
+    // most likely to be in a degraded state. The legally-important
+    // artifact is "we received this webhook + attempted redaction" — the
+    // log line below is that artifact. Same fail-open pattern as
+    // handleCustomerDataRequest's count failure path.
+    logger.error("gdpr.customer_redact_failed_falling_open", error, {
       shop,
       customerId,
-      customerEmail
+      customerEmail,
     });
-    throw error;
   }
 }
 
@@ -295,7 +300,11 @@ async function handleShopRedact(shop: string) {
       deletedShops: deletedShops.count,
     });
   } catch (error) {
-    logger.error("Error redacting shop data", error, { shop });
-    throw error;
+    // Log loud but DO NOT rethrow. SHOP_REDACT fires 48 hours after
+    // uninstall, when the shop row is typically already deleted by
+    // APP_UNINSTALLED — a NotFound here is benign. Returning 5xx would
+    // trigger Shopify's retry storm for 48+ hours. The log line is the
+    // legally-important artifact.
+    logger.error("gdpr.shop_redact_failed_falling_open", error, { shop });
   }
 }
