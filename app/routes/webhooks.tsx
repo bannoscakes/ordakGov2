@@ -127,6 +127,14 @@ async function handleCustomerDataRequest(shop: string, payload: any) {
   const customerEmail = payload.customer?.email ?? null;
   const requestedAt = new Date().toISOString();
 
+  // Resolve shop row up front so all count queries can scope by shopId
+  // (F6 fix). Without this, OrderLink + CustomerPreferences counts would
+  // sum across every installed tenant whose customer shares this email,
+  // disclosing cross-tenant data in the merchant-visible audit log.
+  const shopRecord = await prisma.shop
+    .findUnique({ where: { shopifyDomain: shop }, select: { id: true } })
+    .catch(() => null);
+
   // Count what we hold for this customer — the audit log line is the
   // primary reviewer-visible artifact, so make it self-contained.
   //
@@ -144,7 +152,7 @@ async function handleCustomerDataRequest(shop: string, payload: any) {
   } = { orderLinks: null, preferences: null, recommendationLogs: null };
   let countError: string | null = null;
 
-  if (customerEmail || customerId) {
+  if ((customerEmail || customerId) && shopRecord) {
     try {
       const emailOrId: Array<{ customerEmail: string } | { customerId: string }> = [];
       if (customerEmail) emailOrId.push({ customerEmail });
@@ -152,9 +160,16 @@ async function handleCustomerDataRequest(shop: string, payload: any) {
 
       const [orderLinkCount, preferenceCount, recommendationLogCount] = await Promise.all([
         customerEmail
-          ? prisma.orderLink.count({ where: { customerEmail } })
+          ? prisma.orderLink.count({
+              where: {
+                customerEmail,
+                slot: { location: { shopId: shopRecord.id } },
+              },
+            })
           : Promise.resolve(0),
-        prisma.customerPreferences.count({ where: { OR: emailOrId } }),
+        prisma.customerPreferences.count({
+          where: { shopId: shopRecord.id, OR: emailOrId },
+        }),
         prisma.recommendationLog.count({
           where: { AND: [{ shopifyDomain: shop }, { OR: emailOrId }] },
         }),
@@ -211,10 +226,26 @@ async function handleCustomerRedact(shop: string, payload: any) {
     return;
   }
 
+  // Resolve shop row so every delete/update can be scoped (F6 fix). A
+  // null shopRecord means the shop is already gone — log + bail rather
+  // than fall through to unscoped deletes that would cross tenants.
+  const shopRecord = await prisma.shop
+    .findUnique({ where: { shopifyDomain: shop }, select: { id: true } })
+    .catch(() => null);
+  if (!shopRecord) {
+    logger.warn("gdpr.customer_redact_skipped_unknown_shop", { shop });
+    return;
+  }
+
   try {
-    // Delete customer preferences
+    // Delete customer preferences scoped to this shop only. Without the
+    // shopId guard, an attacker installing the app on a Partner store
+    // could trigger a redact for a high-value customer email and wipe
+    // that customer's preferences across every other shop running this
+    // app — the headline F6 finding.
     const deletedPreferences = await prisma.customerPreferences.deleteMany({
       where: {
+        shopId: shopRecord.id,
         OR: [
           { customerId: customerId || undefined },
           { customerEmail: customerEmail || undefined },
@@ -222,9 +253,12 @@ async function handleCustomerRedact(shop: string, payload: any) {
       },
     });
 
-    // Delete recommendation logs
+    // Delete recommendation logs scoped to this shop only. RecommendationLog
+    // has shopifyDomain natively (unlike CustomerPreferences which gained
+    // shopId only via this fix), so we scope on that.
     const deletedLogs = await prisma.recommendationLog.deleteMany({
       where: {
+        shopifyDomain: shop,
         OR: [
           { customerId: customerId || undefined },
           { customerEmail: customerEmail || undefined },
@@ -233,6 +267,9 @@ async function handleCustomerRedact(shop: string, payload: any) {
     });
 
     // Anonymize order links (we keep the order structure but remove PII).
+    // Scoped via slot.location.shopId so anonymizing a redact-target's
+    // address at shop A doesn't also anonymize a same-email customer's
+    // unrelated order at shop B.
     //
     // BUG FIX (PR #79 review): the previous version had
     // `{ customerPhone: customerEmail || undefined }` — comparing the
@@ -246,6 +283,7 @@ async function handleCustomerRedact(shop: string, payload: any) {
     const updatedOrders = await prisma.orderLink.updateMany({
       where: {
         customerEmail: customerEmail || undefined,
+        slot: { location: { shopId: shopRecord.id } },
       },
       data: {
         customerEmail: null,
