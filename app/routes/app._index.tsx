@@ -361,7 +361,12 @@ export default function Index() {
   const totalCount = autoTracked.length;
   const progressPct = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
   const setupComplete = totalCount > 0 && completedCount === totalCount;
-  const upNext = items.find((i) => !i.done) ?? null;
+  // Skip manual items — they're permanently `done: false` (no programmatic
+  // signal can mark them complete), so without this filter `upNext` would
+  // pin to "Hide express checkout buttons" or "Activate delivery
+  // customization" forever and shadow the real next auto-tracked step.
+  // Caught by the Dev → main cumulative review (2026-05-09, confidence 85).
+  const upNext = autoTracked.find((i) => !i.done) ?? null;
 
   const [showAllTasks, setShowAllTasks] = useState(false);
 
