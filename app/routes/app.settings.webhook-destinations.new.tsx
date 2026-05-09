@@ -120,76 +120,79 @@ export default function NewWebhookDestination() {
           </Layout.Section>
         )}
 
-        <Layout.Section>
-          <Form method="post">
-            <input type="hidden" name="enabled" value={enabled.toString()} />
-            <input type="hidden" name="eventTypes" value={selectedTypes.join(",")} />
-            <FormLayout>
-              <Card>
-                <BlockStack gap="400">
-                  <Text as="h2" variant="headingMd">Receiver</Text>
-                  <TextField
-                    label="URL"
-                    name="url"
-                    value={url}
-                    onChange={setUrl}
-                    placeholder="https://your-server.example.com/ordak-events"
-                    helpText="Where Ordak Go POSTs events. Must accept POST and return 2xx on success."
-                    autoComplete="off"
-                    requiredIndicator
-                  />
-                  <TextField
-                    label="HMAC secret (optional)"
-                    name="secret"
-                    value={secret}
-                    onChange={setSecret}
-                    placeholder="Leave blank to auto-generate"
-                    helpText="Used to sign the X-Ordak-Signature header. Auto-generated if left blank. Must be at least 16 characters."
-                    autoComplete="off"
-                    type="password"
-                  />
-                </BlockStack>
-              </Card>
+        <Form method="post">
+          <input type="hidden" name="enabled" value={enabled.toString()} />
+          <input type="hidden" name="eventTypes" value={selectedTypes.join(",")} />
 
-              <Card>
-                <BlockStack gap="300">
-                  <Text as="h2" variant="headingMd">Subscribed events</Text>
-                  <Text as="p" tone="subdued" variant="bodySm">
-                    Pick the events this destination should receive. Leave all unchecked to
-                    subscribe to <strong>every</strong> event the app emits (recommended for
-                    pipeline integrations that need full visibility).
-                  </Text>
-                  <BlockStack gap="200">
-                    {KNOWN_EVENT_TYPES.map((t) => (
-                      <Checkbox
-                        key={t.value}
-                        label={t.label}
-                        helpText={t.value}
-                        checked={selectedTypes.includes(t.value)}
-                        onChange={() => toggleType(t.value)}
-                      />
-                    ))}
-                  </BlockStack>
-                </BlockStack>
-              </Card>
+          <Layout.AnnotatedSection
+            title="Receiver"
+            description="Where Ordak Go POSTs events. Must accept POST and return 2xx on success."
+          >
+            <Card>
+              <BlockStack gap="400">
+                <TextField
+                  label="URL"
+                  name="url"
+                  value={url}
+                  onChange={setUrl}
+                  placeholder="https://your-server.example.com/ordak-events"
+                  autoComplete="off"
+                  requiredIndicator
+                />
+                <TextField
+                  label="HMAC secret (optional)"
+                  name="secret"
+                  value={secret}
+                  onChange={setSecret}
+                  placeholder="Leave blank to auto-generate"
+                  helpText="Signs the X-Ordak-Signature header. Auto-generated if left blank. Must be at least 16 characters."
+                  autoComplete="off"
+                  type="password"
+                />
+              </BlockStack>
+            </Card>
+          </Layout.AnnotatedSection>
 
-              <Card>
+          <Layout.AnnotatedSection
+            title="Subscribed events"
+            description="Leave all unchecked to subscribe to every event the app emits."
+          >
+            <Card>
+              <BlockStack gap="200">
+                {KNOWN_EVENT_TYPES.map((t) => (
+                  <Checkbox
+                    key={t.value}
+                    label={t.label}
+                    helpText={t.value}
+                    checked={selectedTypes.includes(t.value)}
+                    onChange={() => toggleType(t.value)}
+                  />
+                ))}
+              </BlockStack>
+            </Card>
+          </Layout.AnnotatedSection>
+
+          <Layout.AnnotatedSection
+            title="Activation"
+            description="Off by default. Flip on once the receiving end is configured."
+          >
+            <Card>
+              <BlockStack gap="400">
                 <Checkbox
                   label="Enable immediately"
-                  helpText="Off by default — flip on after the receiving end is configured. Disabled destinations skip dispatch."
+                  helpText="Disabled destinations skip dispatch."
                   checked={enabled}
                   onChange={setEnabled}
                 />
-              </Card>
-
-              <InlineStack align="end">
-                <Button variant="primary" submit loading={isLoading}>
-                  Create destination
-                </Button>
-              </InlineStack>
-            </FormLayout>
-          </Form>
-        </Layout.Section>
+                <InlineStack align="end">
+                  <Button variant="primary" submit loading={isLoading}>
+                    Create destination
+                  </Button>
+                </InlineStack>
+              </BlockStack>
+            </Card>
+          </Layout.AnnotatedSection>
+        </Form>
       </Layout>
     </Page>
   );

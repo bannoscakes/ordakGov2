@@ -1,6 +1,7 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { useLoaderData, useNavigate } from "@remix-run/react";
+import { useState } from "react";
 import {
   Page,
   Layout,
@@ -12,6 +13,7 @@ import {
   Badge,
   Banner,
   ProgressBar,
+  Collapsible,
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
@@ -26,6 +28,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
       select: {
         id: true,
         diagnosticsExpressButtonsVisible: true,
+        diagnosticsCartDrawerSeenAt: true,
+        diagnosticsCartPageSeenAt: true,
         locations: {
           select: { id: true, name: true, isActive: true, supportsPickup: true },
         },
@@ -122,11 +126,43 @@ export async function loader({ request }: LoaderFunctionArgs) {
       `https://admin.shopify.com/store/${shopHandle}/themes/current/editor` +
       `?context=apps&activateAppId=c9e975ac-5a87-7a0c-c4f8-a5b69a342ca6a3e4e584/cart-scheduler-embed`;
 
+    // Cart-block surface auto-detection. The cart-block POSTs to
+    // /apps/ordak-go/diagnostics every time it mounts on the storefront,
+    // stamping `diagnosticsCart{Drawer,Page}SeenAt`. Considered "active" if
+    // we've seen a report within the last 7 days. Stale older than that
+    // means the merchant probably uninstalled the embed/block, or the
+    // storefront stopped rendering — flag it on the dashboard so the
+    // merchant notices.
+    const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+    const nowMs = Date.now();
+    const cartDrawerSeenAt = shop.diagnosticsCartDrawerSeenAt;
+    const cartPageSeenAt = shop.diagnosticsCartPageSeenAt;
+    const cartDrawerActive =
+      cartDrawerSeenAt != null && nowMs - cartDrawerSeenAt.getTime() < SEVEN_DAYS_MS;
+    const cartPageActive =
+      cartPageSeenAt != null && nowMs - cartPageSeenAt.getTime() < SEVEN_DAYS_MS;
+    const cartDrawerStale =
+      cartDrawerSeenAt != null && !cartDrawerActive;
+    const cartPageStale =
+      cartPageSeenAt != null && !cartPageActive;
+
     return json({
       shop: session.shop,
       themeEditorUrl,
       cartSchedulerEmbedUrl,
       diagnosticsExpressButtonsVisible: shop.diagnosticsExpressButtonsVisible,
+      cartBlockSurface: {
+        drawerActive: cartDrawerActive,
+        pageActive: cartPageActive,
+        drawerStale: cartDrawerStale,
+        pageStale: cartPageStale,
+        // Last-seen timestamps for the dashboard's stale-warning copy.
+        // Sent as ISO strings because Remix's json() serializes Date to
+        // string anyway; making the contract explicit avoids client-side
+        // surprises.
+        drawerSeenAt: cartDrawerSeenAt?.toISOString() ?? null,
+        pageSeenAt: cartPageSeenAt?.toISOString() ?? null,
+      },
       stats: {
         locations: activeLocations.length,
         zones: activeZones.length,
@@ -165,10 +201,59 @@ export default function Index() {
     themeEditorUrl,
     cartSchedulerEmbedUrl,
     diagnosticsExpressButtonsVisible,
+    cartBlockSurface,
     stats,
     checklist,
   } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
+
+  // Cart-block setup state — derived from passive surface telemetry.
+  // The merchant can use either or both surfaces; we observe and adapt.
+  const cartBlockActive = cartBlockSurface.drawerActive || cartBlockSurface.pageActive;
+  const cartBlockBoth = cartBlockSurface.drawerActive && cartBlockSurface.pageActive;
+  const cartBlockStaleAny = cartBlockSurface.drawerStale || cartBlockSurface.pageStale;
+  // Partial-stale: one surface active, the other previously seen but now
+  // stale. Most likely cause is the merchant disabling one of the two
+  // blocks. We append a note so the merchant who configured BOTH but lost
+  // one notices, instead of seeing only the still-active surface confirmed.
+  const partialStaleNote = (() => {
+    if (cartBlockSurface.drawerActive && cartBlockSurface.pageStale) {
+      return " The cart page surface (App Block) went silent — re-enable it in the cart template if you still want it.";
+    }
+    if (cartBlockSurface.pageActive && cartBlockSurface.drawerStale) {
+      return " The cart drawer surface (App Embed) went silent — re-enable it in App embeds if you still want it.";
+    }
+    return "";
+  })();
+  const cartBlockDescription = (() => {
+    if (cartBlockBoth) {
+      return "Both surfaces active. Customers see the scheduler in both the cart drawer and on the /cart page.";
+    }
+    if (cartBlockSurface.drawerActive) {
+      return (
+        "Cart drawer active. Customers see the scheduler when they open the cart drawer. To also enable the /cart page, edit the cart template and add the Ordak Cart Scheduler block." +
+        partialStaleNote
+      );
+    }
+    if (cartBlockSurface.pageActive) {
+      return (
+        "Cart page active. Customers see the scheduler on the /cart page. To also enable the cart drawer, open theme editor → App embeds → Cart Scheduler Drawer." +
+        partialStaleNote
+      );
+    }
+    if (cartBlockStaleAny) {
+      return "The cart-block hasn't been seen on your storefront recently. It may have been removed from the theme. Re-enable it in the theme editor.";
+    }
+    return "Choose where customers see the scheduling widget. Cart drawer (App Embed, recommended) shows it in the slide-out cart panel. Cart page (App Block) shows it on the /cart page. Pick one or use both.";
+  })();
+  // CTA selection covers four states explicitly. Without the both-active
+  // branch, an already-complete task pointed at App Embeds — confusing for
+  // merchants whose drawer + page are both running healthy.
+  const cartBlockCta = cartBlockBoth
+    ? { label: "Open theme editor", to: themeEditorUrl, external: true }
+    : cartBlockSurface.pageActive
+      ? { label: "Open cart template", to: themeEditorUrl, external: true }
+      : { label: "Open App embeds", to: cartSchedulerEmbedUrl, external: true };
 
   const items: ChecklistItem[] = [
     {
@@ -254,19 +339,20 @@ export default function Index() {
     },
     {
       id: "theme",
-      label: "Embed cart-block in your theme",
-      description:
-        "Required for the slot picker to render on your storefront. " +
-        "Click \"Open theme editor\" — your cart template will open. " +
-        "Then in the left sidebar click \"Add section\", find " +
-        "\"Ordak Cart Scheduler\" under Apps, click it to add, then " +
-        "click Save in the top right.",
-      done: false,
-      manual: true,
+      label: cartBlockActive
+        ? `Cart-block active${cartBlockBoth ? " (both surfaces)" : cartBlockSurface.drawerActive ? " (cart drawer)" : " (cart page)"}`
+        : "Add the cart-block to your theme",
+      description: cartBlockDescription,
+      // Auto-tracked via storefront telemetry (`diagnosticsCart{Drawer,Page}SeenAt`).
+      // We mark the task done as soon as we observe the cart-block rendering
+      // on either surface — drops the manual flag so it counts toward the
+      // setup-guide progress bar.
+      done: cartBlockActive,
+      manual: !cartBlockActive,
       // External link: the theme editor lives at admin.shopify.com, not
       // inside the embedded Remix iframe. Routing via Remix navigate would
       // 404 inside the iframe.
-      cta: { label: "Open theme editor", to: themeEditorUrl, external: true },
+      cta: cartBlockCta,
     },
   ];
 
@@ -275,6 +361,14 @@ export default function Index() {
   const totalCount = autoTracked.length;
   const progressPct = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
   const setupComplete = totalCount > 0 && completedCount === totalCount;
+  // Skip manual items — they're permanently `done: false` (no programmatic
+  // signal can mark them complete), so without this filter `upNext` would
+  // pin to "Hide express checkout buttons" or "Activate delivery
+  // customization" forever and shadow the real next auto-tracked step.
+  // Caught by the Dev → main cumulative review (2026-05-09, confidence 85).
+  const upNext = autoTracked.find((i) => !i.done) ?? null;
+
+  const [showAllTasks, setShowAllTasks] = useState(false);
 
   function onCta(item: ChecklistItem) {
     if (item.cta.external) {
@@ -318,12 +412,12 @@ export default function Index() {
         <Layout.Section>
           <Card>
             <BlockStack gap="400">
-              <InlineStack align="space-between" blockAlign="center">
+              <InlineStack align="space-between" blockAlign="center" wrap={false}>
                 <BlockStack gap="100">
                   <Text as="h2" variant="headingMd">Setup guide</Text>
                   <Text as="p" tone="subdued" variant="bodySm">
                     {setupComplete
-                      ? "Core setup complete. The manual steps below are also worth ticking off before going live."
+                      ? "Core setup complete. Manual steps below are worth ticking off before going live."
                       : `${completedCount} of ${totalCount} core steps complete`}
                   </Text>
                 </BlockStack>
@@ -332,11 +426,71 @@ export default function Index() {
                 </Badge>
               </InlineStack>
               <ProgressBar progress={progressPct} size="small" />
-              <BlockStack gap="200">
-                {items.map((item) => (
-                  <ChecklistRow key={item.id} item={item} onCta={() => onCta(item)} />
-                ))}
-              </BlockStack>
+
+              {upNext ? (
+                <Card background="bg-surface-secondary">
+                  <InlineStack
+                    align="space-between"
+                    blockAlign="center"
+                    wrap={false}
+                    gap="400"
+                  >
+                    {/* min-width: 0 lets the BlockStack shrink below its
+                        intrinsic content width, which is what makes the
+                        line-clamp on the description actually kick in
+                        instead of pushing the Resume button off-screen. */}
+                    <div style={{ minWidth: 0, flex: "1 1 auto" }}>
+                      <BlockStack gap="050">
+                        <Text as="p" variant="bodySm" tone="subdued">Up next</Text>
+                        <Text as="p" fontWeight="semibold">{upNext.label}</Text>
+                        <span
+                          style={{
+                            display: "-webkit-box",
+                            WebkitLineClamp: 1,
+                            WebkitBoxOrient: "vertical",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                          }}
+                        >
+                          <Text as="span" tone="subdued" variant="bodySm">
+                            {upNext.description}
+                          </Text>
+                        </span>
+                      </BlockStack>
+                    </div>
+                    <div style={{ flex: "0 0 auto" }}>
+                      <Button onClick={() => onCta(upNext)} variant="primary">
+                        Resume setup
+                      </Button>
+                    </div>
+                  </InlineStack>
+                </Card>
+              ) : null}
+
+              <InlineStack align="start">
+                <Button
+                  variant="plain"
+                  onClick={() => setShowAllTasks((v) => !v)}
+                  ariaExpanded={showAllTasks}
+                  ariaControls="setup-guide-all-tasks"
+                >
+                  {showAllTasks
+                    ? "Hide all tasks"
+                    : `Show all ${items.length} tasks`}
+                </Button>
+              </InlineStack>
+
+              <Collapsible
+                id="setup-guide-all-tasks"
+                open={showAllTasks}
+                transition={{ duration: "150ms", timingFunction: "ease-in-out" }}
+              >
+                <BlockStack gap="200">
+                  {items.map((item) => (
+                    <ChecklistRow key={item.id} item={item} onCta={() => onCta(item)} />
+                  ))}
+                </BlockStack>
+              </Collapsible>
             </BlockStack>
           </Card>
         </Layout.Section>

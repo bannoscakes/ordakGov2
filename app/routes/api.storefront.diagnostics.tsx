@@ -6,20 +6,37 @@
  * upstream in apps.proxy.diagnostics.tsx — never call this internal route
  * directly from the storefront).
  *
- * Today the only signal is `expressButtonsVisible` — the cart-block detects
- * Shop Pay / Apple Pay / Buy-it-now buttons in the DOM and reports their
- * visibility once per page load. The dashboard reads `Shop.diagnosticsExpressButtonsVisible`
- * to surface a Banner pointing the merchant at the hide-express-buttons toggle
- * on the cart-scheduler-embed app embed.
+ * Two signals today:
+ *
+ *   1. `expressButtonsVisible` — the cart-block detects Shop Pay / Apple Pay
+ *      / Buy-it-now buttons in the DOM. The dashboard reads
+ *      `Shop.diagnosticsExpressButtonsVisible` to warn the merchant.
+ *
+ *   2. `surface` — which surface the cart-block is running on,
+ *      "cart-drawer" or "cart-page". Stamped into one of two
+ *      `diagnosticsCart{Drawer,Page}SeenAt` timestamp columns so the
+ *      dashboard can answer "is the cart-block actually rendering, and on
+ *      which surface(s)?" without the merchant declaring anything. Both
+ *      timestamps non-null means the merchant uses BOTH surfaces (e.g.
+ *      drawer on mobile + cart page on desktop). Either timestamp older
+ *      than ~7 days surfaces a stale warning. See
+ *      `memory/cart_block_first_open_race.md` for the broader cart-block
+ *      diagnostics design.
+ *
+ * Both signals are optional in the request body. Missing fields = no-op
+ * (matches the "passive observation" model — never reject a partial report).
  */
 
 import { json, type ActionFunctionArgs } from "@remix-run/node";
 import prisma from "../db.server";
 import { logger } from "../utils/logger.server";
 
+type Surface = "cart-drawer" | "cart-page";
+
 interface RequestBody {
   shopifyDomain: string;
   expressButtonsVisible?: boolean;
+  surface?: Surface;
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -33,17 +50,45 @@ export async function action({ request }: ActionFunctionArgs) {
     return json({ error: "shopifyDomain required" }, { status: 400 });
   }
 
-  if (typeof body.expressButtonsVisible !== "boolean") {
-    return json({ error: "expressButtonsVisible (boolean) required" }, { status: 400 });
+  // Build the partial update. Each signal updates its own column. Reports
+  // that include neither signal are accepted (and no-op) — preserves the
+  // "passive observation" contract; we never reject a partial report.
+  const updateData: {
+    diagnosticsExpressButtonsVisible?: boolean;
+    diagnosticsCartDrawerSeenAt?: Date;
+    diagnosticsCartPageSeenAt?: Date;
+  } = {};
+
+  if (typeof body.expressButtonsVisible === "boolean") {
+    updateData.diagnosticsExpressButtonsVisible = body.expressButtonsVisible;
+  }
+
+  if (body.surface === "cart-drawer") {
+    updateData.diagnosticsCartDrawerSeenAt = new Date();
+  } else if (body.surface === "cart-page") {
+    updateData.diagnosticsCartPageSeenAt = new Date();
+  }
+
+  if (Object.keys(updateData).length === 0) {
+    return json({ ok: true, noop: true });
   }
 
   try {
     const updated = await prisma.shop.update({
       where: { shopifyDomain: body.shopifyDomain },
-      data: { diagnosticsExpressButtonsVisible: body.expressButtonsVisible },
-      select: { id: true, diagnosticsExpressButtonsVisible: true },
+      data: updateData,
+      select: {
+        diagnosticsExpressButtonsVisible: true,
+        diagnosticsCartDrawerSeenAt: true,
+        diagnosticsCartPageSeenAt: true,
+      },
     });
-    return json({ ok: true, expressButtonsVisible: updated.diagnosticsExpressButtonsVisible });
+    return json({
+      ok: true,
+      expressButtonsVisible: updated.diagnosticsExpressButtonsVisible,
+      cartDrawerSeenAt: updated.diagnosticsCartDrawerSeenAt?.toISOString() ?? null,
+      cartPageSeenAt: updated.diagnosticsCartPageSeenAt?.toISOString() ?? null,
+    });
   } catch (error) {
     logger.error("storefront.diagnostics update failed", error, {
       shop: body.shopifyDomain,

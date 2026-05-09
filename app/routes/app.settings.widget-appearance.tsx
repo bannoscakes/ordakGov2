@@ -5,19 +5,20 @@ import {
   Page,
   Layout,
   Card,
-  Text,
   BlockStack,
   Banner,
-  Button,
   Checkbox,
   FormLayout,
-  InlineStack,
 } from "@shopify/polaris";
-import { useState } from "react";
+import { SaveBar } from "@shopify/app-bridge-react";
+import { useEffect, useRef } from "react";
 import { Prisma } from "@prisma/client";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { logger } from "../utils/logger.server";
+import { useDirtyForm } from "../components/useDirtyForm";
+import { useToastFeedback } from "../components/useToastFeedback";
+import { SaveBarButton } from "../components/SaveBarButton";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const { session } = await authenticate.admin(request);
@@ -66,12 +67,43 @@ export default function WidgetAppearance() {
   const navigation = useNavigation();
   const isLoading = navigation.state === "submitting";
 
-  const [showRecommendedBadge, setShowRecommendedBadge] = useState(shop.showRecommendedBadge);
-  const [showMostAvailableBadge, setShowMostAvailableBadge] = useState(shop.showMostAvailableBadge);
-  const [searchParams] = useSearchParams();
+  const { values, setField, isDirty, reset, rebaseline } = useDirtyForm({
+    showRecommendedBadge: shop.showRecommendedBadge,
+    showMostAvailableBadge: shop.showMostAvailableBadge,
+  });
 
+  const [searchParams, setSearchParams] = useSearchParams();
   const errorMessage = actionData && actionData.ok === false ? actionData.error : null;
   const justSaved = searchParams.get("saved") === "1";
+
+  const formRef = useRef<HTMLFormElement>(null);
+  const { showToast } = useToastFeedback();
+
+  // After a successful save, the loader's redirect lands us back on the page
+  // with ?saved=1. Re-baseline the form so isDirty is false again, surface a
+  // toast, then strip the query so a refresh doesn't replay the toast.
+  useEffect(() => {
+    if (justSaved && !errorMessage) {
+      rebaseline({
+        showRecommendedBadge: shop.showRecommendedBadge,
+        showMostAvailableBadge: shop.showMostAvailableBadge,
+      });
+      showToast("Saved");
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("saved");
+        return next;
+      }, { replace: true });
+    }
+  }, [justSaved, errorMessage, shop.showRecommendedBadge, shop.showMostAvailableBadge, rebaseline, showToast, setSearchParams]);
+
+  const handleSave = () => {
+    formRef.current?.requestSubmit();
+  };
+
+  const handleDiscard = () => {
+    reset();
+  };
 
   return (
     <Page
@@ -84,45 +116,44 @@ export default function WidgetAppearance() {
             <Banner tone="critical">{errorMessage}</Banner>
           </Layout.Section>
         )}
-        {justSaved && !errorMessage && (
-          <Layout.Section>
-            <Banner tone="success">Saved.</Banner>
-          </Layout.Section>
-        )}
 
-        <Layout.Section>
-          <Form method="post">
-            <input type="hidden" name="showRecommendedBadge" value={showRecommendedBadge.toString()} />
-            <input type="hidden" name="showMostAvailableBadge" value={showMostAvailableBadge.toString()} />
+        <Layout.AnnotatedSection
+          title="Slot tile badges"
+          description="Toggles for the labels that appear on time-slot tiles in the cart-block."
+        >
+          <Form method="post" ref={formRef}>
+            <input type="hidden" name="showRecommendedBadge" value={values.showRecommendedBadge.toString()} />
+            <input type="hidden" name="showMostAvailableBadge" value={values.showMostAvailableBadge.toString()} />
             <FormLayout>
               <Card>
                 <BlockStack gap="400">
-                  <Text as="h2" variant="headingMd">Slot tile badges</Text>
-                  <Text as="p" tone="subdued" variant="bodySm">
-                    Toggles for the labels that appear on time-slot tiles in the cart-block.
-                  </Text>
                   <Checkbox
                     label="Show RECOMMENDED badge"
                     helpText="Highlights slots with the highest recommendation score (orange star + border). Off by default — customers often find the ranking unclear."
-                    checked={showRecommendedBadge}
-                    onChange={setShowRecommendedBadge}
+                    checked={values.showRecommendedBadge}
+                    onChange={(checked) => setField("showRecommendedBadge", checked)}
                   />
                   <Checkbox
                     label="Show 'Most available capacity' label"
                     helpText="Subtitle text on slots with the most spots remaining. On by default — surfaces useful capacity context without the orange-badge confusion."
-                    checked={showMostAvailableBadge}
-                    onChange={setShowMostAvailableBadge}
+                    checked={values.showMostAvailableBadge}
+                    onChange={(checked) => setField("showMostAvailableBadge", checked)}
                   />
                 </BlockStack>
               </Card>
-
-              <InlineStack align="end">
-                <Button variant="primary" submit loading={isLoading}>Save</Button>
-              </InlineStack>
             </FormLayout>
           </Form>
-        </Layout.Section>
+        </Layout.AnnotatedSection>
       </Layout>
+
+      <SaveBar id="widget-appearance-save-bar" open={isDirty}>
+        <SaveBarButton variant="primary" onClick={handleSave} loading={isLoading}>
+          Save
+        </SaveBarButton>
+        <SaveBarButton onClick={handleDiscard} disabled={isLoading}>
+          Discard
+        </SaveBarButton>
+      </SaveBar>
     </Page>
   );
 }

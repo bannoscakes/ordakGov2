@@ -59,33 +59,33 @@ export default function CheckoutRules() {
           </Banner>
         </Layout.Section>
 
-        <Layout.Section>
+        <Layout.AnnotatedSection
+          title="Active rules"
+          description="The cart validation function and carrier service enforce these protections at checkout."
+        >
           <Card>
-            <BlockStack gap="400">
-              <Text as="h2" variant="headingMd">Active rules</Text>
-              <BlockStack gap="300">
-                {RULES.map((r) => (
-                  <InlineStack
-                    key={r.id}
-                    align="space-between"
-                    blockAlign="center"
-                    gap="400"
-                    wrap={false}
-                  >
-                    <BlockStack gap="100">
-                      <Text as="p" fontWeight="semibold">{r.label}</Text>
-                      <Text as="p" tone="subdued" variant="bodySm">{r.description}</Text>
-                      <Text as="p" variant="bodySm" tone="subdued">
-                        Enforced by: <code>{r.enforcedBy}</code>
-                      </Text>
-                    </BlockStack>
-                    <Badge tone="success">Active</Badge>
-                  </InlineStack>
-                ))}
-              </BlockStack>
+            <BlockStack gap="300">
+              {RULES.map((r) => (
+                <InlineStack
+                  key={r.id}
+                  align="space-between"
+                  blockAlign="center"
+                  gap="400"
+                  wrap={false}
+                >
+                  <BlockStack gap="100">
+                    <Text as="p" fontWeight="semibold">{r.label}</Text>
+                    <Text as="p" tone="subdued" variant="bodySm">{r.description}</Text>
+                    <Text as="p" variant="bodySm" tone="subdued">
+                      Enforced by: <code>{r.enforcedBy}</code>
+                    </Text>
+                  </BlockStack>
+                  <Badge tone="success">Active</Badge>
+                </InlineStack>
+              ))}
             </BlockStack>
           </Card>
-        </Layout.Section>
+        </Layout.AnnotatedSection>
       </Layout>
     </Page>
   );

@@ -36,7 +36,10 @@ function reportDiagnosticsOnce(config: BlockConfig) {
   diagnosticsReported = true;
   try {
     const api = new OrdakApi(config);
-    api.reportExpressButtonsVisible(detectVisibleExpressButtons());
+    api.reportDiagnostics({
+      expressButtonsVisible: detectVisibleExpressButtons(),
+      surface: config.surface,
+    });
   } catch {
     // Diagnostics are passive — never block mount on a telemetry failure.
   }
@@ -190,15 +193,36 @@ function observeDrawer(host: Element, drawer: Element) {
   // we mount once and let the theme's own toggle show/hide the container.
   mountInto(host);
 
-  // Themes typically re-render the cart drawer's inner HTML on AJAX cart
-  // updates — which our own /cart/update.js + /cart/change.js writes
-  // trigger. When that happens our host element is detached (but the
-  // Preact tree on it stays alive), so reinsert it into the new DOM.
-  // Preact state survives the move because the host node is the same.
+  // First-open race fix (2026-05-09): we used to only call placeHost when
+  // `!drawer.contains(host)`. That misses the common Horizon path where
+  //   1. On script load, the drawer's checkout button hasn't been
+  //      materialized yet (drawer body is just a <template>). findHostTarget
+  //      falls through to its last-resort `{parent: drawer, before: null}`
+  //      and the host is appended to the drawer root.
+  //   2. User clicks the cart icon. Horizon renders the cart UI by ADDING
+  //      siblings around our host (it doesn't innerHTML-replace on first
+  //      render). Our host is still a direct child of drawer, just at the
+  //      wrong slot.
+  //   3. drawer.contains(host) is still true — old reinsert no-op'd.
+  //   4. Widget stays at drawer root, hidden / off-position.
+  // Calling placeHost unconditionally fixes this: placeHost is idempotent
+  // (lines 174 + 177 short-circuit when the host is already at the correct
+  // slot), so re-running on every drawer mutation only does work when the
+  // ideal slot has shifted.
+  //
+  // Debounce via rAF because subtree:true catches mutations from the
+  // cart-block's OWN Preact renders inside the host (postcode keystrokes,
+  // slot tile hover state, etc.). Without throttling, every keystroke
+  // re-runs findHostTarget. The rAF flush coalesces a burst of mutations
+  // into one placeHost call per frame.
+  let scheduled = false;
   const reinsert = () => {
-    if (!drawer.contains(host)) {
+    if (scheduled) return;
+    scheduled = true;
+    requestAnimationFrame(() => {
+      scheduled = false;
       placeHost(host, drawer);
-    }
+    });
   };
   ["cart:updated", "cart:refresh", "cart-updated"].forEach((evt) => {
     document.addEventListener(evt, reinsert);

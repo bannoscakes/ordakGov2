@@ -141,19 +141,24 @@ export default function WebhookDestinationsIndex() {
       }}
     >
       <Layout>
-        <Layout.Section>
+        <Layout.AnnotatedSection
+          title="How signing works"
+          description="Each destination receives signed POST requests with the event payload."
+        >
           <Card>
             <BlockStack gap="300">
               <Text as="p" tone="subdued" variant="bodySm">
-                Each destination receives signed POST requests with the event payload. Sign
-                verification: <code>X-Ordak-Signature</code> header carries
-                <code>sha256=&lt;hex&gt;</code> of the request body, computed with the
-                destination's secret. Failing destinations surface here with a count.
+                The <code>X-Ordak-Signature</code> header carries <code>sha256=&lt;hex&gt;</code> of the request body, computed
+                with the destination's secret. Failing destinations surface here with a count.
               </Text>
             </BlockStack>
           </Card>
-        </Layout.Section>
-        <Layout.Section>
+        </Layout.AnnotatedSection>
+
+        <Layout.AnnotatedSection
+          title="Configured destinations"
+          description="Health badges show consecutive failures. Click a row to edit URL, secret, or subscribed events."
+        >
           <Card padding="0">
             <DataTable
               columnContentTypes={["text", "text", "text", "text", "text", "text"]}
@@ -161,7 +166,7 @@ export default function WebhookDestinationsIndex() {
               rows={rows}
             />
           </Card>
-        </Layout.Section>
+        </Layout.AnnotatedSection>
       </Layout>
     </Page>
   );

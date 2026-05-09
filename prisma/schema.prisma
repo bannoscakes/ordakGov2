@@ -64,6 +64,22 @@ model Shop {
   // hide-express-buttons toggle on the cart-scheduler-embed app embed.
   diagnosticsExpressButtonsVisible Boolean @default(false)
 
+  // Surface auto-detection. The cart-block POSTs to /apps/ordak-go/diagnostics
+  // each time it mounts, sending which surface it's running on (cart-drawer
+  // app embed vs cart-page app block). The two timestamp columns let the
+  // dashboard answer "is the cart-block actually rendered on this store, and
+  // on which surface(s)?" without requiring the merchant to declare anything
+  // in our admin — Shopify's theme editor is the source of truth, we observe
+  // and reflect.
+  //
+  // Both columns null = no signal yet (fresh install, theme misconfig, or
+  // cart-block error). One non-null = single surface active. Both non-null =
+  // merchant uses BOTH (e.g., drawer on mobile, cart page on desktop). If a
+  // timestamp is older than ~7 days the dashboard surfaces a stale-detection
+  // warning so the merchant knows their setup may have regressed.
+  diagnosticsCartDrawerSeenAt DateTime?
+  diagnosticsCartPageSeenAt   DateTime?
+
   locations             Location[]
   zones                 Zone[]
   webhookDestinations   WebhookDestination[]
@@ -95,6 +111,22 @@ model Location {
   isActive          Boolean  @default(true)
   supportsDelivery  Boolean  @default(true)
   supportsPickup    Boolean  @default(true)
+
+  // Per-location blackout dates. Each entry is a UTC-midnight DateTime
+  // representing a single calendar date the location can't fulfill orders
+  // (holidays, maintenance, one-off closures). The slot loader filters
+  // out any slot whose `slot.date` matches a date in this array, so the
+  // merchant doesn't have to deactivate dozens of slots one by one.
+  // Default empty so existing locations remain valid post-migration.
+  blackoutDates     DateTime[] @default([])
+
+  // Per-location lead time. Effective lead time = (leadTimeDays ?? 0) * 24
+  // + (leadTimeHours ?? 0) hours. The slot loader filters out any slot
+  // whose start moment (date + timeStart, interpreted in the location's
+  // timezone) falls within `now + effectiveLeadTime`. Both nullable so
+  // existing locations remain valid post-migration; null is treated as 0.
+  leadTimeHours     Int?
+  leadTimeDays      Int?
 
   zones             Zone[]
   slots             Slot[]

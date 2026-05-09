@@ -17,6 +17,8 @@ import prisma from "../db.server";
 import { logger } from "../utils/logger.server";
 import { postcodeMatchesZone } from "../utils/postcode-match.server";
 import { isSlotCutoffPassed } from "../services/slot-cutoff.server";
+import { isSlotDateBlackedOut } from "../services/slot-blackout";
+import { isSlotWithinLeadTime } from "../services/slot-leadtime.server";
 
 interface RateRequestItem {
   name?: string;
@@ -142,12 +144,28 @@ export async function action({ request }: ActionFunctionArgs) {
     // _slot_id. Per-branch fulfillmentType + zone/location guards apply
     // below. Pull the location's timezone for the cutoff check.
     let selectedSlot:
-      | (Slot & { location: { timezone: string } })
+      | (Slot & {
+          location: {
+            timezone: string;
+            blackoutDates: Date[];
+            leadTimeHours: number | null;
+            leadTimeDays: number | null;
+          };
+        })
       | null = null;
     if (requestedSlotId) {
       selectedSlot = await prisma.slot.findFirst({
         where: { id: requestedSlotId, location: { shopId: shop.id } },
-        include: { location: { select: { timezone: true } } },
+        include: {
+          location: {
+            select: {
+              timezone: true,
+              blackoutDates: true,
+              leadTimeHours: true,
+              leadTimeDays: true,
+            },
+          },
+        },
       });
       if (!selectedSlot) {
         logger.warn("Carrier service: requested slot not found in shop", {
@@ -156,6 +174,52 @@ export async function action({ request }: ActionFunctionArgs) {
         });
       } else {
         selectedSlotForLog = selectedSlot;
+      }
+    }
+
+    // Defense-in-depth blackout gate. The slot loader already drops
+    // blacked-out dates at cart-time, but the merchant might add a date
+    // to the blackout list while a customer's cart is open. Returning
+    // empty rates here collapses checkout the same way the loader's
+    // empty result does at cart-time.
+    if (selectedSlot && isSlotDateBlackedOut(selectedSlot.date, selectedSlot.location.blackoutDates)) {
+      logger.warn("Carrier service: requested slot falls on a blackout date", {
+        shopifyDomain,
+        slotId: selectedSlot.id,
+        slotDate: selectedSlot.date.toISOString().slice(0, 10),
+      });
+      return json({ rates: [] });
+    }
+
+    // Defense-in-depth lead-time gate. Same fail-open policy as cutoff:
+    // bad tz throws, we warn and let the rate compute rather than block
+    // checkout for a tz typo.
+    if (selectedSlot) {
+      let withinLeadTime = false;
+      try {
+        withinLeadTime = isSlotWithinLeadTime(
+          selectedSlot,
+          new Date(),
+          selectedSlot.location.timezone,
+          selectedSlot.location.leadTimeHours,
+          selectedSlot.location.leadTimeDays,
+        );
+      } catch (err) {
+        logger.warn("Carrier service: lead-time check failed — allowing rate", {
+          shopifyDomain,
+          slotId: selectedSlot.id,
+          locationTimezone: selectedSlot.location.timezone,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+      if (withinLeadTime) {
+        logger.warn("Carrier service: requested slot inside prep-time lead window", {
+          shopifyDomain,
+          slotId: selectedSlot.id,
+          leadTimeHours: selectedSlot.location.leadTimeHours,
+          leadTimeDays: selectedSlot.location.leadTimeDays,
+        });
+        return json({ rates: [] });
       }
     }
 

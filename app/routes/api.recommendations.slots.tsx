@@ -10,6 +10,8 @@ import { logger } from "../utils/logger.server";
 import { scoreSlots } from "../services";
 import { postcodeMatchesZone } from "../utils/postcode-match.server";
 import { isSlotCutoffPassed } from "../services/slot-cutoff.server";
+import { isSlotDateBlackedOut } from "../services/slot-blackout";
+import { isSlotWithinLeadTime } from "../services/slot-leadtime.server";
 import type {
   SlotRecommendationInput,
   CustomerContext,
@@ -118,11 +120,56 @@ export async function action({ request }: ActionFunctionArgs) {
       },
       include: {
         location: {
-          select: { id: true, name: true, latitude: true, longitude: true, timezone: true },
+          select: {
+            id: true,
+            name: true,
+            latitude: true,
+            longitude: true,
+            timezone: true,
+            blackoutDates: true,
+            leadTimeHours: true,
+            leadTimeDays: true,
+          },
         },
       },
       orderBy: { date: "asc" },
     });
+
+    // Blackout filter — drop slots whose date is in the location's
+    // blackoutDates array. Per-location, not per-zone, because the merchant
+    // closes the whole storefront on a holiday, not a specific zone. Runs
+    // before the cutoff/lead-time filters so we don't waste tz math on
+    // slots the merchant already blacked out.
+    const blackoutFiltered = candidateSlots.filter(
+      (s) => !isSlotDateBlackedOut(s.date, s.location.blackoutDates),
+    );
+    const blackoutSuppressedCount = candidateSlots.length - blackoutFiltered.length;
+
+    // Lead-time filter — drop slots that start sooner than the location's
+    // configured prep-time window. Same fail-open policy as cutoff: a bad
+    // tz throws, we warn and keep the slot visible rather than empty the
+    // grid for a single misconfigured location.
+    const now = new Date();
+    const leadTimeFiltered = blackoutFiltered.filter((s) => {
+      try {
+        return !isSlotWithinLeadTime(
+          s,
+          now,
+          s.location.timezone,
+          s.location.leadTimeHours,
+          s.location.leadTimeDays,
+        );
+      } catch (err) {
+        logger.warn("Slots API: lead-time check failed for slot — keeping it visible", {
+          shopDomain: session?.shop,
+          slotId: s.id,
+          locationTimezone: s.location.timezone,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        return true;
+      }
+    });
+    const leadTimeSuppressedCount = blackoutFiltered.length - leadTimeFiltered.length;
 
     // Cutoff filter — drop slots whose per-slot cutoff has passed in the
     // location's local clock. Done in JS post-query because date+timeStart+tz
@@ -135,8 +182,7 @@ export async function action({ request }: ActionFunctionArgs) {
     // rather than silently emptying the storefront grid. One slot slipping
     // its cutoff is a smaller harm than a customer seeing "no slots
     // available" because the merchant typo'd their tz.
-    const now = new Date();
-    const slots = candidateSlots.filter((s) => {
+    const slots = leadTimeFiltered.filter((s) => {
       try {
         return !isSlotCutoffPassed(s, now, s.location.timezone);
       } catch (err) {
@@ -149,16 +195,41 @@ export async function action({ request }: ActionFunctionArgs) {
         return true;
       }
     });
-    const cutoffSuppressedCount = candidateSlots.length - slots.length;
+    const cutoffSuppressedCount = leadTimeFiltered.length - slots.length;
 
     if (slots.length === 0) {
       // Distinct from "no zone matches" — here a zone DID match but no live
-      // Slot rows exist in the requested date range. Two sub-cases:
+      // Slot rows exist in the requested date range. Four sub-cases:
       //  - Nothing was even materialized for the range (merchant hasn't
       //    configured templates yet).
+      //  - Every slot in range fell on a blackout date.
+      //  - Every slot in range fell within the prep-time window.
       //  - Slots existed but every one had its per-slot cutoff pass.
       // Log them separately so the merchant can audit each cause.
-      if (cutoffSuppressedCount > 0 && candidateSlots.length === cutoffSuppressedCount) {
+      if (blackoutSuppressedCount > 0 && candidateSlots.length === blackoutSuppressedCount) {
+        logger.info("Slots API: all slots in range fell on blackout dates", {
+          shopDomain: session?.shop,
+          postcode: body.postcode,
+          zoneIdFilter,
+          fulfillmentType: body.fulfillmentType,
+          startDate: startDate.toISOString().slice(0, 10),
+          endDate: endDate.toISOString().slice(0, 10),
+          blackoutSuppressedCount,
+        });
+      } else if (
+        leadTimeSuppressedCount > 0 &&
+        blackoutFiltered.length === leadTimeSuppressedCount
+      ) {
+        logger.info("Slots API: all slots in range within prep-time lead window", {
+          shopDomain: session?.shop,
+          postcode: body.postcode,
+          zoneIdFilter,
+          fulfillmentType: body.fulfillmentType,
+          startDate: startDate.toISOString().slice(0, 10),
+          endDate: endDate.toISOString().slice(0, 10),
+          leadTimeSuppressedCount,
+        });
+      } else if (cutoffSuppressedCount > 0 && leadTimeFiltered.length === cutoffSuppressedCount) {
         logger.info("Slots API: all slots in range past cutoff", {
           shopDomain: session?.shop,
           postcode: body.postcode,
@@ -230,7 +301,9 @@ export async function action({ request }: ActionFunctionArgs) {
       }
     }
 
-    // Fetch other scheduled deliveries for route efficiency (if delivery type)
+    // Fetch other scheduled deliveries for route efficiency (if delivery type).
+    // Shop-scoped via slot.location.shopId so route-efficiency scoring can't
+    // leak Shop A's order geography into Shop B's storefront recommendations.
     let otherDeliveries: OtherDelivery[] = [];
     if (body.fulfillmentType === "delivery") {
       const scheduledOrders = await prisma.orderLink.findMany({
@@ -242,6 +315,7 @@ export async function action({ request }: ActionFunctionArgs) {
               gte: startDate,
               lte: endDate,
             },
+            location: { shopId: shop.id },
           },
         },
         include: {
