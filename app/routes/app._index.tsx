@@ -384,8 +384,19 @@ export default function Index() {
         <Layout.Section>
           <Card>
             <BlockStack gap="200">
-              <Text as="h2" variant="headingLg">Welcome to Ordak Go</Text>
-              <Text as="p" tone="subdued">Connected to {shop}</Text>
+              <InlineStack gap="300" blockAlign="center">
+                <img
+                  src="/ordak-go-tile.svg"
+                  alt=""
+                  width={44}
+                  height={44}
+                  style={{ borderRadius: 10, display: "block" }}
+                />
+                <BlockStack gap="050">
+                  <Text as="h2" variant="headingLg">Welcome to Ordak Go</Text>
+                  <Text as="p" tone="subdued">Connected to {shop}</Text>
+                </BlockStack>
+              </InlineStack>
             </BlockStack>
           </Card>
         </Layout.Section>
