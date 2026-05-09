@@ -2,6 +2,12 @@ import type { ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 import { logger } from "./logger.server";
+import {
+  checkRateLimit,
+  getClientIp,
+  logRateLimitHit,
+  rateLimitKey,
+} from "./rate-limit.server";
 
 /**
  * Wraps an internal `api.*` action so it can be safely called from the
@@ -20,6 +26,20 @@ export async function appProxyAction(
   const { session } = await authenticate.public.appProxy(args.request);
   if (!session) {
     return json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const ip = getClientIp(args.request);
+  const key = rateLimitKey(session.shop, ip);
+  const limit = checkRateLimit(key);
+  if (!limit.ok) {
+    logRateLimitHit(key, limit.retryAfterSeconds, args.request.url);
+    return json(
+      { error: "Too many requests" },
+      {
+        status: 429,
+        headers: { "Retry-After": String(limit.retryAfterSeconds) },
+      },
+    );
   }
 
   // A malformed/non-JSON body is silently downgraded to an empty object so

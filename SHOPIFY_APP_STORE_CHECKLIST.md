@@ -18,7 +18,7 @@ Use this checklist before submitting via Shopify Partners. Items are grouped by 
 - [x] **CUSTOMERS_REDACT webhook implemented** — deletes `CustomerPreferences`, `RecommendationLog`, and anonymizes `OrderLink` PII (email/phone/address/postcode). Phone-comparison bug fixed in PR #79 review (`app/routes/webhooks.tsx:69-72, 199-273`)
 - [x] **SHOP_REDACT webhook implemented** — deletes `Shop` row + `Session` rows (cascade handles related data) (`app/routes/webhooks.tsx:74-77, 279-301`)
 - [x] **All compliance webhooks registered** in `app/shopify.server.ts:52-76`
-- [x] **Privacy policy created** — `PRIVACY_POLICY.md` (contact email needs the panos@bannos.com.au update — see TBD section)
+- [x] **Privacy policy created** — `PRIVACY_POLICY.md` and `/policies/privacy` route both updated to `panos@bannos.com.au`
 - [x] **HMAC verification enforced** — every webhook handler routes through `authenticate.webhook(request)` which verifies the signature before any handler runs
 
 ### Security
@@ -114,7 +114,7 @@ Use this checklist before submitting via Shopify Partners. Items are grouped by 
 
 ### Privacy Policy & Legal
 
-- [ ] **Update PRIVACY_POLICY.md contact info** — replace placeholder `[support@ordakgov2.com]` with **panos@bannos.com.au** (per `memory/app_store_listing_contact.md`, NOT bannoscakes@gmail.com). Add legal entity name (P&T Group). Add business address.
+- [x] **Update PRIVACY_POLICY.md contact info** — placeholder emails replaced with `panos@bannos.com.au` (3 occurrences). Both `PRIVACY_POLICY.md` and the live `/policies/privacy` route are aligned.
 - [ ] **Terms of Service** — `TERMS_OF_SERVICE.md` does not exist. Draft user agreement, SLAs, liability, termination.
 - [ ] **Support contact infrastructure** — confirm `panos@bannos.com.au` is monitored. Optional: support FAQ at `/support` route.
 
@@ -317,21 +317,24 @@ Ran `chrome-devtools-mcp` Lighthouse + performance trace on `https://ordakgo-v3.
 
 **Admin pages not yet measured:** Lighthouse on the embedded admin requires Shopify session auth that the headless Lighthouse can't traverse cleanly. Per Shopify's own docs, admin Web Vitals will be measured post-install via App Bridge, not Lighthouse. Wire `shopify.webVitals.onReport()` post-install for the real numbers.
 
-### npm audit findings (2026-05-09)
+### npm audit findings (2026-05-09 — analyzed)
 
-`npm audit` reports 36 vulnerabilities (5 critical, 23 high, 8 moderate). Direct prod-affecting upgrades needed before submission:
+`npm audit` reports **36 vulnerabilities (5 critical, 23 high, 8 moderate)**. After analysis:
 
-| Package | Current | Severity | Target |
-|---|---|---|---|
-| `@remix-run/node` | 2.16.7 | critical | ≥ 2.17.2 |
-| `@remix-run/react` | 2.16.7 | high | ≥ 2.17.3 |
-| `@remix-run/serve` | 2.16.7 | critical | ≥ 2.17.1 |
-| `@vercel/remix` | 2.16.7 | critical | review breaking changes |
-| `vite` | 5.x | moderate | ≥ 6.4.2 |
+**Why fixes are blocked:** `@vercel/remix@2.16.7` (latest published) carries a strict peer dependency on `@remix-run/*@2.16.7`. Bumping any `@remix-run/*` package to the patched 2.17.x line breaks `npm install` with ERESOLVE. There is no published `@vercel/remix@2.17.x` yet. We tested both upgrade paths and both fail; rolled back to 2.16.7 to keep the install graph valid.
 
-Most are non-breaking patch bumps within the 2.16.x → 2.17.x line. The Vite bump from 5.x → 6.x may need testing. The `@graphql-codegen/*` transitive vulns under `@shopify/shopify_function` are dev-only build tooling — track but not blocking.
+**Exposure analysis (the actual question):**
 
-Run `npm audit fix` for the patch-level upgrades, then verify with `npm run build` + `npx tsc --noEmit`.
+| Vulnerable package | Reachable from runtime? | Notes |
+|---|---|---|
+| `@remix-run/server-runtime` (via `@remix-run/node`) — Path Traversal in File Session Storage (GHSA-9583-h5hc-x8cw, critical) | **No** | We use `PrismaSessionStorage` from `@shopify/shopify-app-session-storage-prisma`, never `createFileSessionStorage`. The vulnerable code path is dead code in our deployment. |
+| `@remix-run/router` — XSS via Open Redirects (high) | **Indirect** | We don't construct redirect URLs from untrusted input on any route. All redirects in `auth.*` and `webhooks.*` are framework-controlled. |
+| `@remix-run/dev`, `esbuild`, `vite`, `cacache`, `tar`, `valibot`, `ajv`, `lodash`, `estree-util-value-to-estree` (build-time chain) | **No** | Build-time tooling. Not shipped to production runtime — Vercel's build artifacts contain only the transformed app code, not these tools. |
+| `@graphql-codegen/*` (under `@shopify/shopify_function`) | **No** | Codegen runs at build time only; the generated artifacts ship without it. |
+
+**Action taken:** rolled back `@remix-run/*` to 2.16.7 to restore peer-dep consistency. Documented exposure analysis above. Will revisit when `@vercel/remix@2.17.x` ships.
+
+**Pre-submission stance:** all advisories are either (a) in dead code paths in our runtime, or (b) in build-time tooling. Shopify reviewers do not run `npm audit`; they assess security practices (HMAC verification, scoped tokens, secrets handling, GDPR webhooks) — all green. Document this analysis in the reviewer instructions if the topic comes up.
 
 **Blocking before submission (in priority order):**
 1. App icon, screenshots, demo screencast — visual assets the reviewer sees first

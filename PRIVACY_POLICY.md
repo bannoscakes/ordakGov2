@@ -91,7 +91,7 @@ We use the collected information for the following purposes:
 - **Deletion:** Request deletion of your personal information
 - **Opt-out:** Opt out of data collection for recommendations
 
-To exercise these rights, contact us at: [support@ordakgov2.com] (Update with actual email)
+To exercise these rights, contact us at: panos@bannos.com.au
 
 ## GDPR Compliance
 
@@ -147,9 +147,8 @@ If you are located outside the country where our servers are located, please be 
 
 For questions about this Privacy Policy or our data practices:
 
-**Email:** [support@ordakgov2.com] (Update with actual email)
-**Address:** [Your Business Address] (Update with actual address)
-**Shopify App:** ordakGov2 in the Shopify App Store
+**Email:** panos@bannos.com.au
+**Shopify App:** Ordak Go in the Shopify App Store
 
 ## Merchant Responsibilities
 
@@ -162,7 +161,7 @@ As a merchant using our App, you are responsible for:
 
 ## Data Processing Addendum
 
-For merchants requiring a Data Processing Addendum (DPA) for GDPR compliance, please contact us at [legal@ordakgov2.com] (Update with actual email).
+For merchants requiring a Data Processing Addendum (DPA) for GDPR compliance, please contact us at panos@bannos.com.au.
 
 ---
 
