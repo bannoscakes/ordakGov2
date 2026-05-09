@@ -83,6 +83,7 @@ model Shop {
   locations             Location[]
   zones                 Zone[]
   webhookDestinations   WebhookDestination[]
+  customerPreferences   CustomerPreferences[]
 
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
@@ -334,6 +335,14 @@ model EventLog {
 model CustomerPreferences {
   id                String   @id @default(cuid())
 
+  // Per-shop scoping. Nullable for migration compatibility — rows created
+  // before the F6 security fix have shopId=null and are treated as orphans
+  // (invisible to scoped queries). All new writes set this. The GDPR
+  // CUSTOMERS_REDACT handler scopes deletes by shopId so a redact for one
+  // shop can't cascade across tenants. See memory/feedback_secure_dont_delete.md.
+  shopId            String?
+  shop              Shop?    @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
   customerId        String?  // Shopify customer ID (optional)
   customerEmail     String?  // Email hash for anonymous tracking
 
@@ -349,6 +358,7 @@ model CustomerPreferences {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
+  @@index([shopId])
   @@index([customerId])
   @@index([customerEmail])
 }
