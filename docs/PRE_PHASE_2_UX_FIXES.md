@@ -200,17 +200,26 @@ PR #110 shipped after 17 commits' worth of iteration. Useful signal for 1.5.B on
 - **PR #106 shipped to `main` with a broken layout, then was reverted** (#108/#109) before being redone on Dev. **Lesson:** don't merge to `main` until layout has been verified on the Dev preview URL with a screenshot. The Partners toml URL routing (below) makes this dead simple — no excuse to skip it.
 - **Content-key memoization** in `SlotsEditor.tsx` (lines 117–154) prevents Remix revalidations from clobbering local state. Any future column added to the editor should be included in the `templatesByDayKey` join — otherwise typing into the new column will get reset every save round-trip.
 
-## The proven pre-launch loop (verified 2026-05-08)
+## The canonical iteration loop (current as of 2026-05-11)
 
-While ordakGov2 has zero production installs, `shopify.app.ordak-go.toml` points at the Dev branch Vercel deploy URL (`ordak-go-git-dev-bannos-and-flour-lane.vercel.app`). Result: push to `Dev` → Vercel auto-deploys in ~30s → reload the embedded admin in `ordakgo-v3` → see the change immediately. **No `Dev → main` merge required to verify a change in the embedded admin.**
+`shopify.app.ordak-go.toml` pins all URLs (`application_url`, `redirect_urls`, `app_proxy.url`) to `https://dev.ordak.vip` — the stable named Cloudflare tunnel routed to `localhost:5173`. `npm run dev` (= `bash scripts/dev-up.sh`) orchestrates three coordinated processes:
 
-The 1.5.B–D loop should be:
+| Process | Where | What it does |
+|---|---|---|
+| `cloudflared tunnel run ordak-go-dev` | background | Routes `https://dev.ordak.vip` → `localhost:5173` (named tunnel, stable across restarts) |
+| `npm run vite:dev` (Remix dev server) | background | Serves the embedded admin with HMR on `localhost:5173` |
+| `shopify app dev` | foreground | Pushes Development previews of every extension to `ordakgo-v3`; hot-reloads on save |
 
-1. Branch off `Dev` (`feat/<thing>`)
-2. Edit + `npx tsc --noEmit && npm run build` locally
-3. Push the branch (or commit straight to Dev for small fixes; the branch hook only blocks `main`)
-4. Wait for the Vercel "READY" deploy (≤60s)
-5. Reload the `ordakgo-v3` admin and verify the change visually
-6. PR to `Dev`, merge, then PR `Dev → main` once the feature is solid
+The day-to-day loop is identical to every other ordak project:
 
-**Flip toml URLs back to `ordak-go.vercel.app` only when the App Store unlisted listing lands and Bannos / Flour Lane install via the listing.** Until then, the Dev URL routing stays — it's the loop.
+1. Branch off `Dev` (`feat/<thing>`).
+2. `npm run dev` — leave running.
+3. Edit code under `app/` or `extensions/_cart-block-src/`, save, see it live on `ordakgo-v3` (admin **or** storefront).
+4. `npx tsc --noEmit && npm run build` locally before committing.
+5. Commit, push, PR to `Dev`. Merge. Optionally PR `Dev → main` for the App Store stable line.
+
+**Vercel still auto-deploys both branches in the background** — `Dev` to `ordak-go-git-dev-bannos-and-flour-lane.vercel.app` (preview) and `main` to `ordak-go.vercel.app` (production). Useful for verifying public routes (e.g. `/policies/privacy`) but the embedded admin in `ordakgo-v3` loads from the named tunnel, NOT from Vercel.
+
+**Production-shape rehearsal** (one-time, before App Store submission): flip the toml URLs from `dev.ordak.vip` to `ordak-go.vercel.app`, run `npm run deploy:prod`, install on a clean dev store, verify. Then revert toml URLs to `dev.ordak.vip` for ongoing iteration. Full ritual in [`docs/WORKFLOW.md`](WORKFLOW.md) § "Production deploys".
+
+> **Historical note (kept for context).** Before 2026-05-10 the toml was pinned to the Vercel Dev URL, and the loop was "push to Dev → wait 60s for Vercel → reload admin." That worked, but admin changes weren't visible until after a CI roundtrip. The current loop uses local Vite + the named tunnel so the embedded admin hot-reloads on every save with no commit needed.
