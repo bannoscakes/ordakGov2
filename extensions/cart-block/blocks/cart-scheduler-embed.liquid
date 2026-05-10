@@ -26,9 +26,23 @@
 {%- endif -%}
 
 {%- if block.settings.enabled -%}
+  {%- comment -%}
+    `data-skip-subtree-update` opts this element (and all descendants)
+    out of Horizon's morph algorithm (assets/morph.js). Without it,
+    Horizon's cart-items-component performs a section morph on every
+    cart update that can replace or detach our host, taking the live
+    Preact tree (and all its event listeners) with it — the visible
+    widget then looks identical but its toggle/postcode/Check button
+    silently do nothing because the controller is bound to the old
+    detached DOM. With this attribute, the morph leaves our subtree
+    alone and the widget survives Add-to-Cart, Update, Remove, etc.
+    Themes that don't run morph ignore the attribute. Reference:
+    https://github.com/Shopify/horizon/blob/main/assets/morph.js
+  {%- endcomment -%}
   <div
     class="ordak-cart-scheduler-embed"
     data-ordak-cart-scheduler-embed
+    data-skip-subtree-update
     data-ordak-drawer-selector="{{ block.settings.drawer_selector | default: '[data-cart-drawer], cart-drawer, #cart-drawer, .cart-drawer, .drawer--cart' }}"
     data-ordak-hide-express-buttons="{{ block.settings.hide_express_buttons | default: true }}"
     style="--ordak-accent: {{ block.settings.accent_color | default: '#EB5E14' }};"

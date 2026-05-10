@@ -97,7 +97,7 @@ Pipeline A is much simpler:
 1. **Code change** on a feature branch off `Dev`.
 2. **`npx tsc --noEmit && npm run build`** locally to catch obvious breakage.
 3. **Push** → Vercel preview deploys automatically.
-4. **Test the preview** — direct route URLs (e.g. `/policies/privacy`) work without auth. Embedded admin testing requires the toml's redirect URLs to match the preview URL, which they don't by default; for embedded routes, dev work is easier via `npm run dev:up` (the named tunnel) than via Vercel preview.
+4. **Test the preview** — direct route URLs (e.g. `/policies/privacy`) work without auth. Embedded admin testing requires the toml's redirect URLs to match the preview URL, which they don't by default; for embedded routes, dev work is easier via `npm run dev` (= `shopify app dev`, CLI provisions its own tunnel) than via Vercel preview.
 5. **Open PR to `Dev`.** CI runs typecheck + build.
 6. **Merge to `Dev`** when green.
 7. Periodically PR `Dev` → `main` for production. Vercel deploys prod automatically.

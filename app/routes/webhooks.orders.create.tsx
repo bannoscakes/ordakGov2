@@ -324,8 +324,8 @@ export async function action({ request }: ActionFunctionArgs) {
     // OrderLink path and re-attempts only the metafield/tag writes —
     // safely idempotent (orderUpdate metafields are upserts; tagsAdd is
     // a set-merge). Without this, a transient throttle leaves the order
-    // un-tagged in Shopify while our DB says scheduled — the manufacturing
-    // system never sees the order.
+    // un-tagged in Shopify while our DB says scheduled — any downstream
+    // system that reads the order tag never sees the scheduling.
     if (!metafieldsResult.ok || !tagsResult.ok) {
       logger.error("Shopify-side writes failed; will rely on Shopify retry", undefined, {
         orderId,

@@ -6,11 +6,11 @@ Onboarding for Claude Code sessions in this repo. Read top-to-bottom once per se
 
 ## What this repo is
 
-**Ordak Go** (handle: `ordak-go`, repo: `ordakGov2`) — a Shopify embedded app providing delivery/pickup scheduling. Replaces a third-party "Local Delivery"–style app that broke on Shopify version changes and was costing the business orders. The app belongs to **P&T Group**, runs on the **`bannos`** and **`flour-lane`** production stores, and integrates with the existing **`bannoscakes-ordak-ui`** manufacturing system (separate Vite + Supabase repo at `/Users/panospanayi/projects/bannoscakes-ordak-ui`).
+**Ordak Go** (handle: `ordak-go`, repo: `ordakGov2`) — a Shopify embedded app providing delivery and pickup scheduling. Customers pick a delivery date or pickup window in the cart, and that choice is locked through to checkout via a Carrier Service callback, a Delivery Customization Function, and a Cart Validation Function. The app is published by **P&T Group**. Outbound webhooks let merchants forward order/scheduling events to any external system (ERP, routing, warehouse, fulfillment) — destinations are merchant-configurable in the admin and are off by default.
 
 Goal hierarchy:
-1. **v1**: install on Bannos + Flour Lane and replace the fragile third-party app
-2. **v2**: submit to Shopify App Store
+1. **v1**: ship a stable App Store listing (unlisted public) and complete first installs
+2. **v2**: graduate to a fully public App Store listing
 
 ## Stack (post-2026-05 upgrade)
 
@@ -33,22 +33,29 @@ A **PreToolUse hook blocks Write/Edit while on `main`** (intentional safety rail
 
 ## Boot it locally
 
-**One command:** `npm run dev:up` (and `dev:down` / `dev:logs`). Boots cloudflared + vite in the background, ~2 seconds per restart after the first run.
-
-The app runs on a **stable named Cloudflare tunnel** at `https://dev.ordak.vip`. The tunnel hostname is permanent — `.env`, `shopify.app.ordak-go.toml`, and the Partners App URL are all pinned to it. No per-restart Partners-version churn. See [`docs/DEV_SETUP.md`](docs/DEV_SETUP.md) for the one-time tunnel setup recipe (`cloudflared tunnel login` + `tunnel create` + `tunnel route dns`) — already done on this machine.
-
-**Shopify CLI's `app dev` does work** with our named tunnel — the previous "EACCES on `--tunnel-url <X>:443`" claim that lived here was wrong (verified 2026-05-06 against Shopify CLI 3.94.3 + the `dev.ordak.vip` named tunnel). The canonical command is:
+**One command, everything hot-reloads:**
 
 ```bash
-npx shopify app dev \
-  --store=ordakgo-v3.myshopify.com \
-  --tunnel-url=https://dev.ordak.vip:443 \
-  --no-update
+npm run dev   # alias: npm run dev:up
 ```
 
-This pushes a "Development" preview of every extension (cart-block, delivery-rate-filter, cart-validation) to `ordakgo-v3` and hot-reloads on local file changes. Run it **in a real interactive terminal** — the CLI prompts for the dev store's storefront password (`theuld` for ordakgo-v3), and that prompt can't be piped non-interactively. The named cloudflared tunnel must be running first (`cloudflared tunnel run ordak-go-dev` — `npm run dev:up` does this plus starts Vite, which `shopify app dev` doesn't need since it provides its own server).
+Runs `scripts/dev-up.sh` which orchestrates three processes:
 
-`shopify app dev` is the right path for **iterative cart-block / extension work**. For one-shot production-style verification, `shopify app deploy --no-release` + Partners "Install on a development store" is the alternative (see [`docs/WORKFLOW.md`](docs/WORKFLOW.md)).
+1. **`cloudflared tunnel run ordak-go-dev`** (background) — stable named tunnel, routes `https://dev.ordak.vip` → `localhost:5173`.
+2. **Vite/Remix dev server** (background) — serves the embedded admin on `localhost:5173` with HMR.
+3. **`shopify app dev`** (foreground) — pushes Development previews of every extension (cart-block, delivery-rate-filter, cart-validation) to `ordakgo-v3` and hot-reloads on save. Also keeps Partners config in sync.
+
+Edit `app/routes/*` → save → admin hot-reloads. Edit `extensions/_cart-block-src/*` → save → cart-block reloads on the storefront. **No `shopify app deploy`, no `shopify app release` for iteration.** Releases are for App Store distribution, not for checking your own work.
+
+Ctrl-C in the foreground process exits everything cleanly via the script's signal trap.
+
+The iteration loop matches every other ordak project: **edit → save → see it on `ordakgo-v3` → commit → push → PR.**
+
+### Why a named tunnel and not the CLI's quick tunnel?
+
+Vite has to be reachable by Shopify (the embedded admin runs in an iframe served from a public HTTPS URL). The CLI's quick tunnel works only for the duration of `shopify app dev`; the named tunnel `dev.ordak.vip` is permanent, so the toml's URLs stay stable across restarts and the Partners config doesn't need to be re-pushed every session.
+
+The toml's URLs (`application_url`, `redirect_urls`, `app_proxy.url`) are pinned to `https://dev.ordak.vip`. For App Store production deploys, flip them to `https://ordak-go.vercel.app` and run `npm run deploy:prod` — that's a one-time pre-launch action, not the iteration loop.
 
 ## What's next
 
@@ -130,7 +137,9 @@ If checkout filtering ever breaks, restore from `git tag v0.5.0-pickup-checkout-
 
 ## What NOT to do (learned the hard way)
 
-- **Don't suggest `shopify app dev --use-localhost` or `shopify app dev --tunnel-url <X>:443`** — they error or no-op. Use `npm run dev:up`.
+- **Don't pass `--tunnel-url=<url>:443` to `shopify app dev`** — the CLI interprets the URL's port as a LOCAL bind port and crashes with `EACCES: permission denied ::1:443` (port 443 requires root). Instead: pin the toml's URLs to the public tunnel (`https://dev.ordak.vip`), let the CLI read them from the toml, and let the CLI's internal proxy bind to a free high port. The named cloudflared tunnel makes `dev.ordak.vip` resolve to `localhost:5173`. This is what `npm run dev` already does — don't fight it.
+- **Don't pass `--use-localhost` either** — it conflicts with the named-tunnel architecture and disables extension Development previews.
+- **Don't recommend `shopify app deploy` + `shopify app release` to verify a local change.** Those commands distribute a numbered version to other stores. For your own iteration, `shopify app dev` already pushes a live Development preview to the dev store on every save.
 - **Don't add `[web]` to the toml** — newer CLI rejects it as "Unsupported section."
 - **Don't pin `apiVersion` to a hardcoded constant other than the current quarterly** (`ApiVersion.April26` today) — quarterly bumps happen via the rot-defense process in `memory/stack_rot_defense.md`.
 - **Don't commit `.env`, `.env.save`, or any file with secrets** — gitignored, but be careful with editor backups.

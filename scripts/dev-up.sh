@@ -1,26 +1,38 @@
 #!/usr/bin/env bash
 #
-# Boots the Ordak Go dev environment in the background. Replaces the
-# 3-terminal copy-paste flow described in docs/DEV_SETUP.md.
+# Canonical local-dev loop for Ordak Go. ONE command, everything hot-reloads:
+#   - Embedded admin (Remix routes in `app/routes/*`) → hot-reload via Vite
+#     served through the named tunnel.
+#   - Theme app extension `cart-block` → hot-reload via `shopify app dev`'s
+#     Development preview pushed to ordakgo-v3.
+#   - Functions (delivery-rate-filter, cart-validation) → rebuilt on save.
 #
 # Architecture:
 #   - Stable named cloudflared tunnel `ordak-go-dev` is permanently routed via
 #     Cloudflare DNS to https://dev.ordak.vip → http://localhost:5173.
-#   - shopify.app.ordak-go.toml pins all URLs to https://dev.ordak.vip and is
-#     committed in that state — no per-restart rewriting.
-#   - Partners gets the URL via `shopify app deploy` ONCE (first run after the
-#     URL changes); a sentinel file makes subsequent runs skip the deploy.
+#   - shopify.app.ordak-go.toml pins all URLs to https://dev.ordak.vip.
+#   - Partners URLs are synced via one-time `shopify app deploy --no-release`
+#     (idempotent; sentinel file makes repeat runs skip).
 #
 # Sequence:
 #   1. Stop anything we previously started (idempotent).
 #   2. Start `cloudflared tunnel run ordak-go-dev` in background.
-#   3. If the Partners-pushed URL differs from APP_URL: build extensions and
-#      `shopify app deploy` to push toml. Else skip.
-#   4. Start `npm run vite:dev` in background.
-#   5. Print where the app is reachable.
+#   3. If the Partners-pushed URL differs: build extensions and
+#      `shopify app deploy --no-release` to push toml. Else skip.
+#   4. Start Vite (`npm run vite:dev`) in background.
+#   5. Run `shopify app dev` in foreground (interactive — login + storefront
+#      password prompt + extension hot-reload).
+#   6. On Ctrl-C / exit: tear down cloudflared + Vite cleanly via dev-down.sh.
+#
+# Iteration loop after this script is running:
+#   edit a file → save → see it on ordakgo-v3 (admin or storefront) →
+#   commit → push → PR. No `shopify app deploy`, no `shopify app release`.
+#
+# For App Store production deploys: separate command, NOT this script. See
+# `docs/DEV_SETUP.md` § Production deploys.
 #
 # Logs and PIDs land in .dev-logs/ (gitignored). Use `npm run dev:logs` to
-# tail, `npm run dev:down` to stop.
+# tail, `npm run dev:down` to stop background processes if this script crashed.
 
 set -euo pipefail
 
@@ -127,12 +139,38 @@ if ! wait_until 30 vite_bound; then
   warn "Tunnel is up; you can investigate without restarting cloudflared."
 fi
 
+# 5. Trap signals — when the user Ctrl-C's `shopify app dev` (foreground), or
+#    this script exits for any reason, kill cloudflared + Vite cleanly.
+cleanup() {
+  printf '\n'
+  log "Tearing down cloudflared + Vite ..."
+  "$ROOT/scripts/dev-down.sh" --quiet || true
+  log "Stopped."
+}
+trap cleanup EXIT INT TERM
+
 cat <<EOF
 
-✓ Dev environment up.
+✓ Background services up.
   App URL    $APP_URL
   Admin      https://admin.shopify.com/store/ordakgo-v3/apps/ordak-go
-  Tail logs  npm run dev:logs
-  Stop       npm run dev:down
+  Tail logs  npm run dev:logs (in another terminal)
+
+Now starting \`shopify app dev\` in foreground for extension hot-reload.
+Ctrl-C exits everything cleanly.
 
 EOF
+
+# 6. shopify app dev in foreground. We do NOT pass --tunnel-url — the CLI
+#    interprets a `:443` URL as "bind locally to port 443" (EACCES, requires
+#    root). Instead, the toml's URLs are pinned to https://dev.ordak.vip and
+#    the CLI uses those as the public face; its internal proxy binds to a
+#    free high port automatically. The named cloudflared tunnel (started in
+#    step 2) is what makes dev.ordak.vip reachable — it routes inbound HTTPS
+#    to localhost:5173 (Vite). --no-update silences the CLI version-check.
+#    The CLI prompts for the dev store's storefront password (`theuld`) on
+#    first run; that's interactive — only you can answer.
+shopify app dev \
+  --config ordak-go \
+  --store=ordakgo-v3.myshopify.com \
+  --no-update

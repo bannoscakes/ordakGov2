@@ -182,6 +182,27 @@ function placeHost(host: Element, drawer: Element) {
   }
 }
 
+// Remove duplicate cart-block hosts. After Horizon's cart-items-component
+// section render, the new HTML often includes a fresh empty
+// `<div data-ordak-cart-scheduler-embed>` matching our selector. Our
+// MutationObserver re-attaches the OLD host (which has the live Preact
+// tree mounted on it), but the NEW empty host is also in the DOM. Both
+// are visually identical because they share the same liquid output, so
+// the customer often clicks the empty one and nothing happens (the
+// listeners and signal-connected children only exist on OUR host).
+//
+// Identify ours by MOUNTED_FLAG — set during mountInto. Anything else
+// matching the selector is a duplicate from a section re-render or a
+// theme that injects the embed twice; safe to drop.
+function sweepDuplicateHosts(ours: Element) {
+  const all = document.querySelectorAll(`[${EMBED_ATTR}]`);
+  for (const el of Array.from(all)) {
+    if (el === ours) continue;
+    if (el.hasAttribute(MOUNTED_FLAG)) continue;
+    el.parentElement?.removeChild(el);
+  }
+}
+
 function observeDrawer(host: Element, drawer: Element) {
   placeHost(host, drawer);
 
@@ -221,10 +242,20 @@ function observeDrawer(host: Element, drawer: Element) {
     scheduled = true;
     requestAnimationFrame(() => {
       scheduled = false;
+      // Sweep first so placeHost works on a clean DOM. After a section
+      // re-render the duplicate empty host can sit at our target slot
+      // and confuse findHostTarget (e.g. its checkout button is the
+      // first match in DOM order). Removing duplicates first means
+      // placeHost lands our mounted host at the right spot.
+      sweepDuplicateHosts(host);
       placeHost(host, drawer);
     });
   };
-  ["cart:updated", "cart:refresh", "cart-updated"].forEach((evt) => {
+  // `cart:update` (singular) is what Horizon's cart Web Components
+  // dispatch on Add-to-Cart. The plural names cover Dawn-derivative
+  // themes. Listening at document level catches bubbled events from any
+  // theme.
+  ["cart:update", "cart:updated", "cart:refresh", "cart-updated"].forEach((evt) => {
     document.addEventListener(evt, reinsert);
   });
   const mo = new MutationObserver(reinsert);

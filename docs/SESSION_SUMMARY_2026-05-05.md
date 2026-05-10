@@ -4,7 +4,7 @@ Long session. Mixed results. This document is honest about both. Next session: r
 
 ## What was attempted
 
-The user wanted to install Ordak Go on the Bannoscakes production store so they could replace the broken third-party Local Delivery app they'd been depending on. We took **Path B** (install on Bannoscakes before Phase D shipped) against my own warnings, then spent the day fighting one polish gap after another. Mid-afternoon the user reset the approach: stop patching forward on Bannoscakes, create a fresh dev store with the foundation correct, validate end-to-end there, then come back to Bannoscakes properly.
+The user wanted to install Ordak Go on the Bannoscakes production store as the first real-merchant install. We took **Path B** (install on Bannoscakes before Phase D shipped) against my own warnings, then spent the day fighting one polish gap after another. Mid-afternoon the user reset the approach: stop patching forward on Bannoscakes, create a fresh dev store with the foundation correct, validate end-to-end there, then come back to Bannoscakes properly.
 
 ## What actually shipped today (real state, verified)
 
