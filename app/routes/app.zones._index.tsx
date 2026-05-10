@@ -80,9 +80,10 @@ function getZoneTypeBadge(type: string) {
 
 function getZoneCoverage(zone: any) {
   switch (zone.type) {
-    case "postcode_list":
+    case "postcode_list": {
       const count = zone.postcodes?.length || 0;
       return `${count} postcode${count !== 1 ? "s" : ""}`;
+    }
     case "postcode_range":
       if (zone.postcodes && zone.postcodes.length >= 2) {
         return `${zone.postcodes[0]} - ${zone.postcodes[1]}`;

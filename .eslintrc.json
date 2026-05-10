@@ -19,7 +19,7 @@
     {
       "files": ["**/*.ts", "**/*.tsx"],
       "parser": "@typescript-eslint/parser",
-      "plugins": ["@typescript-eslint"],
+      "plugins": ["@typescript-eslint", "react-hooks"],
       "extends": [
         "eslint:recommended",
         "plugin:@typescript-eslint/recommended",
@@ -28,7 +28,9 @@
       "rules": {
         "@typescript-eslint/no-explicit-any": "warn",
         "@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }],
-        "no-console": ["warn", { "allow": ["warn", "error"] }]
+        "no-console": ["warn", { "allow": ["warn", "error"] }],
+        "react-hooks/rules-of-hooks": "error",
+        "react-hooks/exhaustive-deps": "warn"
       }
     }
   ],
@@ -41,6 +43,9 @@
     "build/",
     "dist/",
     ".cache/",
-    "public/build/"
+    "public/build/",
+    "public/*.js",
+    "extensions/cart-block/assets/",
+    "extensions/*/generated/"
   ]
 }
