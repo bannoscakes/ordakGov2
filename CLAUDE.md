@@ -81,13 +81,15 @@ The current plan and phase ordering live in [`docs/PLAN.md`](docs/PLAN.md) and [
 - ⏳ **Phase 3** — reviewer-experience hardening: carrier-service uninstall/reinstall test on `ordakgo-v3`, final pre-submission smoke.
 - ⏳ **Phase 4–6** — submit unlisted, address review feedback, install on Bannos + Flour Lane via the unlisted listing's direct link post-approval.
 
-## Pre-launch loop — push to Dev, verify in admin (no main merge required)
+## Iteration loop — `npm run dev`
 
-While the app has zero production installs, `shopify.app.ordak-go.toml` pins `application_url` + `app_proxy.url` to the **Dev branch** Vercel deploy URL (`ordak-go-git-dev-bannos-and-flour-lane.vercel.app`). This means:
+`shopify.app.ordak-go.toml` pins `application_url` and `app_proxy.url` to `https://dev.ordak.vip` (the named Cloudflare tunnel). `npm run dev` starts cloudflared + Vite + `shopify app dev` together, so the embedded admin (Remix) AND theme app extensions (cart-block, delivery-rate-filter, cart-validation) both hot-reload on save.
 
-> Push to `Dev` → Vercel auto-deploys in ~30–60s → reload the Shopify admin → Apps → Ordak Go on `ordakgo-v3` → the change is live.
+> Edit a file → save → see the change on `ordakgo-v3` (admin or storefront) → commit → push → PR.
 
-**No `Dev → main` merge is required to verify a change in the embedded admin.** Merge to `main` only when the feature is solid and you want it on the stable line. The Dev URL routing is the development surface; the prod URL (`ordak-go.vercel.app`) is the "stable" line we ship from at App Store listing time. Full ritual + when-to-flip in [`docs/WORKFLOW.md`](docs/WORKFLOW.md) § "The proven pre-launch loop."
+No version releases for iteration. Vercel still auto-deploys `Dev` (preview URL) and `main` (production URL `ordak-go.vercel.app`), but during pre-launch dev the embedded admin in `ordakgo-v3` loads from the named tunnel — NOT from Vercel — because that's where `application_url` points.
+
+**Production-shape rehearsal** (one-time, before App Store submission): flip the toml's URLs from `https://dev.ordak.vip` to `https://ordak-go.vercel.app`, run `npm run deploy:prod` (= `shopify app deploy --release`), and verify a fresh install on a clean dev store. Until App Store time, the daily loop is `npm run dev`. Full description in [`docs/WORKFLOW.md`](docs/WORKFLOW.md).
 
 ## Key directories
 

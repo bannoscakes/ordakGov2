@@ -66,6 +66,21 @@ fi
 
 TUNNEL_NAME="ordak-go-dev"
 
+# Idempotency-guarded teardown. Registered immediately after cloudflared
+# starts so any subsequent failure (Partners deploy hang, Vite bind error,
+# `shopify app dev` crash, Ctrl-C) tears the tunnel + Vite down cleanly.
+# The guard prevents the EXIT-then-INT double-fire that bash's `set -e`
+# can produce when a foreground child exits non-zero.
+_cleaned=0
+cleanup() {
+  [[ "$_cleaned" -eq 1 ]] && return
+  _cleaned=1
+  printf '\n'
+  log "Tearing down cloudflared + Vite ..."
+  "$ROOT/scripts/dev-down.sh" --quiet || true
+  log "Stopped."
+}
+
 # 1. Idempotency: stop anything we previously started.
 "$ROOT/scripts/dev-down.sh" --quiet || true
 
@@ -78,6 +93,10 @@ nohup cloudflared tunnel run "$TUNNEL_NAME" \
 CF_PID=$!
 echo "$CF_PID" > "$LOG_DIR/cloudflared.pid"
 
+# Trap registered NOW — covers every failure path from this point on,
+# including `shopify app deploy` hangs and Vite bind errors.
+trap cleanup EXIT INT TERM
+
 # Wait for the tunnel to register a connection.
 tunnel_ready() {
   pid_alive "$CF_PID" && grep -q "Registered tunnel connection" "$LOG_DIR/cloudflared.log"
@@ -86,7 +105,6 @@ if ! wait_until 30 tunnel_ready; then
   err "cloudflared did not register a connection within 30s."
   err "Tail of $LOG_DIR/cloudflared.log:"
   tail -n 30 "$LOG_DIR/cloudflared.log" >&2
-  "$ROOT/scripts/dev-down.sh" --quiet
   exit 1
 fi
 log "Tunnel registered."
@@ -133,21 +151,13 @@ vite_bound() {
   pid_alive "$VITE_PID" && grep -q "Local:.*5173" "$LOG_DIR/vite.log"
 }
 if ! wait_until 30 vite_bound; then
-  warn "Vite did not announce 'Local: ...:5173' within 30s."
-  warn "Tail of $LOG_DIR/vite.log:"
+  err "Vite did not announce 'Local: ...:5173' within 30s."
+  err "Tail of $LOG_DIR/vite.log:"
   tail -n 20 "$LOG_DIR/vite.log" >&2
-  warn "Tunnel is up; you can investigate without restarting cloudflared."
+  err "Cannot continue without Vite — the embedded admin would load blank."
+  exit 1
 fi
-
-# 5. Trap signals — when the user Ctrl-C's `shopify app dev` (foreground), or
-#    this script exits for any reason, kill cloudflared + Vite cleanly.
-cleanup() {
-  printf '\n'
-  log "Tearing down cloudflared + Vite ..."
-  "$ROOT/scripts/dev-down.sh" --quiet || true
-  log "Stopped."
-}
-trap cleanup EXIT INT TERM
+# (cleanup trap registered earlier, right after cloudflared starts)
 
 cat <<EOF
 
