@@ -150,29 +150,43 @@ Same evidence shape for one delivery order AND one pickup order = foundation gat
 
 Bannos and Flour Lane are explicitly out of scope until Phase 6.
 
-## The proven pre-launch loop — push to Dev, verify in embedded admin (no merge required)
+## The canonical iteration loop — `npm run dev`
 
-Verified 2026-05-08 across the 17-commit Phase 1.5.A iteration. Until ordakGov2 has production installs, the embedded admin in `ordakgo-v3` loads the Remix app from the **Dev branch** Vercel deploy URL — not from `main`. This is the entire pre-launch development loop:
-
-1. Branch off `Dev`, or commit straight to `Dev` for small fixes (the `main`-edit-block hook in `~/.claude/settings.json` only blocks `main`).
-2. `npx tsc --noEmit && npm run build` locally.
-3. Push.
-4. Vercel auto-deploys the Dev branch URL `ordak-go-git-dev-bannos-and-flour-lane.vercel.app` in ~30–60s. Watch for `READY` state via `gh` or the Vercel API.
-5. Reload the Shopify admin → Apps → Ordak Go on `ordakgo-v3` → the new code is live.
-6. Verify visually (or via DOM snapshot through `chrome-devtools-mcp` if needed).
-7. Once the feature is solid, PR `Dev → main` to land it on the stable line.
-
-`shopify.app.ordak-go.toml` pins both `application_url` and `app_proxy.url` to the Dev branch URL while we're pre-launch:
+`shopify.app.ordak-go.toml` pins all URLs to `https://dev.ordak.vip` (the named Cloudflare tunnel routed to `localhost:5173`):
 
 ```
-application_url = "https://ordak-go-git-dev-bannos-and-flour-lane.vercel.app/"
-[auth] redirect_urls = ["https://ordak-go-git-dev-bannos-and-flour-lane.vercel.app/api/auth"]
-[app_proxy] url = "https://ordak-go-git-dev-bannos-and-flour-lane.vercel.app/apps/proxy"
+application_url = "https://dev.ordak.vip/"
+[auth] redirect_urls = ["https://dev.ordak.vip/api/auth"]
+[app_proxy] url = "https://dev.ordak.vip/apps/proxy"
 ```
 
-**Flip these URLs back to `ordak-go.vercel.app` (production) only at App Store listing time**, when Bannos and Flour Lane install via the unlisted listing. Until then, Dev branch routing IS the canonical pre-launch surface.
+`npm run dev` (= `bash scripts/dev-up.sh`) starts three coordinated processes — cloudflared (named tunnel), Vite (Remix dev server with HMR), and `shopify app dev` (extension Development previews + Partners config sync) — and the embedded admin in `ordakgo-v3` loads from the local Vite server. Edit any file under `app/` or `extensions/`, save, see the change live on `ordakgo-v3`. No version releases for iteration.
 
-This addresses the long-standing "validated in dev → broken in prod" risk by making "dev" and "the embedded admin merchants would see" the same surface during pre-launch development. There's no separate prod environment to drift away from yet.
+The full daily loop:
+
+1. Branch off `Dev` (the `main`-edit-block hook in `~/.claude/settings.json` only blocks `main`, but PRs into `Dev` are still preferred for review).
+2. `npm run dev` — leave it running in a foreground terminal; Ctrl-C tears down all three processes via the script's signal trap.
+3. Edit code, save, watch it hot-reload on `ordakgo-v3`.
+4. `npx tsc --noEmit && npm run build` locally before committing — catches any compile breakage that HMR's tolerance hides.
+5. Commit, push, PR `Dev → Dev` (or feature branch → Dev).
+6. Once a feature is solid, PR `Dev → main` for the App Store production line.
+
+Vercel still auto-deploys both branches in the background:
+- `Dev` push → `https://ordak-go-git-dev-bannos-and-flour-lane.vercel.app/` (preview)
+- `main` push → `https://ordak-go.vercel.app/` (production)
+
+But during pre-launch the **embedded admin** in `ordakgo-v3` does NOT load from Vercel — it loads from the named tunnel. Vercel deploys are still useful for verifying public routes (e.g. `/policies/privacy` works without Shopify auth) and for the production-shape rehearsal below.
+
+### Production-shape rehearsal (one-time, before App Store submission)
+
+When ready to ship to the App Store, do this once on a clean dev store:
+
+1. Edit `shopify.app.ordak-go.toml` — flip `application_url`, `redirect_urls`, and `[app_proxy].url` from `dev.ordak.vip` → `ordak-go.vercel.app` (production).
+2. `npm run deploy:prod` (= `shopify app deploy --release`) — pushes the toml + extension bundles to Partners + Shopify CDN.
+3. Install the app fresh on a clean dev store; verify the embedded admin loads from `ordak-go.vercel.app`, OAuth round-trip works, cart-block + Functions install correctly.
+4. If anything breaks, revert toml URLs to `dev.ordak.vip`, fix, re-rehearse.
+
+Until App Store submission, daily work stays on the `dev.ordak.vip` loop. The rehearsal is a separate, deliberate action — not part of the iteration cycle.
 
 ### How 1.5.A actually shipped — concrete walkthrough
 

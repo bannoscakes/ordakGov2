@@ -106,7 +106,8 @@ export function CartScheduler({ config, rootEl }: Props) {
   // When fulfillment changes, reset downstream state so we re-fetch.
   useEffect(() => {
     return effect(() => {
-      state.fulfillment.value; // dependency
+      // eslint-disable-next-line @typescript-eslint/no-unused-expressions -- intentional read to register Preact signal dependency
+      state.fulfillment.value;
       viewedTrackedRef.current = false;
       state.slots.value = [];
       state.selectedSlot.value = null;

@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 
 declare global {
+  // eslint-disable-next-line no-var -- required pattern for global PrismaClient singleton across Vite HMR reloads
   var prisma: PrismaClient;
 }
 
