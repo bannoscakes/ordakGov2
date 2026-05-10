@@ -3,9 +3,19 @@
   Merchants add this block to the cart page through the theme editor.
 {%- endcomment -%}
 
+{%- comment -%}
+  `data-skip-subtree-update` opts this element (and all descendants)
+  out of Horizon's morph algorithm (assets/morph.js). The cart page
+  also runs morph on cart updates; without this attribute the live
+  Preact tree gets detached during morph and the widget appears but
+  its handlers silently do nothing. Themes that don't run morph
+  ignore the attribute. Same fix as cart-scheduler-embed.liquid.
+  Reference: https://github.com/Shopify/horizon/blob/main/assets/morph.js
+{%- endcomment -%}
 <div
   class="ordak-cart-scheduler"
   data-ordak-cart-scheduler="{{ block.id }}"
+  data-skip-subtree-update
   style="--ordak-accent: {{ block.settings.accent_color | default: '#EB5E14' }}; padding: {{ block.settings.block_padding | default: 16 }}px;"
 >
   <script type="application/json" data-ordak-config>
