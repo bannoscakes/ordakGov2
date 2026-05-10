@@ -171,7 +171,7 @@ Use this checklist before submitting via Shopify Partners. Items are grouped by 
 
 ### Documentation
 
-- [ ] **Update README.md** — current README is stale. Cover: what the app does, install steps, dev setup (point at `npm run dev:up` per `docs/DEV_SETUP.md`), production deploy
+- [x] **Update README.md** — done 2026-05-11. Now describes the app, the canonical `npm run dev` iteration loop, branch strategy, contribution steps, and production deploy path. See current README + `docs/DEV_SETUP.md` for full details.
 - [ ] **Merchant setup guide** — short markdown doc / FAQ. Steps: install → wizard → first location → first zone → first slots → embed cart-block in theme. Link from the dashboard's setup guide if reasonable.
 
 ---
@@ -231,11 +231,14 @@ Use this checklist before submitting via Shopify Partners. Items are grouped by 
 
 ### Tools (this repo)
 
-- `npm run build` — verify compile
+- `npm run dev` (alias `npm run dev:up`) — canonical iteration loop. Starts cloudflared + Vite + `shopify app dev` together; embedded admin loads from `https://dev.ordak.vip` (named tunnel → localhost:5173). Ctrl-C tears everything down.
+- `npm run build` — verify compile (Remix Vite build + Prisma generate)
 - `npm run type-check` — `tsc --noEmit`
-- `npm run dev:up` — boot via stable named tunnel `dev.ordak.vip`
-- `npx prisma migrate deploy` — apply pending migrations to Supabase (gated by CLAUDE.md — never auto-run)
-- Lighthouse: run via `chrome-devtools-mcp` MCP server; target the live Vercel URL
+- `npm run lint` — eslint across the repo (`extensions/cart-block/assets/`, generated Function types, and `public/*.js` are ignored)
+- `npm test -- --run` — vitest, all 7 test files / 73 tests
+- `npx prisma migrate deploy` — apply pending migrations to Supabase (never auto-run; review SQL first)
+- `npm run deploy:prod` — App Store release path: `shopify app deploy --release` after the toml URLs are flipped from `dev.ordak.vip` to `ordak-go.vercel.app`. NOT part of the iteration loop.
+- Lighthouse: run via `chrome-devtools-mcp` MCP server; target the live Vercel URL.
 
 ### Internal references
 
