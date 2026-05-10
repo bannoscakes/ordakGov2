@@ -37,10 +37,9 @@ export default function TermsOfService() {
       <p>
         These terms govern your use of the Ordak Go Shopify app
         ("Ordak Go", "we", "us", "our"). Ordak Go is operated by P&amp;T
-        Group ("the publisher"), the operator of the bannoscakes.com.au
-        and flourlane.com.au stores. By installing Ordak Go on your
-        Shopify store you agree to these terms. If you do not agree, do
-        not install the app or uninstall it from your Shopify admin.
+        Group ("the publisher"). By installing Ordak Go on your Shopify
+        store you agree to these terms. If you do not agree, do not
+        install the app or uninstall it from your Shopify admin.
       </p>
 
       <h2 style={{ marginTop: 32 }}>1. What Ordak Go provides</h2>

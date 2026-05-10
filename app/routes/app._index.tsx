@@ -227,24 +227,24 @@ export default function Index() {
   })();
   const cartBlockDescription = (() => {
     if (cartBlockBoth) {
-      return "Both surfaces active. Customers see the scheduler in both the cart drawer and on the /cart page.";
-    }
-    if (cartBlockSurface.drawerActive) {
-      return (
-        "Cart drawer active. Customers see the scheduler when they open the cart drawer. To also enable the /cart page, edit the cart template and add the Ordak Cart Scheduler block." +
-        partialStaleNote
-      );
+      return "Cart page active. Customers see the scheduler on the /cart page, and also when they open the cart drawer if your theme has one.";
     }
     if (cartBlockSurface.pageActive) {
       return (
-        "Cart page active. Customers see the scheduler on the /cart page. To also enable the cart drawer, open theme editor → App embeds → Cart Scheduler Drawer." +
+        "Cart page active. Customers see the scheduler on the /cart page. If your theme also surfaces a cart drawer, you can mirror it there: theme editor → App embeds → Cart Scheduler Drawer." +
+        partialStaleNote
+      );
+    }
+    if (cartBlockSurface.drawerActive) {
+      return (
+        "Cart drawer active. Customers see the scheduler when they open the cart drawer. The /cart page isn't wired up yet — edit the cart template and add the Ordak Cart Scheduler block to cover both surfaces." +
         partialStaleNote
       );
     }
     if (cartBlockStaleAny) {
       return "The cart-block hasn't been seen on your storefront recently. It may have been removed from the theme. Re-enable it in the theme editor.";
     }
-    return "Choose where customers see the scheduling widget. Cart drawer (App Embed, recommended) shows it in the slide-out cart panel. Cart page (App Block) shows it on the /cart page. Pick one or use both.";
+    return "Add the Ordak Cart Scheduler block to your cart template (recommended). If your theme surfaces a cart drawer, you can also enable the App Embed to mirror the scheduler there.";
   })();
   // CTA selection covers four states explicitly. Without the both-active
   // branch, an already-complete task pointed at App Embeds — confusing for
@@ -252,8 +252,8 @@ export default function Index() {
   const cartBlockCta = cartBlockBoth
     ? { label: "Open theme editor", to: themeEditorUrl, external: true }
     : cartBlockSurface.pageActive
-      ? { label: "Open cart template", to: themeEditorUrl, external: true }
-      : { label: "Open App embeds", to: cartSchedulerEmbedUrl, external: true };
+      ? { label: "Open App embeds", to: cartSchedulerEmbedUrl, external: true }
+      : { label: "Open cart template", to: themeEditorUrl, external: true };
 
   const items: ChecklistItem[] = [
     {
@@ -323,7 +323,7 @@ export default function Index() {
       id: "hide-express-buttons",
       label: "Hide express checkout buttons",
       description:
-        "Shop Pay / Apple Pay / Buy-it-now bypass the cart drawer, skipping the scheduling step. " +
+        "Shop Pay / Apple Pay / Buy-it-now bypass the cart entirely, skipping the scheduling step. " +
         "Open theme editor → App embeds → Ordak Cart Scheduler → enable \"Hide express checkout buttons\".",
       done: false,
       manual: true,
@@ -393,8 +393,8 @@ export default function Index() {
                   style={{ borderRadius: 10, display: "block" }}
                 />
                 <BlockStack gap="050">
-                  <Text as="h2" variant="headingLg">Welcome to Ordak Go</Text>
-                  <Text as="p" tone="subdued">Connected to {shop}</Text>
+                  <Text as="h2" variant="headingLg">Welcome back to Ordak Go</Text>
+                  <Text as="p" tone="subdued">Live on {shop}</Text>
                 </BlockStack>
               </InlineStack>
             </BlockStack>
@@ -412,7 +412,7 @@ export default function Index() {
               }}
             >
               <Text as="p">
-                Shop Pay / Apple Pay / Buy-it-now buttons let customers skip the cart drawer,
+                Shop Pay / Apple Pay / Buy-it-now buttons let customers skip the cart entirely,
                 which bypasses the scheduling step. Enable &quot;Hide express checkout buttons&quot;
                 in the cart-scheduler app embed to block them.
               </Text>

@@ -1,30 +1,65 @@
 # DEV_SETUP.md
 
-How to bring up Ordak Go locally and install it on the dev store.
+How to bring up Ordak Go locally for iteration.
 
 ## TL;DR
 
-```
-npm run dev:up      # boots cloudflared + builds extensions + pushes Partners config + starts vite
-npm run dev:logs    # tail vite + cloudflared logs (Ctrl-C exits tail, processes keep running)
-npm run dev:down    # stop both
+```bash
+npm run dev   # alias: npm run dev:up
 ```
 
-That's it. `dev:up` runs `cloudflared tunnel run ordak-go-dev` (a stable named tunnel routed via Cloudflare DNS to **`https://dev.ordak.vip`**) in the background, then starts Vite. The tunnel hostname never changes; the dev Partners app is pinned to `https://dev.ordak.vip` (committed `shopify.app.ordak-go-dev.toml`), separate from the production toml that points at Vercel. The first `dev:up` after a fresh clone (or after URL changes) builds the cart-block extension and runs `shopify app deploy --config ordak-go-dev` once to push the URL to Partners; subsequent runs skip the deploy via a sentinel file (`.dev-logs/last-pushed-url.txt`).
+Wraps `scripts/dev-up.sh`, which runs three coordinated processes:
 
-### How the tunnel was set up (one-time, already done)
+| Process | Where | What it does |
+|---|---|---|
+| `cloudflared tunnel run ordak-go-dev` | background | Routes `https://dev.ordak.vip` → `localhost:5173` (named tunnel, stable) |
+| `npm run vite:dev` (Remix) | background | Serves the embedded admin with hot module replacement |
+| `shopify app dev` | foreground | Pushes Development previews of cart-block + Functions to `ordakgo-v3`; hot-reloads on save |
 
-- `ordak.vip` is registered at GoDaddy; nameservers point at Cloudflare (`jasper.ns.cloudflare.com`, `tara.ns.cloudflare.com`).
-- `cloudflared tunnel login` once → drops `~/.cloudflared/cert.pem`.
-- `cloudflared tunnel create ordak-go-dev` → tunnel UUID `f19b52ae-38bc-4ddd-ad07-92f1c2cdd04d`, credentials in `~/.cloudflared/<uuid>.json`.
+The iteration loop:
+
+1. Edit a file in `app/*` or `extensions/*`
+2. Save
+3. See it live on `ordakgo-v3` (admin or storefront)
+4. Commit → push → PR
+
+**No `shopify app deploy` or `shopify app release`.** Those are for App Store distribution, not iteration.
+
+Ctrl-C in the foreground process exits everything cleanly (the script traps the signal and tears down cloudflared + Vite).
+
+### When `shopify app dev` prompts you
+
+- **Login to Partners** — once per session, browser opens to authorize.
+- **Pick a store** — choose `ordakgo-v3.myshopify.com`.
+- **Storefront password** — type `theuld`. The CLI needs an interactive terminal for this; can't be piped.
+
+### How the named tunnel was set up (one-time, already done)
+
+- `ordak.vip` registered at GoDaddy; nameservers point at Cloudflare.
+- `cloudflared tunnel login` → drops `~/.cloudflared/cert.pem`.
+- `cloudflared tunnel create ordak-go-dev` → tunnel UUID `f19b52ae-38bc-4ddd-ad07-92f1c2cdd04d`.
 - `cloudflared tunnel route dns ordak-go-dev dev.ordak.vip` → CNAME at Cloudflare.
-- `~/.cloudflared/config.yml` maps `dev.ordak.vip` to `http://localhost:5173`.
+- `~/.cloudflared/config.yml` maps `dev.ordak.vip` → `http://localhost:5173`.
 
-If you ever need to recreate this on a different machine, repeat the four `cloudflared` commands above (point the new credential file at the same UUID or create a fresh tunnel + DNS route).
+If you ever need to recreate this on a different machine, repeat the four `cloudflared` commands above.
 
-If `dev:up` breaks, the manual 3-terminal flow below still works as a fallback — read it for the mental model of what the script does. Replace `cloudflared tunnel --url http://localhost:5173` with `cloudflared tunnel run ordak-go-dev` in step 2 if your `~/.cloudflared/` is set up; otherwise quick-tunnel is fine for one-off debugging.
+## Production deploys (separate workflow, not the iteration loop)
 
-The Shopify CLI's `app dev` auto-orchestration **does not work** for this project — its auto-tunnel never starts, it never spawns Vite, and the `--tunnel-url` flag interprets the URL's port as a local-bind port (EACCES on `:443`).
+For App Store releases, the toml URLs need to point at the production Vercel URL, not the dev tunnel. One-time pre-launch action:
+
+1. Edit `shopify.app.ordak-go.toml`: swap URLs from `https://dev.ordak.vip` to `https://ordak-go.vercel.app`.
+2. Run `npm run deploy:prod` (= `shopify app deploy --release`).
+3. Push the committed toml to `main` → Vercel deploys prod → installed merchants load from prod.
+
+To go back to local iteration: revert toml URLs to `dev.ordak.vip` and run `npm run dev` (the script handles re-syncing Partners on first run after a URL change).
+
+## Prerequisites (one-time, on a fresh machine)
+
+- Node ≥ 20.10 (we use 22.22 via Volta)
+- `npm install` already run
+- `brew install cloudflared`
+- `.env` populated (see end of this doc)
+- Authenticated against Shopify Partners (any `shopify app *` command will prompt; auth persists in `~/Library/Preferences/shopify-cli-kit-nodejs/`)
 
 ## Prerequisites
 

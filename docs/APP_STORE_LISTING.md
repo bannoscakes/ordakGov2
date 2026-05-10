@@ -27,7 +27,7 @@ Let shoppers pick a delivery date or pickup window in the cart, then lock that c
 ## App details / Long description
 
 ```
-Ordak Go adds delivery and pickup scheduling to your Shopify store — without the fragility that has historically plagued "local delivery" apps.
+Ordak Go adds delivery and pickup scheduling to your Shopify store, with the customer's cart-stage choice locked through to checkout.
 
 Customers choose a delivery date and time slot (or a pickup location and window) in the cart, before they reach checkout. Their choice carries through every step: rate calculation, the shipping options Shopify shows them, the order tag, and the order metafields your fulfillment team reads.
 
@@ -45,7 +45,7 @@ Configure once, run with confidence:
   • Outbound webhooks — forward order/scheduling events to your ERP, routing software, or warehouse system. Off by default, signed with a secret you rotate from Settings.
   • GDPR-compliant — handles all three Shopify privacy webhooks (data_request, customers/redact, shop/redact).
 
-Built by the team that runs bannoscakes.com.au and flourlane.com.au — a real Australian bakery operation that needed scheduling that actually works on Shopify Basic, without a Plus upgrade. We use this app every day to ship hundreds of cakes a week.
+Works on Shopify Basic — no Plus upgrade required.
 
 Ordak Go is free during initial release.
 ```
@@ -67,9 +67,10 @@ GDPR-ready, no Plus upgrade required, free during initial release.
 ## Feature highlights (longer-form bullets — for the listing's "Features" panel)
 
 ```
-Cart-stage scheduling drawer
+Cart-page scheduling block
 Customers pick delivery date/time or pickup location/window before checkout.
-Configurable accent colour, heading, and pickup instructions per theme.
+Renders on the cart page; if your theme also surfaces a cart drawer, the same
+block appears there. Configurable accent colour, heading, and pickup instructions per theme.
 
 Carrier-Calculated Shipping callback
 Returns delivery rates per zone with optional per-slot premiums.
@@ -100,7 +101,7 @@ Forward order/scheduling events to external systems. Off by default.
 HMAC-signed payloads, secret rotation per destination.
 
 Diagnostics
-Built-in diagnostics surface (cart drawer detection, express buttons visible,
+Built-in diagnostics surface (cart-surface detection, express buttons visible,
 function activation state) for both merchants and reviewers.
 ```
 

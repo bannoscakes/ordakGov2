@@ -39,8 +39,7 @@ export default function PrivacyPolicy() {
         ("Ordak Go", "we", "us") collects, uses, and protects information
         when a Shopify merchant installs it on their store and a customer
         of that merchant interacts with it. Ordak Go is operated by P&amp;T
-        Group, the publisher of the bannoscakes.com.au and flourlane.com.au
-        stores, who can be contacted at{" "}
+        Group, who can be contacted at{" "}
         <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
       </p>
 
