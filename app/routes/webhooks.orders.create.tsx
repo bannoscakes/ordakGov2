@@ -245,6 +245,19 @@ export async function action({ request }: ActionFunctionArgs) {
               }),
             },
           });
+          // Explicit "Shopify writes are pending" marker, committed atomically
+          // with the OrderLink. Paired with order.shopify_writes_attempted
+          // (~line 308 below). If a _pending row has no companion _attempted
+          // within ~5min, a reconciliation job knows the local DB is ahead of
+          // Shopify (transaction committed, then process crashed / network
+          // dropped before metafield+tag writes ran).
+          await tx.eventLog.create({
+            data: {
+              orderLinkId: link.id,
+              eventType: "order.shopify_writes_pending",
+              payload: JSON.stringify({ orderId }),
+            },
+          });
           return link;
         });
 
