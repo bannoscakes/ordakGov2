@@ -86,22 +86,46 @@ export async function appProxyAction(
     );
   }
 
-  // A malformed/non-JSON body is silently downgraded to an empty object so
-  // the downstream handler's Zod validation can produce a normal 400. Log
-  // it so a future serializer regression in the cart-block doesn't debug
-  // as a generic "Invalid input" in production.
-  const original = await args.request
-    .clone()
-    .json()
-    .catch((err: unknown) => {
-      logger.warn("appProxyAction: request body was not valid JSON", {
-        url: args.request.url,
-        shop: session.shop,
-        contentType: args.request.headers.get("content-type"),
-        error: err instanceof Error ? err.message : String(err),
-      });
-      return {} as Record<string, unknown>;
+  // A signed proxy request claiming `Content-Type: application/json` that
+  // contains a malformed body is anomalous — the signature was valid for
+  // the original bytes, so something between Shopify and us mangled them.
+  // We reject those with 400 (loud) instead of downgrading to {}, which
+  // would mask the anomaly as a downstream "Invalid input" Zod error.
+  //
+  // Non-JSON content-types (or missing content-type) are downgraded to
+  // {} so the downstream handler's Zod validation produces its usual 400.
+  // This keeps the prior tolerant behaviour for unsigned-body cases.
+  const contentType = args.request.headers.get("content-type") ?? "";
+  const claimsJson = /\bapplication\/json\b/i.test(contentType);
+  let original: Record<string, unknown>;
+  try {
+    original = await args.request.clone().json();
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    if (claimsJson) {
+      logger.error(
+        "appProxyAction: signed body declared application/json but failed to parse",
+        undefined,
+        {
+          url: args.request.url,
+          shop: session.shop,
+          contentType,
+          error: errMsg,
+        },
+      );
+      return json(
+        { error: "Malformed JSON body" },
+        { status: 400, headers: { "X-Ordak-Error": "malformed-json" } },
+      );
+    }
+    logger.warn("appProxyAction: request body was not valid JSON", {
+      url: args.request.url,
+      shop: session.shop,
+      contentType,
+      error: errMsg,
     });
+    original = {} as Record<string, unknown>;
+  }
 
   const replayed = new Request(args.request.url, {
     method: "POST",
