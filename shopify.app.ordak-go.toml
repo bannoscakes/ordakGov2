@@ -1,7 +1,7 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "ab729e4046f8cdea55d24bfffd815e6a"
-name = "Ordak Go"
+name = "ordak go old"
 handle = "ordak-go"
 # Pinned to the stable named Cloudflare tunnel `ordak-go-dev` → localhost:5173.
 # `npm run dev` runs cloudflared + Vite + `shopify app dev` together, so the
